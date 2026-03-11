@@ -1,10 +1,11 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import type { TabId, ConnectionState, HealthStatus } from "./types/api";
 import { StatusIndicator } from "./components/StatusIndicator";
 import { ProjectPanel } from "./panels/ProjectPanel";
 import { TaskBoard } from "./panels/TaskBoard";
 import { ApprovalsPanel } from "./panels/ApprovalsPanel";
 import { LogsPanel } from "./panels/LogsPanel";
+import { approvalsApi } from "./api/approvals";
 import "./App.css";
 
 const RUNTIME_URL = "http://127.0.0.1:9800";
@@ -48,6 +49,31 @@ function App() {
     const interval = setInterval(checkHealth, 5000);
     return () => clearInterval(interval);
   }, [checkHealth]);
+
+  // ── Background approval count polling ─────────────
+  // Keeps sidebar badge updated even when ApprovalsPanel is unmounted.
+  // When ApprovalsPanel IS mounted, its onCountChange overrides with
+  // a more precise value on each of its own 5s polling ticks.
+  const countMountedRef = useRef(true);
+  useEffect(() => {
+    countMountedRef.current = true;
+    const fetchCount = async () => {
+      try {
+        const data = await approvalsApi.listPending();
+        if (countMountedRef.current) {
+          setPendingCount(data.length);
+        }
+      } catch {
+        // silent — health check already handles connection state
+      }
+    };
+    fetchCount();
+    const interval = setInterval(fetchCount, 10000);
+    return () => {
+      countMountedRef.current = false;
+      clearInterval(interval);
+    };
+  }, []);
 
   // ── Project selection handler ───────────────────────
   const handleSelectProject = useCallback((id: string) => {
