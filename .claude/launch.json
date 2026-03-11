@@ -1,0 +1,19 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "fastapi-runtime",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["main.py"],
+      "port": 9800,
+      "cwd": "services/runtime"
+    },
+    {
+      "name": "vite-frontend",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["node_modules/vite/bin/vite.js", "--port", "5173"],
+      "port": 5173,
+      "cwd": "apps/desktop"
+    }
+  ]
+}
