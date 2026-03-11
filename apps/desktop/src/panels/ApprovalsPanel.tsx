@@ -7,7 +7,7 @@ interface ApprovalsPanelProps {
 }
 
 export function ApprovalsPanel({ onCountChange }: ApprovalsPanelProps) {
-  const { approvals, loading, error, refresh, resolve } = useApprovals();
+  const { approvals, loading, error, refresh, resolve, lastUpdated } = useApprovals();
   const [activeAction, setActiveAction] = useState<{
     id: string;
     type: "approved" | "rejected";
@@ -78,6 +78,11 @@ export function ApprovalsPanel({ onCountChange }: ApprovalsPanelProps) {
           )}
         </h2>
         <div className="panel-actions">
+          {lastUpdated && (
+            <span className="last-updated" data-testid="approvals-last-updated">
+              {lastUpdated.toLocaleTimeString("en-US", { hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+            </span>
+          )}
           <button
             className="btn btn-secondary"
             onClick={refresh}
@@ -103,7 +108,7 @@ export function ApprovalsPanel({ onCountChange }: ApprovalsPanelProps) {
 
       {/* Empty */}
       {!loading && !error && approvals.length === 0 && (
-        <div className="panel-empty">No pending approvals. All clear.</div>
+        <div className="panel-empty" data-testid="approvals-empty">No pending approvals. All clear.</div>
       )}
 
       {/* Approval list */}
@@ -114,7 +119,7 @@ export function ApprovalsPanel({ onCountChange }: ApprovalsPanelProps) {
             const isActive = activeAction?.id === a.id;
 
             return (
-              <div key={a.id} className="approval-card">
+              <div key={a.id} className="approval-card" data-testid="approval-card">
                 <div className="approval-header">
                   <span className="approval-type">{a.action_type}</span>
                   <span className="approval-date">
@@ -179,12 +184,14 @@ export function ApprovalsPanel({ onCountChange }: ApprovalsPanelProps) {
                 <div className="approval-actions">
                   <button
                     className={`btn btn-success btn-sm ${isActive && activeAction.type === "approved" ? "active" : ""}`}
+                    data-testid="approval-approve-btn"
                     onClick={() => handleAction(a.id, "approved")}
                   >
                     &#10003; Approve
                   </button>
                   <button
                     className={`btn btn-danger btn-sm ${isActive && activeAction.type === "rejected" ? "active" : ""}`}
+                    data-testid="approval-reject-btn"
                     onClick={() => handleAction(a.id, "rejected")}
                   >
                     &#10007; Reject
@@ -196,6 +203,7 @@ export function ApprovalsPanel({ onCountChange }: ApprovalsPanelProps) {
                   <div className="approval-comment">
                     <textarea
                       className="form-input form-textarea"
+                      data-testid="approval-comment-input"
                       value={comment}
                       onChange={(e) => setComment(e.target.value)}
                       placeholder={`Comment for ${activeAction.type === "approved" ? "approval" : "rejection"} (optional)`}
@@ -206,6 +214,7 @@ export function ApprovalsPanel({ onCountChange }: ApprovalsPanelProps) {
                     )}
                     <button
                       className={`btn ${activeAction.type === "approved" ? "btn-success" : "btn-danger"}`}
+                      data-testid="approval-confirm-btn"
                       onClick={handleSubmit}
                       disabled={submitting}
                     >

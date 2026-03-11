@@ -9,6 +9,7 @@ import { approvalsApi } from "./api/approvals";
 import "./App.css";
 
 const RUNTIME_URL = "http://127.0.0.1:9800";
+const COUNT_POLL_INTERVAL = Number(import.meta.env.VITE_APPROVAL_COUNT_POLL_MS) || 10000;
 
 /** Sidebar tab definitions */
 const WORKSPACE_TABS: Array<{ id: TabId; icon: string; label: string }> = [
@@ -68,7 +69,7 @@ function App() {
       }
     };
     fetchCount();
-    const interval = setInterval(fetchCount, 10000);
+    const interval = setInterval(fetchCount, COUNT_POLL_INTERVAL);
     return () => {
       countMountedRef.current = false;
       clearInterval(interval);
@@ -122,6 +123,7 @@ function App() {
             {WORKSPACE_TABS.map((tab) => (
               <div
                 key={tab.id}
+                data-testid={`sidebar-${tab.id}`}
                 className={`sidebar-item ${activeTab === tab.id ? "active" : ""}`}
                 onClick={() => setActiveTab(tab.id)}
               >
@@ -135,13 +137,16 @@ function App() {
             {SYSTEM_TABS.map((tab) => (
               <div
                 key={tab.id}
+                data-testid={`sidebar-${tab.id}`}
                 className={`sidebar-item ${activeTab === tab.id ? "active" : ""}`}
                 onClick={() => setActiveTab(tab.id)}
               >
                 <span className="sidebar-icon">{tab.icon}</span>
                 <span>{tab.label}</span>
                 {tab.id === "approvals" && pendingCount > 0 && (
-                  <span className="sidebar-badge">{pendingCount}</span>
+                  <span className="sidebar-badge" data-testid="sidebar-badge-approvals">
+                    {pendingCount}
+                  </span>
                 )}
               </div>
             ))}

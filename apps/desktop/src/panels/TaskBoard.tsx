@@ -101,6 +101,7 @@ export function TaskBoard({ projectId }: TaskBoardProps) {
           </button>
           <button
             className="btn btn-primary"
+            data-testid="task-create-btn"
             onClick={() => setShowForm(!showForm)}
           >
             {showForm ? "Cancel" : "+ New Task"}
@@ -115,6 +116,7 @@ export function TaskBoard({ projectId }: TaskBoardProps) {
             <label className="form-label">Title *</label>
             <input
               className="form-input"
+              data-testid="task-title-input"
               type="text"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
@@ -148,6 +150,7 @@ export function TaskBoard({ projectId }: TaskBoardProps) {
           {formError && <div className="form-error">{formError}</div>}
           <button
             className="btn btn-primary"
+            data-testid="task-submit-btn"
             type="submit"
             disabled={submitting || !title.trim()}
           >
@@ -178,9 +181,9 @@ export function TaskBoard({ projectId }: TaskBoardProps) {
 
       {/* Task list */}
       {!loading && tasks.length > 0 && (
-        <div className="task-list">
+        <div className="task-list" data-testid="task-list">
           {tasks.map((t) => (
-            <div key={t.id} className="task-item">
+            <div key={t.id} className="task-item" data-testid="task-item">
               <div className="task-item-header">
                 <span className="task-title">{t.title}</span>
                 <span className="task-date">{formatDate(t.updated_at)}</span>
