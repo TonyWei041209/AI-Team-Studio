@@ -124,89 +124,48 @@
   text-align: center;
 }
 
+.sidebar-badge {
+  margin-left: auto;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 6px;
+  background-color: var(--accent-red);
+  color: white;
+  border-radius: 8px;
+  min-width: 16px;
+  text-align: center;
+}
+
 /* Content Area */
 .content-area {
   flex: 1;
-  padding: 32px;
+  padding: 24px;
   overflow-y: auto;
   display: flex;
-  justify-content: center;
-}
-
-.welcome-panel {
-  max-width: 560px;
-  width: 100%;
-  padding-top: 60px;
-}
-
-.welcome-panel h1 {
-  font-size: 28px;
-  font-weight: 600;
-  margin-bottom: 4px;
-}
-
-.welcome-subtitle {
-  font-size: 14px;
-  color: var(--text-secondary);
-  margin-bottom: 32px;
-}
-
-/* Status Card */
-.status-card {
-  background-color: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: 8px;
-  padding: 20px;
-}
-
-.status-card h2 {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--text-secondary);
-  margin-bottom: 16px;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-
-.status-grid {
-  display: flex;
   flex-direction: column;
-  gap: 12px;
-}
-
-.status-row {
-  display: flex;
-  justify-content: space-between;
   align-items: center;
-  padding: 8px 12px;
-  background-color: var(--bg-tertiary);
-  border-radius: 4px;
 }
 
-.status-row-label {
+/* Connection banner */
+.connection-banner {
+  width: 100%;
+  max-width: 720px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  margin-bottom: 16px;
+  background-color: rgba(248, 81, 73, 0.1);
+  border: 1px solid var(--accent-red);
+  border-radius: 6px;
   font-size: 13px;
-  color: var(--text-secondary);
+  color: var(--accent-red);
 }
 
-.status-row-value {
-  font-size: 13px;
-  font-family: var(--font-mono);
-  font-weight: 500;
-}
-
-.status-hint {
-  margin-top: 16px;
-  padding: 12px;
-  background-color: var(--bg-tertiary);
-  border-radius: 4px;
-  font-size: 12px;
-  color: var(--text-secondary);
-}
-
-.status-hint code {
+.connection-banner code {
   font-family: var(--font-mono);
   background-color: var(--bg-primary);
-  padding: 2px 6px;
+  padding: 2px 8px;
   border-radius: 3px;
   font-size: 12px;
   color: var(--accent-blue);
@@ -228,4 +187,8 @@
 
 .status-bar-item {
   font-family: var(--font-mono);
+}
+
+.status-bar-warn {
+  color: var(--accent-yellow);
 }

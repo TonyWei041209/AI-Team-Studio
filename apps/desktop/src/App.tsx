@@ -1,37 +1,77 @@
-import { useEffect, useState } from 'react';
-import './App.css';
+import { useEffect, useState, useCallback } from "react";
+import type { TabId, ConnectionState, HealthStatus } from "./types/api";
+import { StatusIndicator } from "./components/StatusIndicator";
+import { ProjectPanel } from "./panels/ProjectPanel";
+import { TaskBoard } from "./panels/TaskBoard";
+import { ApprovalsPanel } from "./panels/ApprovalsPanel";
+import { LogsPanel } from "./panels/LogsPanel";
+import "./App.css";
 
-const RUNTIME_URL = 'http://127.0.0.1:9800';
+const RUNTIME_URL = "http://127.0.0.1:9800";
 
-interface HealthStatus {
-  status: string;
-  version: string;
-  database: string;
-}
+/** Sidebar tab definitions */
+const WORKSPACE_TABS: Array<{ id: TabId; icon: string; label: string }> = [
+  { id: "projects", icon: "\u25A0", label: "Projects" },
+  { id: "tasks", icon: "\u25B6", label: "Tasks" },
+];
 
-type ConnectionState = 'checking' | 'connected' | 'disconnected';
+const SYSTEM_TABS: Array<{ id: TabId; icon: string; label: string }> = [
+  { id: "approvals", icon: "\u2713", label: "Approvals" },
+  { id: "logs", icon: "\u2261", label: "Logs" },
+];
 
 function App() {
-  const [connectionState, setConnectionState] = useState<ConnectionState>('checking');
+  const [connectionState, setConnectionState] =
+    useState<ConnectionState>("checking");
   const [health, setHealth] = useState<HealthStatus | null>(null);
+  const [activeTab, setActiveTab] = useState<TabId>("projects");
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(
+    null,
+  );
+  const [pendingCount, setPendingCount] = useState(0);
 
-  const checkHealth = async () => {
+  // ── Health check polling ────────────────────────────
+  const checkHealth = useCallback(async () => {
     try {
       const res = await fetch(`${RUNTIME_URL}/api/health`);
       const data: HealthStatus = await res.json();
       setHealth(data);
-      setConnectionState('connected');
+      setConnectionState("connected");
     } catch {
       setHealth(null);
-      setConnectionState('disconnected');
+      setConnectionState("disconnected");
     }
-  };
+  }, []);
 
   useEffect(() => {
     checkHealth();
     const interval = setInterval(checkHealth, 5000);
     return () => clearInterval(interval);
+  }, [checkHealth]);
+
+  // ── Project selection handler ───────────────────────
+  const handleSelectProject = useCallback((id: string) => {
+    setSelectedProjectId(id);
   }, []);
+
+  // ── Render active panel ─────────────────────────────
+  const renderPanel = () => {
+    switch (activeTab) {
+      case "projects":
+        return (
+          <ProjectPanel
+            selectedProjectId={selectedProjectId}
+            onSelectProject={handleSelectProject}
+          />
+        );
+      case "tasks":
+        return <TaskBoard projectId={selectedProjectId} />;
+      case "approvals":
+        return <ApprovalsPanel onCountChange={setPendingCount} />;
+      case "logs":
+        return <LogsPanel />;
+    }
+  };
 
   return (
     <div className="app-container">
@@ -49,106 +89,71 @@ function App() {
 
       {/* Main Content */}
       <main className="main-content">
-        {/* Sidebar placeholder */}
+        {/* Sidebar */}
         <nav className="sidebar">
           <div className="sidebar-section">
             <div className="sidebar-label">WORKSPACE</div>
-            <SidebarItem icon="&#9632;" label="Projects" active />
-            <SidebarItem icon="&#9654;" label="Tasks" />
-            <SidebarItem icon="&#9733;" label="Agents" />
+            {WORKSPACE_TABS.map((tab) => (
+              <div
+                key={tab.id}
+                className={`sidebar-item ${activeTab === tab.id ? "active" : ""}`}
+                onClick={() => setActiveTab(tab.id)}
+              >
+                <span className="sidebar-icon">{tab.icon}</span>
+                <span>{tab.label}</span>
+              </div>
+            ))}
           </div>
           <div className="sidebar-section">
             <div className="sidebar-label">SYSTEM</div>
-            <SidebarItem icon="&#9776;" label="Logs" />
-            <SidebarItem icon="&#10003;" label="Approvals" />
-            <SidebarItem icon="&#9881;" label="Settings" />
+            {SYSTEM_TABS.map((tab) => (
+              <div
+                key={tab.id}
+                className={`sidebar-item ${activeTab === tab.id ? "active" : ""}`}
+                onClick={() => setActiveTab(tab.id)}
+              >
+                <span className="sidebar-icon">{tab.icon}</span>
+                <span>{tab.label}</span>
+                {tab.id === "approvals" && pendingCount > 0 && (
+                  <span className="sidebar-badge">{pendingCount}</span>
+                )}
+              </div>
+            ))}
           </div>
         </nav>
 
         {/* Content Area */}
         <div className="content-area">
-          <div className="welcome-panel">
-            <h1>AI Team Studio</h1>
-            <p className="welcome-subtitle">Local-first AI Workstation</p>
-
-            <div className="status-card">
-              <h2>System Status</h2>
-              <div className="status-grid">
-                <StatusRow
-                  label="Runtime"
-                  value={connectionState === 'connected' ? 'Online' : connectionState === 'checking' ? 'Checking...' : 'Offline'}
-                  state={connectionState}
-                />
-                <StatusRow
-                  label="Database"
-                  value={health?.database ?? 'Unknown'}
-                  state={health?.database === 'connected' ? 'connected' : 'disconnected'}
-                />
-                <StatusRow
-                  label="Version"
-                  value={health?.version ?? '-'}
-                  state="neutral"
-                />
-              </div>
-              {connectionState === 'disconnected' && (
-                <div className="status-hint">
-                  Start the runtime: <code>cd services/runtime && python main.py</code>
-                </div>
-              )}
+          {connectionState === "disconnected" && (
+            <div className="connection-banner">
+              <span>&#9888; Runtime not connected.</span>
+              <code>cd services/runtime && python main.py</code>
             </div>
-          </div>
+          )}
+          {renderPanel()}
         </div>
       </main>
 
       {/* Status Bar */}
       <footer className="status-bar">
-        <span className="status-bar-item">Phase 0+1: Skeleton</span>
+        <span className="status-bar-item">Phase 5: Frontend</span>
         <span className="status-bar-item">
-          Runtime: {connectionState === 'connected' ? '127.0.0.1:9800' : 'not connected'}
+          Runtime:{" "}
+          {connectionState === "connected"
+            ? `${health?.version ?? "?"} @ 127.0.0.1:9800`
+            : "not connected"}
         </span>
+        {selectedProjectId && (
+          <span className="status-bar-item">
+            Project: {selectedProjectId.slice(0, 8)}...
+          </span>
+        )}
+        {pendingCount > 0 && (
+          <span className="status-bar-item status-bar-warn">
+            {pendingCount} pending approval{pendingCount > 1 ? "s" : ""}
+          </span>
+        )}
       </footer>
-    </div>
-  );
-}
-
-function StatusIndicator({ state }: { state: ConnectionState }) {
-  const color =
-    state === 'connected' ? 'var(--accent-green)' :
-    state === 'checking' ? 'var(--accent-yellow)' :
-    'var(--accent-red)';
-  const label =
-    state === 'connected' ? 'Connected' :
-    state === 'checking' ? 'Connecting...' :
-    'Disconnected';
-
-  return (
-    <div className="status-indicator">
-      <span className="status-dot" style={{ backgroundColor: color }} />
-      <span className="status-text">{label}</span>
-    </div>
-  );
-}
-
-function SidebarItem({ icon, label, active }: { icon: string; label: string; active?: boolean }) {
-  return (
-    <div className={`sidebar-item ${active ? 'active' : ''}`}>
-      <span className="sidebar-icon">{icon}</span>
-      <span>{label}</span>
-    </div>
-  );
-}
-
-function StatusRow({ label, value, state }: { label: string; value: string; state: ConnectionState | 'neutral' }) {
-  const color =
-    state === 'connected' ? 'var(--accent-green)' :
-    state === 'disconnected' ? 'var(--accent-red)' :
-    state === 'checking' ? 'var(--accent-yellow)' :
-    'var(--text-secondary)';
-
-  return (
-    <div className="status-row">
-      <span className="status-row-label">{label}</span>
-      <span className="status-row-value" style={{ color }}>{value}</span>
     </div>
   );
 }
