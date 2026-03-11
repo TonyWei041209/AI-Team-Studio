@@ -1,11 +1,15 @@
 /**
- * Settings panel — Provider configuration, model selection, API key management.
- * Phase 6A: minimal but functional.
+ * Settings panel — Provider configuration, model selection, API key management,
+ * and per-role model routing (Phase 6A + 6C).
  */
 
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useProviders } from "../hooks/useProviders";
-import type { ProviderSettingUpdate } from "../types/api";
+import { settingsApi } from "../api/settings";
+import type { ProviderSettingUpdate, RoleModelSetting, RoleModelSettingUpdate } from "../types/api";
+
+// Roles that support real model configuration in Phase 6C
+const CONFIGURABLE_ROLES = ["planner", "reviewer"] as const;
 
 export function SettingsPanel() {
   const {
@@ -18,14 +22,39 @@ export function SettingsPanel() {
     testProvider,
   } = useProviders();
 
-  // Local edit state keyed by provider name
+  // Provider edit state
   const [edits, setEdits] = useState<Record<string, { apiKey: string; baseUrl: string }>>({});
   const [saving, setSaving] = useState<string | null>(null);
   const [testing, setTesting] = useState<string | null>(null);
 
-  if (loading) {
-    return <div className="settings-panel"><p className="settings-loading">Loading provider settings...</p></div>;
+  // Role-model state
+  const [roleModels, setRoleModels] = useState<Record<string, RoleModelSetting>>({});
+  const [roleEdits, setRoleEdits] = useState<Record<string, Partial<RoleModelSettingUpdate>>>({});
+  const [roleLoading, setRoleLoading] = useState(true);
+  const [roleSaving, setRoleSaving] = useState<string | null>(null);
+  const [roleError, setRoleError] = useState<string | null>(null);
+
+  // Load role-model settings
+  const refreshRoleModels = useCallback(async () => {
+    try {
+      const resp = await settingsApi.getRoleModels();
+      setRoleModels(resp.role_models);
+    } catch {
+      // silent
+    } finally {
+      setRoleLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    refreshRoleModels();
+  }, [refreshRoleModels]);
+
+  if (loading || roleLoading) {
+    return <div className="settings-panel"><p className="settings-loading">Loading settings...</p></div>;
   }
+
+  // ── Provider helpers ──
 
   const getEdit = (name: string) => {
     if (edits[name]) return edits[name];
@@ -55,7 +84,6 @@ export function SettingsPanel() {
     setSaving(providerName);
     try {
       await updateSettings([update]);
-      // Clear local edit after save
       setEdits((prev) => {
         const next = { ...prev };
         delete next[providerName];
@@ -78,9 +106,151 @@ export function SettingsPanel() {
   const providerModels = (name: string) =>
     models.filter((m) => m.provider === name);
 
+  // ── Role-model helpers ──
+
+  const getRoleEdit = (role: string): Partial<RoleModelSettingUpdate> => {
+    return roleEdits[role] || {};
+  };
+
+  const setRoleEdit = (role: string, field: "provider" | "model" | "enabled", value: string | boolean) => {
+    setRoleEdits((prev) => ({
+      ...prev,
+      [role]: { ...getRoleEdit(role), role, [field]: value },
+    }));
+  };
+
+  const handleRoleSave = async (role: string) => {
+    const edit = getRoleEdit(role);
+    const current = roleModels[role];
+    const update: RoleModelSettingUpdate = {
+      role,
+      provider: edit.provider ?? current?.provider,
+      model: edit.model ?? current?.model,
+      enabled: edit.enabled ?? current?.enabled,
+    };
+
+    setRoleSaving(role);
+    setRoleError(null);
+    try {
+      const resp = await settingsApi.updateRoleModels([update]);
+      setRoleModels(resp.role_models);
+      setRoleEdits((prev) => {
+        const next = { ...prev };
+        delete next[role];
+        return next;
+      });
+    } catch (err: any) {
+      const msg = err?.message || err?.detail || "Failed to save";
+      setRoleError(`${role}: ${msg}`);
+    } finally {
+      setRoleSaving(null);
+    }
+  };
+
   return (
     <div className="settings-panel">
-      <h2>Provider Settings</h2>
+      {/* ── Role Model Configuration (Phase 6C) ── */}
+      <h2>Role Model Configuration</h2>
+      <p className="settings-subtitle">
+        Configure which provider and model each agent role uses.
+        Only Planner and Reviewer support real model integration.
+      </p>
+
+      {roleError && (
+        <div className="provider-test-result error" style={{ marginBottom: 12 }}>
+          {roleError}
+        </div>
+      )}
+
+      <div className="provider-cards">
+        {CONFIGURABLE_ROLES.map((role) => {
+          const current = roleModels[role];
+          const edit = getRoleEdit(role);
+          const effectiveProvider = edit.provider ?? current?.provider ?? "mock";
+          const effectiveModel = edit.model ?? current?.model ?? "";
+          const effectiveEnabled = edit.enabled ?? current?.enabled ?? false;
+
+          return (
+            <div key={role} className="provider-card">
+              <div className="provider-card-header">
+                <h3>{role.charAt(0).toUpperCase() + role.slice(1)}</h3>
+                <span className={`provider-status ${effectiveEnabled ? "configured" : "not-configured"}`}>
+                  {effectiveEnabled ? "Enabled" : "Disabled"}
+                </span>
+              </div>
+
+              <div className="provider-field">
+                <label>Provider</label>
+                <select
+                  className="provider-input"
+                  value={effectiveProvider}
+                  onChange={(e) => setRoleEdit(role, "provider", e.target.value)}
+                >
+                  <option value="mock">mock (disabled)</option>
+                  {providers.map((p) => (
+                    <option key={p.name} value={p.name}>{p.display_name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="provider-field">
+                <label>Model</label>
+                <select
+                  className="provider-input"
+                  value={effectiveModel}
+                  onChange={(e) => setRoleEdit(role, "model", e.target.value)}
+                >
+                  <option value="">Select model...</option>
+                  {models
+                    .filter((m) => m.provider === effectiveProvider)
+                    .map((m) => (
+                      <option key={m.id} value={m.id}>{m.display_name}</option>
+                    ))}
+                </select>
+                {/* Allow free-text if model not in dropdown */}
+                <input
+                  type="text"
+                  className="provider-input"
+                  placeholder="Or enter model ID manually..."
+                  value={effectiveModel}
+                  onChange={(e) => setRoleEdit(role, "model", e.target.value)}
+                  style={{ marginTop: 4 }}
+                />
+              </div>
+
+              <div className="provider-field">
+                <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <input
+                    type="checkbox"
+                    checked={effectiveEnabled}
+                    onChange={(e) => setRoleEdit(role, "enabled", e.target.checked)}
+                  />
+                  Enable real model calls
+                </label>
+              </div>
+
+              <div className="provider-actions">
+                <button
+                  className="btn btn-primary"
+                  disabled={roleSaving === role}
+                  onClick={() => handleRoleSave(role)}
+                >
+                  {roleSaving === role ? "Saving..." : "Save"}
+                </button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Builder / QA info */}
+      <div style={{ margin: "12px 0", padding: "8px 12px", background: "rgba(255,255,255,0.05)", borderRadius: 6, fontSize: 13, color: "#999" }}>
+        <strong>Builder</strong> and <strong>QA</strong> roles use mock executors in the current phase.
+        Real model integration for these roles will be available in a future update.
+      </div>
+
+      {/* ── Provider Settings (Phase 6A) ── */}
+      <h2 style={{ marginTop: 32 }}>Provider Settings</h2>
       <p className="settings-subtitle">
         Configure LLM providers and API keys. Keys are stored locally — never in git.
       </p>
@@ -117,7 +287,6 @@ export function SettingsPanel() {
                 )}
               </div>
 
-              {/* Show base_url only for openai-compatible providers */}
               {["openai", "deepseek", "kimi", "minimax"].includes(p.name) && (
                 <div className="provider-field">
                   <label>Base URL</label>

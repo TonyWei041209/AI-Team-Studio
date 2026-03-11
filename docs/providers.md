@@ -111,3 +111,72 @@ Request body:
 ```
 
 Errors: 404 (unknown provider), 400 (not configured), 502 (provider error).
+
+## Role-Level Model Routing (Phase 6C)
+
+Phase 6C introduces config-driven per-role model routing. Each agent role independently selects its provider and model via the `role_model_settings` database table.
+
+### Architecture
+
+```
+Settings UI (Role Model Config)
+    |
+    v
+PATCH /api/settings/role-models  -->  SQLite (role_model_settings)
+                                              |
+GET /api/settings/role-models   <-------------+
+                                              |
+Orchestrator                                  v
+  └─ executor selection  <──  role_model_settings.enabled?
+       |                           |
+       ├── enabled=true  ──> ModelAgentExecutor
+       |                       └── _resolve_provider() reads from DB
+       |                       └── ProviderRegistry.get(cfg.provider)
+       |                       └── provider.complete(model=cfg.model)
+       └── enabled=false ──> MockAgentExecutor
+```
+
+### role_model_settings Table (Schema V5)
+
+```sql
+role       TEXT PRIMARY KEY,  -- planner, builder, qa, reviewer
+provider   TEXT NOT NULL DEFAULT 'mock',
+model      TEXT NOT NULL DEFAULT '',
+enabled    INTEGER NOT NULL DEFAULT 0,
+created_at TEXT,
+updated_at TEXT
+```
+
+### API Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/settings/role-models` | Read all role-model mappings |
+| PATCH | `/api/settings/role-models` | Update role-model mappings (partial) |
+
+### PATCH Validation Rules
+
+- `role` must be a valid AgentRole (planner, builder, qa, reviewer)
+- When `enabled=true`: `provider` and `model` must be non-empty
+- `provider` must be a registered provider name
+- **Phase 6C**: Only `planner` and `reviewer` can be enabled for real models
+- **Builder/QA**: Attempts to enable real models are rejected with 400
+
+### Dual-Model Support
+
+Same provider, different models per role:
+
+```json
+{
+  "role_models": [
+    {"role": "planner",  "provider": "anthropic", "model": "claude-sonnet-4-20250514"},
+    {"role": "reviewer", "provider": "anthropic", "model": "claude-3-5-haiku-20241022"}
+  ]
+}
+```
+
+### Truth Source
+
+`role_model_settings` is the **sole runtime truth source** for model routing.
+`definitions.py` only provides system prompts, role metadata, and seed defaults
+for the V5 migration. It is NOT consulted at runtime for provider/model selection.

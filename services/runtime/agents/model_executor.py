@@ -1,7 +1,10 @@
-"""Model-backed agent executor (Phase 6B).
+"""Model-backed agent executor (Phase 6B + 6C).
 
 Calls real LLM providers via the ProviderRegistry for agent execution.
 Currently supports: Planner and Reviewer roles.
+
+Phase 6C: Provider/model resolution is now config-driven via role_model_settings
+database table, falling back to definitions.py defaults only when DB config is absent.
 """
 
 from __future__ import annotations
@@ -164,11 +167,37 @@ def strip_code_fences(text: str) -> str:
 # ── Model Agent Executor ──────────────────────────────────────
 
 
+def _load_role_model_config(role: AgentRole) -> dict | None:
+    """Load role-model config from database.  Returns None if no row found."""
+    try:
+        from database import get_connection
+        conn = get_connection()
+        try:
+            row = conn.execute(
+                "SELECT provider, model, enabled FROM role_model_settings WHERE role = ?",
+                (role.value,),
+            ).fetchone()
+            if row:
+                return {
+                    "provider": row["provider"],
+                    "model": row["model"],
+                    "enabled": bool(row["enabled"]),
+                }
+            return None
+        finally:
+            conn.close()
+    except Exception:
+        return None
+
+
 class ModelAgentExecutor:
     """Executes agent roles using real LLM provider calls.
 
     Currently supports the **Planner** and **Reviewer** roles.
     Builder and QA will raise ``NotImplementedError``.
+
+    Phase 6C: Provider/model are resolved from role_model_settings DB table,
+    falling back to definitions.py defaults when DB config is absent.
     """
 
     _SUPPORTED_ROLES = {AgentRole.PLANNER, AgentRole.REVIEWER}
@@ -194,25 +223,64 @@ class ModelAgentExecutor:
     # ── Shared helpers ─────────────────────────────────────────
 
     def _resolve_provider(self, role: AgentRole):
-        """Look up the provider for a role definition, raising on misconfiguration."""
-        defn = get_definition(role)
-        provider = self._registry.get(defn.model_provider)
+        """Look up the provider/model for a role from role_model_settings DB.
+
+        The role_model_settings table is the **sole runtime truth source** for
+        model routing (Phase 6C).  definitions.py only provides system_prompt
+        and role metadata.
+
+        Raises ValueError if:
+        - No DB config found for the role
+        - Role is not enabled for real model calls
+        - Provider is not registered
+        - Provider has no API key configured
+        - Model name is empty
+        """
+        defn = get_definition(role)  # for system_prompt and metadata only
+
+        db_cfg = _load_role_model_config(role)
+        if not db_cfg:
+            raise ValueError(
+                f"No model configuration found for role '{role.value}'. "
+                f"Configure it in Settings → Role Model Configuration."
+            )
+        if not db_cfg["enabled"]:
+            raise ValueError(
+                f"Role '{role.value}' is not enabled for real model calls. "
+                f"Enable it in Settings → Role Model Configuration."
+            )
+
+        provider_name = db_cfg["provider"]
+        model_name = db_cfg["model"]
+
+        if not provider_name or provider_name == "mock":
+            raise ValueError(
+                f"Role '{role.value}' is enabled but provider is '{provider_name}'. "
+                f"Set a valid provider in Settings."
+            )
+        if not model_name:
+            raise ValueError(
+                f"Role '{role.value}' is enabled but model is empty. "
+                f"Set a model name in Settings → Role Model Configuration."
+            )
+
+        provider = self._registry.get(provider_name)
         if provider is None:
             raise ValueError(
-                f"Provider '{defn.model_provider}' not registered. "
-                f"Check provider configuration."
+                f"Provider '{provider_name}' not registered for role '{role.value}'. "
+                f"Check provider configuration in Settings."
             )
         if not getattr(provider, "api_key", ""):
             raise ValueError(
-                f"Provider '{defn.model_provider}' has no API key configured. "
-                f"Set the API key in Settings."
+                f"Provider '{provider_name}' has no API key configured for role '{role.value}'. "
+                f"Set the API key in Settings → Provider Settings."
             )
-        return defn, provider
+        return defn, provider, model_name
 
-    async def _call_model(self, defn, provider, user_msg: str) -> str:
+    async def _call_model(self, defn, provider, model_name: str, user_msg: str) -> str:
         """Build a CompletionRequest, call the provider, return raw content."""
         request = CompletionRequest(
-            model=defn.model_name,
+            model=model_name,
             messages=[Message(role=MessageRole.user, content=user_msg)],
             system_prompt=defn.system_prompt,
             max_tokens=4096,
@@ -258,9 +326,9 @@ class ModelAgentExecutor:
 
     async def _execute_planner(self, task_context: dict) -> ExecutionResult:
         """Call a real LLM to produce a structured Planner output."""
-        defn, provider = self._resolve_provider(AgentRole.PLANNER)
+        defn, provider, model_name = self._resolve_provider(AgentRole.PLANNER)
         user_msg = self._build_planner_user_message(task_context)
-        raw_content = await self._call_model(defn, provider, user_msg)
+        raw_content = await self._call_model(defn, provider, model_name, user_msg)
 
         result = self._parse_and_validate(raw_content, "Planner", PlannerOutputSchema)
         if isinstance(result, ExecutionResult):
@@ -289,9 +357,9 @@ class ModelAgentExecutor:
 
     async def _execute_reviewer(self, task_context: dict) -> ExecutionResult:
         """Call a real LLM to produce a structured Reviewer output."""
-        defn, provider = self._resolve_provider(AgentRole.REVIEWER)
+        defn, provider, model_name = self._resolve_provider(AgentRole.REVIEWER)
         user_msg = self._build_reviewer_user_message(task_context)
-        raw_content = await self._call_model(defn, provider, user_msg)
+        raw_content = await self._call_model(defn, provider, model_name, user_msg)
 
         result = self._parse_and_validate(raw_content, "Reviewer", ReviewerOutputSchema)
         if isinstance(result, ExecutionResult):

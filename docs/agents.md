@@ -159,12 +159,58 @@ The `_get_executor(role)` method checks the role-specific map first, then falls 
 }
 ```
 
-### Fallback Behavior
+### Fallback Behavior (Phase 6B)
 
 - **Provider configured with API key** → `ModelAgentExecutor` used for Planner and Reviewer
 - **Provider NOT configured** → Falls back to `MockAgentExecutor` (same as Phase 3)
 - **Provider configured but call fails** → Task fails with error (no silent mock fallback)
-- **Builder/QA** → Always use `MockAgentExecutor` (Phase 6B Round 2 scope)
+- **Builder/QA** → Always use `MockAgentExecutor`
+
+## Role-Level Model Routing (Phase 6C)
+
+Phase 6C makes model routing **config-driven** via the `role_model_settings` DB table.
+
+### Key Changes from Phase 6B
+
+- `definitions.py` model_provider/model_name are now **seed defaults only** (for V5 migration)
+- At runtime, `role_model_settings` is the **sole truth source** for provider/model
+- Each role independently configures: provider, model, enabled
+- Same provider can use different models for different roles (dual-model support)
+
+### Current Role Status
+
+| Role | Real Model | Notes |
+|------|-----------|-------|
+| Planner | ✅ Supported | Config via Settings → Role Model Configuration |
+| Reviewer | ✅ Supported | Config via Settings → Role Model Configuration |
+| Builder | ❌ Mock only | Real model blocked in Phase 6C |
+| QA | ❌ Mock only | Real model blocked in Phase 6C |
+
+### Executor Selection Flow (Phase 6C)
+
+```
+Orchestrator
+  └─ read role_model_settings from DB
+  └─ for each role in (PLANNER, REVIEWER):
+       if cfg.enabled AND cfg.provider != "mock" AND provider has API key:
+           executors[role] = ModelAgentExecutor
+       else:
+           use default MockAgentExecutor
+  └─ Builder/QA always use MockAgentExecutor
+```
+
+### ModelAgentExecutor Resolution (Phase 6C)
+
+```
+_resolve_provider(role)
+  1. Load from role_model_settings DB (sole truth source)
+  2. Validate: enabled, provider non-mock, model non-empty
+  3. Look up provider in ProviderRegistry
+  4. Verify API key exists
+  5. Return (definition, provider, model_name)
+```
+
+No fallback to `definitions.py` at runtime.
 
 ### Manual Completion Endpoint
 

@@ -19,10 +19,15 @@ class AgentRoleDefinition:
     required_task_status Task status that must hold before this role can run.
     success_task_status  Task status to set after this role succeeds.
     allowed_tools        Tools this role may use (enforced by tool layer since Phase 4A).
-    model_provider       Provider name for LLM calls ("mock" = use MockAgentExecutor).
-    model_name           Model identifier for LLM calls ("mock-v1" = mock).
+    model_provider       Default provider (seed value for role_model_settings; not used at runtime).
+    model_name           Default model (seed value for role_model_settings; not used at runtime).
     output_sections      Expected structured output keys this role produces.
     system_prompt        System prompt template sent to LLM (empty = mock/not yet wired).
+
+    NOTE (Phase 6C): model_provider and model_name are **seed defaults only**.
+    At runtime, the role_model_settings DB table is the sole truth source for
+    provider/model routing.  These fields are used only to populate the DB on
+    first migration (V5).
     """
 
     role: AgentRole

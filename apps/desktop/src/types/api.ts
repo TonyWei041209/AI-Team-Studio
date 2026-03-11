@@ -166,3 +166,23 @@ export interface ProviderSettingUpdate {
   base_url?: string;
   enabled?: boolean;
 }
+
+// ── Role-model settings (Phase 6C) ────────────────────
+
+export interface RoleModelSetting {
+  role: string;
+  provider: string;
+  model: string;
+  enabled: boolean;
+}
+
+export interface RoleModelSettingsResponse {
+  role_models: Record<string, RoleModelSetting>;
+}
+
+export interface RoleModelSettingUpdate {
+  role: string;
+  provider?: string;
+  model?: string;
+  enabled?: boolean;
+}

@@ -259,3 +259,35 @@ class ProviderSettingUpdate(BaseModel):
 class ProviderSettingsPatch(BaseModel):
     """Request body for PATCH /api/settings/providers."""
     providers: list[ProviderSettingUpdate]
+
+
+# ── Role-model settings (Phase 6C) ──────────────────────────────
+
+class RoleModelSetting(BaseModel):
+    """Single role's model configuration (read response)."""
+    model_config = ConfigDict(protected_namespaces=())
+
+    role: str
+    provider: str = "mock"
+    model: str = ""
+    enabled: bool = False
+
+
+class RoleModelSettingsResponse(BaseModel):
+    """Response for GET /api/settings/role-models."""
+    role_models: dict[str, RoleModelSetting]
+
+
+class RoleModelSettingUpdate(BaseModel):
+    """Patch body for a single role's model settings."""
+    model_config = ConfigDict(protected_namespaces=())
+
+    role: str
+    provider: Optional[str] = None
+    model: Optional[str] = None
+    enabled: Optional[bool] = None
+
+
+class RoleModelSettingsPatch(BaseModel):
+    """Request body for PATCH /api/settings/role-models."""
+    role_models: list[RoleModelSettingUpdate]

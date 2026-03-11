@@ -16,7 +16,9 @@
  */
 import { test, expect, type Page } from "@playwright/test";
 
-const API = "http://127.0.0.1:9800/api";
+const API = process.env.VITE_API_BASE_URL
+  ? `${process.env.VITE_API_BASE_URL}/api`
+  : "http://127.0.0.1:9800/api";
 
 // Unique prefix to avoid collisions with other test suites
 const PREFIX = `E2E-${Date.now()}`;

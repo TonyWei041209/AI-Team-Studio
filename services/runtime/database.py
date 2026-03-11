@@ -185,12 +185,46 @@ def _apply_v4(conn: sqlite3.Connection) -> None:
     conn.execute("INSERT INTO schema_version (version) VALUES (4)")
 
 
+def _apply_v5(conn: sqlite3.Connection) -> None:
+    """V5: Role-model settings table (Phase 6C).
+
+    Per-role model configuration: each agent role can independently select
+    a provider and model.  API keys are NOT stored here — they remain in
+    provider_settings (V4).
+    """
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS role_model_settings (
+            role TEXT PRIMARY KEY,
+            provider TEXT NOT NULL DEFAULT 'mock',
+            model TEXT NOT NULL DEFAULT '',
+            enabled INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+        )
+    """)
+    # Seed default rows from agent definitions
+    defaults = [
+        ("planner", "anthropic", "claude-sonnet-4-20250514", 1),
+        ("builder", "mock", "", 0),
+        ("qa", "mock", "", 0),
+        ("reviewer", "anthropic", "claude-3-5-haiku-20241022", 1),
+    ]
+    for role, provider, model, enabled in defaults:
+        conn.execute(
+            "INSERT OR IGNORE INTO role_model_settings (role, provider, model, enabled) "
+            "VALUES (?, ?, ?, ?)",
+            (role, provider, model, enabled),
+        )
+    conn.execute("INSERT INTO schema_version (version) VALUES (5)")
+
+
 # Ordered list of migrations
 _MIGRATIONS = [
     (1, _apply_v1),
     (2, _apply_v2),
     (3, _apply_v3),
     (4, _apply_v4),
+    (5, _apply_v5),
 ]
 
 

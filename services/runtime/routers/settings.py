@@ -1,6 +1,7 @@
-"""Settings API endpoints (Phase 6A).
+"""Settings API endpoints (Phase 6A + 6C).
 
-Manages provider configuration (API keys, base URLs, enabled state).
+Manages provider configuration (API keys, base URLs, enabled state)
+and per-role model mapping (provider, model, enabled per agent role).
 API keys are stored in the local SQLite DB only — never in git-tracked files.
 Settings responses mask API keys for display safety.
 """
@@ -8,13 +9,17 @@ Settings responses mask API keys for display safety.
 import json
 import logging
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 
 from database import get_connection
 from models import (
+    AgentRole,
     ProviderSettingRead,
     ProviderSettingsResponse,
     ProviderSettingsPatch,
+    RoleModelSetting,
+    RoleModelSettingsResponse,
+    RoleModelSettingsPatch,
 )
 from providers.base import mask_api_key
 from providers.registry import get_registry
@@ -156,3 +161,139 @@ async def update_provider_settings(body: ProviderSettingsPatch):
 
     # Return updated settings (masked)
     return await get_provider_settings()
+
+
+# ── Role-model mapping endpoints (Phase 6C) ────────────────────
+
+
+_VALID_ROLES = {r.value for r in AgentRole}
+
+
+def load_role_model_settings() -> dict[str, dict]:
+    """Read all rows from role_model_settings into a dict keyed by role."""
+    conn = get_connection()
+    try:
+        rows = conn.execute(
+            "SELECT role, provider, model, enabled FROM role_model_settings"
+        ).fetchall()
+        return {
+            row["role"]: {
+                "provider": row["provider"],
+                "model": row["model"],
+                "enabled": bool(row["enabled"]),
+            }
+            for row in rows
+        }
+    finally:
+        conn.close()
+
+
+@router.get("/role-models", response_model=RoleModelSettingsResponse)
+async def get_role_model_settings():
+    """Return per-role model configuration.
+
+    No sensitive information is exposed — API keys live in provider_settings.
+    """
+    saved = load_role_model_settings()
+    role_models = {}
+    for role_val in _VALID_ROLES:
+        cfg = saved.get(role_val, {"provider": "mock", "model": "", "enabled": False})
+        role_models[role_val] = RoleModelSetting(
+            role=role_val,
+            provider=cfg["provider"],
+            model=cfg["model"],
+            enabled=cfg["enabled"],
+        )
+    return RoleModelSettingsResponse(role_models=role_models)
+
+
+# Roles that are allowed to enable real model calls in Phase 6C.
+# Builder/QA are explicitly blocked from real model activation.
+_REAL_MODEL_ALLOWED_ROLES = {"planner", "reviewer"}
+
+
+@router.patch("/role-models", response_model=RoleModelSettingsResponse)
+async def update_role_model_settings(body: RoleModelSettingsPatch):
+    """Update per-role model configuration with strong validation.
+
+    Validation rules:
+    - role must be a valid AgentRole
+    - When enabled=true: provider and model must be non-empty, provider must exist
+    - Builder/QA cannot be enabled for real model calls in Phase 6C
+    - Only provided fields are updated — omitted fields keep their current value
+    """
+    registry = get_registry()
+    registered_providers = set(registry.names()) | {"mock"}
+
+    conn = get_connection()
+    try:
+        for item in body.role_models:
+            # Validate role
+            if item.role not in _VALID_ROLES:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Invalid role: {item.role}. Must be one of {sorted(_VALID_ROLES)}",
+                )
+
+            existing = conn.execute(
+                "SELECT provider, model, enabled FROM role_model_settings WHERE role = ?",
+                (item.role,),
+            ).fetchone()
+
+            new_provider = item.provider if item.provider is not None else (existing["provider"] if existing else "mock")
+            new_model = item.model if item.model is not None else (existing["model"] if existing else "")
+            new_enabled = (1 if item.enabled else 0) if item.enabled is not None else (existing["enabled"] if existing else 0)
+
+            # Phase 6C constraint: Builder/QA cannot enable real models
+            if bool(new_enabled) and item.role not in _REAL_MODEL_ALLOWED_ROLES:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        f"Role '{item.role}' cannot be enabled for real model calls in the current phase. "
+                        f"Only {sorted(_REAL_MODEL_ALLOWED_ROLES)} support real model integration."
+                    ),
+                )
+
+            # When enabling: provider must be valid and model must be non-empty
+            if bool(new_enabled) and new_provider != "mock":
+                if not new_provider:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Role '{item.role}': provider cannot be empty when enabled.",
+                    )
+                if new_provider not in registered_providers:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Role '{item.role}': provider '{new_provider}' is not registered. "
+                               f"Available: {sorted(registered_providers)}",
+                    )
+                if not new_model:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Role '{item.role}': model cannot be empty when enabled with provider '{new_provider}'.",
+                    )
+
+            if existing is None:
+                conn.execute(
+                    "INSERT INTO role_model_settings (role, provider, model, enabled) "
+                    "VALUES (?, ?, ?, ?)",
+                    (item.role, new_provider, new_model, new_enabled),
+                )
+            else:
+                conn.execute(
+                    "UPDATE role_model_settings "
+                    "SET provider = ?, model = ?, enabled = ?, updated_at = datetime('now') "
+                    "WHERE role = ?",
+                    (new_provider, new_model, new_enabled, item.role),
+                )
+
+            logger.info(
+                "[settings] Updated role-model %s → provider=%s, model=%s, enabled=%s",
+                item.role, new_provider, new_model, bool(new_enabled),
+            )
+
+        conn.commit()
+    finally:
+        conn.close()
+
+    return await get_role_model_settings()

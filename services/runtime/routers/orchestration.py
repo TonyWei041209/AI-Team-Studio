@@ -11,11 +11,11 @@ from pydantic import BaseModel, Field
 
 from database import get_connection
 from models import AgentRole, TaskStatus, RunStatus
-from agents.definitions import get_definition
 from agents.orchestrator import Orchestrator
 from agents.executor import AgentExecutor, MockAgentExecutor
 from agents.model_executor import ModelAgentExecutor
 from providers.registry import get_registry
+from routers.settings import load_role_model_settings
 
 router = APIRouter(prefix="/api", tags=["orchestration"])
 
@@ -89,14 +89,17 @@ async def orchestrate_task(
         rejection_rate=params.rejection_rate,
     )
 
-    # Per-role executor dispatch: use ModelAgentExecutor for roles
-    # that have a real model provider configured with an API key.
+    # Phase 6C: Per-role executor dispatch based on role_model_settings DB.
+    # The DB table is the sole truth source for model routing.
+    # Orchestrator only decides mock vs model executor; the ModelAgentExecutor
+    # internally resolves the specific provider/model from the same DB.
     executors: dict[AgentRole, AgentExecutor] = {}
     registry = get_registry()
+    role_configs = load_role_model_settings()
     for role_enum in (AgentRole.PLANNER, AgentRole.REVIEWER):
-        defn = get_definition(role_enum)
-        if defn.model_provider != "mock":
-            provider = registry.get(defn.model_provider)
+        cfg = role_configs.get(role_enum.value, {})
+        if cfg.get("enabled") and cfg.get("provider", "mock") != "mock":
+            provider = registry.get(cfg["provider"])
             if provider and getattr(provider, "api_key", ""):
                 executors[role_enum] = ModelAgentExecutor(registry=registry)
 

@@ -82,27 +82,46 @@ Key design decisions:
 5. **Rejection loops**: Reviewer can reject up to 3 times, looping back to Builder each time
 6. **Full audit trail**: Every step creates AgentRun records, log events, and tracks status transitions
 
-## Model Agent Executor (Phase 6B)
+## Model Agent Executor (Phase 6B + 6C)
 
 The `ModelAgentExecutor` calls real LLM providers via the ProviderRegistry:
 
 ```
 Orchestrator._get_executor(role)
-  ├── PLANNER → ModelAgentExecutor (when provider configured)
-  │                 └── ProviderRegistry.get("anthropic").complete()
+  ├── PLANNER → ModelAgentExecutor (when enabled in role_model_settings + API key)
+  │                 └── _resolve_provider() reads from role_model_settings DB
+  │                 └── ProviderRegistry.get(cfg.provider).complete(model=cfg.model)
   │                 └── Parse JSON → PlannerOutputSchema.validate()
-  ├── BUILDER → MockAgentExecutor
-  ├── QA      → MockAgentExecutor
-  └── REVIEWER → MockAgentExecutor
+  ├── BUILDER → MockAgentExecutor (always)
+  ├── QA      → MockAgentExecutor (always)
+  └── REVIEWER → ModelAgentExecutor (when enabled in role_model_settings + API key)
+                      └── _resolve_provider() reads from role_model_settings DB
+                      └── ProviderRegistry.get(cfg.provider).complete(model=cfg.model)
+                      └── Parse JSON → ReviewerOutputSchema.validate()
 ```
 
 Key design decisions:
-1. **Planner-only in Round 1**: Only Planner uses real model calls; other roles remain on mock
-2. **Structured JSON output**: Planner must return valid JSON matching `PlannerOutputSchema`
-3. **No silent fallback**: If provider is configured but call fails, task fails (not silently mocked)
-4. **Graceful mock fallback**: When provider has no API key, Planner uses mock executor
-5. **System prompts**: Each role definition has a `system_prompt` field; only Planner's is populated in Round 1
-6. **Code fence stripping**: Handles common LLM behavior of wrapping JSON in markdown fences
+1. **Config-driven routing (Phase 6C)**: `role_model_settings` DB table is the sole runtime truth source
+2. **Definitions as seed only**: `definitions.py` provides system prompts and V5 migration defaults, NOT runtime routing
+3. **Dual-model support**: Same provider, different models per role (e.g., Planner→opus, Reviewer→sonnet)
+4. **Structured JSON output**: Planner and Reviewer must return valid JSON matching their schemas
+5. **No silent fallback**: If role is enabled but misconfigured, task fails with clear error
+6. **Builder/QA blocked**: Cannot enable real models in Phase 6C; API rejects the request
+7. **Code fence stripping**: Handles common LLM behavior of wrapping JSON in markdown fences
+
+## Data Model (Phase 6C)
+
+### role_model_settings (Schema V5)
+
+```sql
+role       TEXT PRIMARY KEY,  -- planner, builder, qa, reviewer
+provider   TEXT NOT NULL DEFAULT 'mock',
+model      TEXT NOT NULL DEFAULT '',
+enabled    INTEGER NOT NULL DEFAULT 0
+```
+
+Seeded from definitions.py defaults on first V5 migration.
+Updated via `PATCH /api/settings/role-models` with strong validation.
 
 ## Tool Layer (Phase 4A)
 
