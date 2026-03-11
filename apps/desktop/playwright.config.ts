@@ -36,6 +36,10 @@ export default defineConfig({
       VITE_APPROVALS_POLL_MS: "1000",
       VITE_LOGS_POLL_MS: "1000",
       VITE_APPROVAL_COUNT_POLL_MS: "1000",
+      // Allow verify-all to point the frontend at an isolated test runtime
+      ...(process.env.VITE_API_BASE_URL
+        ? { VITE_API_BASE_URL: process.env.VITE_API_BASE_URL }
+        : {}),
     },
   },
 });

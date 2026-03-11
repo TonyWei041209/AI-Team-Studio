@@ -1,10 +1,11 @@
 """Phase 3 acceptance test suite — Agent & Orchestrator."""
 import json
+import os
 import sys
 import urllib.request
 import urllib.error
 
-BASE = "http://127.0.0.1:9800/api"
+BASE = os.environ.get("TEST_API_BASE", "http://127.0.0.1:9800/api")
 results = []
 
 

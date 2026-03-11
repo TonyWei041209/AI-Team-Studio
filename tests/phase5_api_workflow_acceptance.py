@@ -9,13 +9,14 @@ NOTE: These are *API-level* end-to-end tests exercising the same HTTP
 endpoints the React frontend calls.  They do NOT test browser rendering.
 """
 import json
+import os
 import sqlite3
 import pathlib
 import sys
 import urllib.request
 import urllib.error
 
-BASE = "http://127.0.0.1:9800/api"
+BASE = os.environ.get("TEST_API_BASE", "http://127.0.0.1:9800/api")
 results = []
 
 REPO_PATH = "D:/AI_Team_Studio"

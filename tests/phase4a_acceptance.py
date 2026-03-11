@@ -1,10 +1,11 @@
 """Phase 4A acceptance test suite — Tool Layer + Approval Gating."""
 import json
+import os
 import sys
 import urllib.request
 import urllib.error
 
-BASE = "http://127.0.0.1:9800/api"
+BASE = os.environ.get("TEST_API_BASE", "http://127.0.0.1:9800/api")
 results = []
 
 REPO_PATH = "D:/AI_Team_Studio"

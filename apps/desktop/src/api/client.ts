@@ -1,10 +1,12 @@
 /**
  * Typed fetch wrapper for the FastAPI backend.
  *
- * All endpoints live under http://127.0.0.1:9800.
+ * Default: http://127.0.0.1:9800
+ * Override at build time via VITE_API_BASE_URL env var for isolated test runs.
  */
 
-const BASE_URL = "http://127.0.0.1:9800";
+const BASE_URL: string =
+  import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:9800";
 
 export class ApiError extends Error {
   status: number;

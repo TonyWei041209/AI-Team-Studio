@@ -11,7 +11,9 @@
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "verify:build": "tsc -b && vite build",
+    "verify:tauri": "cd src-tauri && cargo check"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.10.1",

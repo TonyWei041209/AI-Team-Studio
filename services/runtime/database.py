@@ -1,11 +1,14 @@
 """SQLite database initialization and connection management."""
 
+import os
 import sqlite3
 from pathlib import Path
 
-# Database file lives in the project-level data/ directory
+# Database file lives in the project-level data/ directory.
+# Override with RUNTIME_DB env var for isolated test runs.
 DATA_DIR = Path(__file__).resolve().parent.parent.parent / "data"
-DB_PATH = DATA_DIR / "ai_team_studio.db"
+_db_override = os.environ.get("RUNTIME_DB")
+DB_PATH = Path(_db_override) if _db_override else DATA_DIR / "ai_team_studio.db"
 
 
 def get_db_path() -> Path:

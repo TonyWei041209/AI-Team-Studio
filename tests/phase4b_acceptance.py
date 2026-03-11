@@ -1,12 +1,13 @@
 """Phase 4B acceptance test suite — Audit Logging + Approval Single-Use Consume."""
 import json
+import os
 import sys
 import time
 import urllib.request
 import urllib.error
 import concurrent.futures
 
-BASE = "http://127.0.0.1:9800/api"
+BASE = os.environ.get("TEST_API_BASE", "http://127.0.0.1:9800/api")
 results = []
 
 REPO_PATH = "D:/AI_Team_Studio"

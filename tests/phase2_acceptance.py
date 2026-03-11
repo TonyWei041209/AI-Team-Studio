@@ -1,12 +1,13 @@
 """Phase 2 comprehensive acceptance test suite."""
 import json
+import os
 import pathlib
 import sqlite3
 import sys
 import urllib.request
 import urllib.error
 
-BASE = "http://127.0.0.1:9800/api"
+BASE = os.environ.get("TEST_API_BASE", "http://127.0.0.1:9800/api")
 results = []
 
 
