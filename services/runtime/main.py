@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from database import init_db, get_db_path
 from routers import projects, tasks, agent_runs, approvals, logs, orchestration, tools
 from routers import providers as providers_router, settings as settings_router
+from routers import completion as completion_router
 from routers.settings import load_and_apply_settings
 
 
@@ -46,6 +47,7 @@ app.include_router(orchestration.router)
 app.include_router(tools.router)
 app.include_router(providers_router.router)
 app.include_router(settings_router.router)
+app.include_router(completion_router.router)
 
 
 @app.get("/api/health")

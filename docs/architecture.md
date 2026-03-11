@@ -77,9 +77,32 @@ pending → [Planner] → planning → [Builder] → in_progress → [QA] → re
 Key design decisions:
 1. **Data-driven pipeline**: Role definitions are declarative (in `agents/definitions.py`), not hardcoded in control flow
 2. **Swappable executor**: The `AgentExecutor` Protocol lets Phase 6 swap mock agents for real model calls without modifying the orchestrator
-3. **Synchronous execution**: Phase 3 runs the pipeline synchronously; async/background execution can be added later
-4. **Rejection loops**: Reviewer can reject up to 3 times, looping back to Builder each time
-5. **Full audit trail**: Every step creates AgentRun records, log events, and tracks status transitions
+3. **Per-role executor dispatch** (Phase 6B): Orchestrator accepts `executors: dict[AgentRole, AgentExecutor]` for role-specific overrides
+4. **Synchronous execution**: Phase 3 runs the pipeline synchronously; async/background execution can be added later
+5. **Rejection loops**: Reviewer can reject up to 3 times, looping back to Builder each time
+6. **Full audit trail**: Every step creates AgentRun records, log events, and tracks status transitions
+
+## Model Agent Executor (Phase 6B)
+
+The `ModelAgentExecutor` calls real LLM providers via the ProviderRegistry:
+
+```
+Orchestrator._get_executor(role)
+  ├── PLANNER → ModelAgentExecutor (when provider configured)
+  │                 └── ProviderRegistry.get("anthropic").complete()
+  │                 └── Parse JSON → PlannerOutputSchema.validate()
+  ├── BUILDER → MockAgentExecutor
+  ├── QA      → MockAgentExecutor
+  └── REVIEWER → MockAgentExecutor
+```
+
+Key design decisions:
+1. **Planner-only in Round 1**: Only Planner uses real model calls; other roles remain on mock
+2. **Structured JSON output**: Planner must return valid JSON matching `PlannerOutputSchema`
+3. **No silent fallback**: If provider is configured but call fails, task fails (not silently mocked)
+4. **Graceful mock fallback**: When provider has no API key, Planner uses mock executor
+5. **System prompts**: Each role definition has a `system_prompt` field; only Planner's is populated in Round 1
+6. **Code fence stripping**: Handles common LLM behavior of wrapping JSON in markdown fences
 
 ## Tool Layer (Phase 4A)
 

@@ -10,9 +10,12 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from database import get_connection
-from models import TaskStatus, RunStatus
+from models import AgentRole, TaskStatus, RunStatus
+from agents.definitions import get_definition
 from agents.orchestrator import Orchestrator
-from agents.executor import MockAgentExecutor
+from agents.executor import AgentExecutor, MockAgentExecutor
+from agents.model_executor import ModelAgentExecutor
+from providers.registry import get_registry
 
 router = APIRouter(prefix="/api", tags=["orchestration"])
 
@@ -78,15 +81,26 @@ async def orchestrate_task(
     finally:
         conn.close()
 
-    # Build executor
+    # Build executor(s)
     params = body or OrchestrationRequest()
-    executor = MockAgentExecutor(
+    mock_executor = MockAgentExecutor(
         delay_seconds=params.delay_seconds,
         failure_rate=params.failure_rate,
         rejection_rate=params.rejection_rate,
     )
 
-    orchestrator = Orchestrator(executor=executor)
+    # Per-role executor dispatch: use ModelAgentExecutor for roles
+    # that have a real model provider configured with an API key.
+    executors: dict[AgentRole, AgentExecutor] = {}
+    registry = get_registry()
+    for role_enum in (AgentRole.PLANNER, AgentRole.REVIEWER):
+        defn = get_definition(role_enum)
+        if defn.model_provider != "mock":
+            provider = registry.get(defn.model_provider)
+            if provider and getattr(provider, "api_key", ""):
+                executors[role_enum] = ModelAgentExecutor(registry=registry)
+
+    orchestrator = Orchestrator(executor=mock_executor, executors=executors)
     result = await orchestrator.run(task_id)
     return result.to_dict()
 

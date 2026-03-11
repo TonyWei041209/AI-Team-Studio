@@ -58,8 +58,22 @@ class OrchestrationResult:
 class Orchestrator:
     """Drives a pending task through Planner → Builder → QA → Reviewer."""
 
-    def __init__(self, executor: AgentExecutor | None = None):
-        self.executor: AgentExecutor = executor or MockAgentExecutor()
+    def __init__(
+        self,
+        executor: AgentExecutor | None = None,
+        executors: dict[AgentRole, AgentExecutor] | None = None,
+    ):
+        self._default_executor: AgentExecutor = executor or MockAgentExecutor()
+        self._executors: dict[AgentRole, AgentExecutor] = executors or {}
+
+    # Backward-compat property so existing code using `self.executor` still works
+    @property
+    def executor(self) -> AgentExecutor:
+        return self._default_executor
+
+    def _get_executor(self, role: AgentRole) -> AgentExecutor:
+        """Return the executor for a role, falling back to the default."""
+        return self._executors.get(role, self._default_executor)
 
     async def run(self, task_id: str) -> OrchestrationResult:
         """Execute the full orchestration pipeline for a task.
@@ -235,9 +249,10 @@ class Orchestrator:
         # 2. Mark running
         self._update_run(run_id, RunStatus.RUNNING)
 
-        # 3. Execute
+        # 3. Execute (per-role executor dispatch)
+        executor = self._get_executor(defn.role)
         try:
-            result: ExecutionResult = await self.executor.execute(
+            result: ExecutionResult = await executor.execute(
                 role=defn.role,
                 task_context=task_context,
             )

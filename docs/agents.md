@@ -89,15 +89,94 @@ class AgentExecutor(Protocol):
 ```
 
 - **Phase 3**: `MockAgentExecutor` — returns simulated outputs
-- **Phase 6**: `ModelAgentExecutor` — calls real model providers
+- **Phase 6B**: `ModelAgentExecutor` — calls real model providers
 
 This design lets the orchestrator remain unchanged when real model calls are added.
+
+## Model Integration (Phase 6B)
+
+### Per-Role Executor Dispatch
+
+The `Orchestrator` accepts an optional `executors` dict mapping specific roles to custom executors:
+
+```python
+Orchestrator(
+    executor=mock_executor,                          # default for all roles
+    executors={                                       # override for specific roles
+        AgentRole.PLANNER: model_executor,
+        AgentRole.REVIEWER: model_executor,
+    },
+)
+```
+
+The `_get_executor(role)` method checks the role-specific map first, then falls back to the default.
+
+### Planner Model Integration
+
+**Phase 6B Round 1** connects only the Planner to real LLM calls:
+
+- Uses `ModelAgentExecutor` which calls `ProviderRegistry.complete()`
+- Default provider: `anthropic` with model `claude-3-5-haiku-20241022`
+- System prompt instructs the model to return **valid JSON only**
+- Response is parsed and validated against `PlannerOutputSchema`
+- Invalid JSON or schema violations → task fails with clear error (no silent fallback)
+
+### Planner Output Schema
+
+```json
+{
+  "goal_summary": "string (required, non-empty)",
+  "task_breakdown": [
+    {"step": 1, "description": "string", "role": "builder|qa|reviewer"}
+  ],
+  "acceptance_criteria": ["string", ...],
+  "risks": ["string", ...],
+  "dependencies": ["string", ...]
+}
+```
+
+### Reviewer Model Integration
+
+**Phase 6B Round 2** connects the Reviewer to real LLM calls alongside Planner:
+
+- Uses `ModelAgentExecutor` which calls `ProviderRegistry.complete()`
+- Default provider: `anthropic` with model `claude-3-5-haiku-20241022`
+- System prompt instructs the model to return **valid JSON only**
+- Response is parsed and validated against `ReviewerOutputSchema`
+- Invalid JSON or schema violations → task fails with clear error (no silent fallback)
+- Decision is mapped to `ReviewDecision` enum for orchestrator loop control
+
+### Reviewer Output Schema
+
+```json
+{
+  "decision": "approve | request_changes",
+  "reason": "string (required, non-empty)",
+  "issues_found": [
+    {"severity": "critical|major|minor|nitpick", "description": "string"}
+  ],
+  "confidence": "high | medium | low"
+}
+```
+
+### Fallback Behavior
+
+- **Provider configured with API key** → `ModelAgentExecutor` used for Planner and Reviewer
+- **Provider NOT configured** → Falls back to `MockAgentExecutor` (same as Phase 3)
+- **Provider configured but call fails** → Task fails with error (no silent mock fallback)
+- **Builder/QA** → Always use `MockAgentExecutor` (Phase 6B Round 2 scope)
+
+### Manual Completion Endpoint
+
+`POST /api/completion` — send arbitrary prompts to any configured provider for debugging.
 
 ## Key Files
 
 | File | Purpose |
 |------|---------|
-| `agents/definitions.py` | Role registry and pipeline sequence |
+| `agents/definitions.py` | Role registry, pipeline sequence, system prompts |
 | `agents/executor.py` | AgentExecutor protocol and MockAgentExecutor |
-| `agents/orchestrator.py` | Core orchestration engine |
+| `agents/model_executor.py` | ModelAgentExecutor, PlannerOutputSchema, ReviewerOutputSchema, code-fence stripping |
+| `agents/orchestrator.py` | Core orchestration engine with per-role executor dispatch |
 | `routers/orchestration.py` | HTTP endpoints for orchestration |
+| `routers/completion.py` | Manual completion debug endpoint |

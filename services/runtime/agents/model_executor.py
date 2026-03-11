@@ -1,0 +1,339 @@
+"""Model-backed agent executor (Phase 6B).
+
+Calls real LLM providers via the ProviderRegistry for agent execution.
+Currently supports: Planner and Reviewer roles.
+"""
+
+from __future__ import annotations
+
+import json
+import re
+from typing import Any
+
+from models import AgentRole, ReviewDecision
+from agents.definitions import get_definition
+from agents.executor import ExecutionResult
+from providers.base import CompletionRequest, Message, MessageRole
+from providers.registry import get_registry, ProviderRegistry
+
+
+# ── Planner output schema validation ──────────────────────────
+
+
+class PlannerOutputSchema:
+    """Validates Planner JSON output against the required schema."""
+
+    @staticmethod
+    def validate(data: Any) -> tuple[bool, str]:
+        """Check *data* conforms to the Planner output schema.
+
+        Returns ``(True, "")`` on success or ``(False, "<reason>")`` on failure.
+        """
+        if not isinstance(data, dict):
+            return False, "Output must be a JSON object"
+
+        # goal_summary: required, non-empty string
+        gs = data.get("goal_summary")
+        if not isinstance(gs, str) or not gs.strip():
+            return False, "goal_summary must be a non-empty string"
+
+        # task_breakdown: required, list with >= 1 item
+        tb = data.get("task_breakdown")
+        if not isinstance(tb, list) or len(tb) == 0:
+            return False, "task_breakdown must be a non-empty list"
+        for i, item in enumerate(tb):
+            if not isinstance(item, dict):
+                return False, f"task_breakdown[{i}] must be an object"
+            if "step" not in item or not isinstance(item["step"], (int, float)):
+                return False, f"task_breakdown[{i}].step must be an integer"
+            if "description" not in item or not isinstance(item["description"], str):
+                return False, f"task_breakdown[{i}].description must be a string"
+            if "role" not in item or not isinstance(item["role"], str):
+                return False, f"task_breakdown[{i}].role must be a string"
+
+        # acceptance_criteria: required, list with >= 1 string item
+        ac = data.get("acceptance_criteria")
+        if not isinstance(ac, list) or len(ac) == 0:
+            return False, "acceptance_criteria must be a non-empty list"
+        for i, item in enumerate(ac):
+            if not isinstance(item, str):
+                return False, f"acceptance_criteria[{i}] must be a string"
+
+        # risks: optional, list of strings (can be empty)
+        risks = data.get("risks")
+        if risks is None:
+            pass  # tolerate missing — treat as empty
+        elif not isinstance(risks, list):
+            return False, "risks must be a list"
+        else:
+            for i, item in enumerate(risks):
+                if not isinstance(item, str):
+                    return False, f"risks[{i}] must be a string"
+
+        # dependencies: optional, list of strings (can be empty)
+        deps = data.get("dependencies")
+        if deps is None:
+            pass  # tolerate missing — treat as empty
+        elif not isinstance(deps, list):
+            return False, "dependencies must be a list"
+        else:
+            for i, item in enumerate(deps):
+                if not isinstance(item, str):
+                    return False, f"dependencies[{i}] must be a string"
+
+        return True, ""
+
+
+# ── Reviewer output schema validation ─────────────────────────
+
+_VALID_DECISIONS = {"approve", "request_changes"}
+_VALID_SEVERITIES = {"critical", "major", "minor", "nitpick"}
+_VALID_CONFIDENCES = {"high", "medium", "low"}
+
+
+class ReviewerOutputSchema:
+    """Validates Reviewer JSON output against the required schema."""
+
+    @staticmethod
+    def validate(data: Any) -> tuple[bool, str]:
+        """Check *data* conforms to the Reviewer output schema.
+
+        Returns ``(True, "")`` on success or ``(False, "<reason>")`` on failure.
+        """
+        if not isinstance(data, dict):
+            return False, "Output must be a JSON object"
+
+        # decision: required, must be "approve" or "request_changes"
+        decision = data.get("decision")
+        if not isinstance(decision, str) or decision not in _VALID_DECISIONS:
+            return False, (
+                f"decision must be one of {sorted(_VALID_DECISIONS)}, "
+                f"got: {decision!r}"
+            )
+
+        # reason: required, non-empty string
+        reason = data.get("reason")
+        if not isinstance(reason, str) or not reason.strip():
+            return False, "reason must be a non-empty string"
+
+        # issues_found: required, list (can be empty)
+        issues = data.get("issues_found")
+        if not isinstance(issues, list):
+            return False, "issues_found must be a list"
+        for i, item in enumerate(issues):
+            if not isinstance(item, dict):
+                return False, f"issues_found[{i}] must be an object"
+            sev = item.get("severity")
+            if not isinstance(sev, str) or sev not in _VALID_SEVERITIES:
+                return False, (
+                    f"issues_found[{i}].severity must be one of "
+                    f"{sorted(_VALID_SEVERITIES)}, got: {sev!r}"
+                )
+            desc = item.get("description")
+            if not isinstance(desc, str) or not desc.strip():
+                return False, f"issues_found[{i}].description must be a non-empty string"
+
+        # confidence: required, must be "high", "medium", or "low"
+        confidence = data.get("confidence")
+        if not isinstance(confidence, str) or confidence not in _VALID_CONFIDENCES:
+            return False, (
+                f"confidence must be one of {sorted(_VALID_CONFIDENCES)}, "
+                f"got: {confidence!r}"
+            )
+
+        return True, ""
+
+
+# ── Code-fence stripping ──────────────────────────────────────
+
+_FENCE_RE = re.compile(
+    r"^\s*```(?:json)?\s*\n(.*?)\n\s*```\s*$",
+    re.DOTALL,
+)
+
+
+def strip_code_fences(text: str) -> str:
+    """Remove markdown code fences wrapping JSON output.
+
+    Handles both ````` ```json ... ``` ````` and ````` ``` ... ``` `````.
+    """
+    m = _FENCE_RE.match(text.strip())
+    return m.group(1).strip() if m else text.strip()
+
+
+# ── Model Agent Executor ──────────────────────────────────────
+
+
+class ModelAgentExecutor:
+    """Executes agent roles using real LLM provider calls.
+
+    Currently supports the **Planner** and **Reviewer** roles.
+    Builder and QA will raise ``NotImplementedError``.
+    """
+
+    _SUPPORTED_ROLES = {AgentRole.PLANNER, AgentRole.REVIEWER}
+
+    def __init__(self, registry: ProviderRegistry | None = None):
+        self._registry = registry or get_registry()
+
+    async def execute(
+        self,
+        role: AgentRole,
+        task_context: dict,
+    ) -> ExecutionResult:
+        """Execute a single agent role via a real model call."""
+        if role == AgentRole.PLANNER:
+            return await self._execute_planner(task_context)
+        if role == AgentRole.REVIEWER:
+            return await self._execute_reviewer(task_context)
+        raise NotImplementedError(
+            f"ModelAgentExecutor does not yet support role: {role.value}. "
+            f"Use MockAgentExecutor for {role.value}."
+        )
+
+    # ── Shared helpers ─────────────────────────────────────────
+
+    def _resolve_provider(self, role: AgentRole):
+        """Look up the provider for a role definition, raising on misconfiguration."""
+        defn = get_definition(role)
+        provider = self._registry.get(defn.model_provider)
+        if provider is None:
+            raise ValueError(
+                f"Provider '{defn.model_provider}' not registered. "
+                f"Check provider configuration."
+            )
+        if not getattr(provider, "api_key", ""):
+            raise ValueError(
+                f"Provider '{defn.model_provider}' has no API key configured. "
+                f"Set the API key in Settings."
+            )
+        return defn, provider
+
+    async def _call_model(self, defn, provider, user_msg: str) -> str:
+        """Build a CompletionRequest, call the provider, return raw content."""
+        request = CompletionRequest(
+            model=defn.model_name,
+            messages=[Message(role=MessageRole.user, content=user_msg)],
+            system_prompt=defn.system_prompt,
+            max_tokens=4096,
+            temperature=0.3,
+        )
+        response = await provider.complete(request)
+        return response.content
+
+    def _parse_and_validate(
+        self,
+        raw_content: str,
+        role_name: str,
+        schema_cls,
+    ) -> ExecutionResult | dict:
+        """Strip fences, parse JSON, validate schema.
+
+        Returns the parsed dict on success, or an ExecutionResult(success=False) on failure.
+        """
+        raw_text = strip_code_fences(raw_content)
+        try:
+            parsed = json.loads(raw_text)
+        except json.JSONDecodeError as exc:
+            preview = raw_text[:200] + "..." if len(raw_text) > 200 else raw_text
+            return ExecutionResult(
+                success=False,
+                output={},
+                error_message=(
+                    f"{role_name} returned invalid JSON: {exc}. "
+                    f"Response preview: {preview}"
+                ),
+            )
+
+        valid, err = schema_cls.validate(parsed)
+        if not valid:
+            return ExecutionResult(
+                success=False,
+                output=parsed,
+                error_message=f"{role_name} output schema validation failed: {err}",
+            )
+        return parsed
+
+    # ── Planner execution ─────────────────────────────────────
+
+    async def _execute_planner(self, task_context: dict) -> ExecutionResult:
+        """Call a real LLM to produce a structured Planner output."""
+        defn, provider = self._resolve_provider(AgentRole.PLANNER)
+        user_msg = self._build_planner_user_message(task_context)
+        raw_content = await self._call_model(defn, provider, user_msg)
+
+        result = self._parse_and_validate(raw_content, "Planner", PlannerOutputSchema)
+        if isinstance(result, ExecutionResult):
+            return result  # validation failed
+
+        # Normalize optional fields
+        result.setdefault("risks", [])
+        result.setdefault("dependencies", [])
+
+        return ExecutionResult(success=True, output=result)
+
+    @staticmethod
+    def _build_planner_user_message(ctx: dict) -> str:
+        """Assemble the user-facing prompt from task context."""
+        parts = [
+            f"Task: {ctx.get('title', 'Untitled')}",
+            f"Description: {ctx.get('description', 'No description provided')}",
+            f"Priority: {ctx.get('priority', 'medium')}",
+        ]
+        prev = ctx.get("previous_outputs")
+        if prev:
+            parts.append(f"Previous agent outputs: {json.dumps(prev, indent=2)}")
+        return "\n".join(parts)
+
+    # ── Reviewer execution ────────────────────────────────────
+
+    async def _execute_reviewer(self, task_context: dict) -> ExecutionResult:
+        """Call a real LLM to produce a structured Reviewer output."""
+        defn, provider = self._resolve_provider(AgentRole.REVIEWER)
+        user_msg = self._build_reviewer_user_message(task_context)
+        raw_content = await self._call_model(defn, provider, user_msg)
+
+        result = self._parse_and_validate(raw_content, "Reviewer", ReviewerOutputSchema)
+        if isinstance(result, ExecutionResult):
+            return result  # validation failed
+
+        # Normalize optional fields
+        result.setdefault("issues_found", [])
+
+        # Map decision to ReviewDecision for the orchestrator
+        decision_str = result["decision"]
+        if decision_str == "approve":
+            decision = ReviewDecision.APPROVE
+        else:
+            decision = ReviewDecision.REQUEST_CHANGES
+
+        return ExecutionResult(
+            success=True,
+            output=result,
+            decision=decision,
+        )
+
+    @staticmethod
+    def _build_reviewer_user_message(ctx: dict) -> str:
+        """Assemble the user-facing prompt from task context for Reviewer."""
+        parts = [
+            f"Task: {ctx.get('title', 'Untitled')}",
+            f"Description: {ctx.get('description', 'No description provided')}",
+            f"Priority: {ctx.get('priority', 'medium')}",
+        ]
+        prev = ctx.get("previous_outputs", {})
+        if prev.get("planner"):
+            parts.append(f"\nPlanner output:\n{json.dumps(prev['planner'], indent=2)}")
+        if prev.get("builder"):
+            parts.append(f"\nBuilder output:\n{json.dumps(prev['builder'], indent=2)}")
+        if prev.get("qa"):
+            parts.append(f"\nQA output:\n{json.dumps(prev['qa'], indent=2)}")
+
+        # Include rejection history if this is a retry
+        rejection_history = ctx.get("rejection_history")
+        if rejection_history:
+            parts.append(
+                f"\nPrevious rejection(s):\n{json.dumps(rejection_history, indent=2)}"
+            )
+
+        return "\n".join(parts)

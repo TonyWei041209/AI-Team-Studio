@@ -81,3 +81,33 @@ updated_at    TEXT
 1. Create `providers/new_provider.py` implementing `BaseProvider`
 2. Register in `providers/registry.py` `_build_default_providers()`
 3. Provider will automatically appear in API and Settings UI
+
+## Agent Integration (Phase 6B)
+
+Providers are used by the `ModelAgentExecutor` to make real LLM calls during orchestration:
+
+```
+Orchestrator → _get_executor(PLANNER) → ModelAgentExecutor
+  → ProviderRegistry.get("anthropic") → provider.complete(request)
+  → Parse JSON → PlannerOutputSchema.validate() → ExecutionResult
+```
+
+### Manual Completion Endpoint
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/api/completion` | Send arbitrary prompt to a configured provider |
+
+Request body:
+```json
+{
+  "provider": "anthropic",
+  "model": "claude-3-5-haiku-20241022",
+  "prompt": "Your prompt here",
+  "system_prompt": "Optional system prompt",
+  "max_tokens": 1024,
+  "temperature": 0.7
+}
+```
+
+Errors: 404 (unknown provider), 400 (not configured), 502 (provider error).
