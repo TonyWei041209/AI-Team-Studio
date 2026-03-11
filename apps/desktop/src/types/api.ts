@@ -25,7 +25,7 @@ export type LogLevel = "debug" | "info" | "warn" | "error";
 
 // ── Tab navigation ──────────────────────────────────────
 
-export type TabId = "projects" | "tasks" | "approvals" | "logs";
+export type TabId = "projects" | "tasks" | "approvals" | "logs" | "settings";
 
 // ── Connection state ────────────────────────────────────
 
@@ -125,4 +125,44 @@ export interface HealthStatus {
   status: string;
   version: string;
   database: string;
+}
+
+// ── Provider types (Phase 6A) ──────────────────────────
+
+export interface ProviderInfo {
+  name: string;
+  display_name: string;
+}
+
+export interface ProviderModelInfo {
+  id: string;
+  display_name: string;
+  provider: string;
+  max_tokens: number;
+  supports_system_prompt: boolean;
+}
+
+export interface ProviderTestResult {
+  ok: boolean;
+  provider: string;
+  message: string;
+  latency_ms: number;
+}
+
+export interface ProviderSettingRead {
+  provider_name: string;
+  api_key_masked: string;
+  base_url: string;
+  enabled: boolean;
+}
+
+export interface ProviderSettingsResponse {
+  providers: ProviderSettingRead[];
+}
+
+export interface ProviderSettingUpdate {
+  provider_name: string;
+  api_key?: string;
+  base_url?: string;
+  enabled?: boolean;
 }

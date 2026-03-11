@@ -7,6 +7,8 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from database import init_db, get_db_path
 from routers import projects, tasks, agent_runs, approvals, logs, orchestration, tools
+from routers import providers as providers_router, settings as settings_router
+from routers.settings import load_and_apply_settings
 
 
 @asynccontextmanager
@@ -14,6 +16,8 @@ async def lifespan(app: FastAPI):
     """Initialize resources on startup."""
     init_db()
     print(f"[runtime] Database initialized at {get_db_path()}")
+    load_and_apply_settings()
+    print("[runtime] Provider settings loaded")
     yield
 
 
@@ -40,6 +44,8 @@ app.include_router(approvals.router)
 app.include_router(logs.router)
 app.include_router(orchestration.router)
 app.include_router(tools.router)
+app.include_router(providers_router.router)
+app.include_router(settings_router.router)
 
 
 @app.get("/api/health")

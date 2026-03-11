@@ -203,3 +203,59 @@ class LogEvent(BaseModel):
     message: str
     payload: str
     created_at: str
+
+
+# ── Provider models (Phase 6A) ────────────────────────────────────
+
+class ProviderInfo(BaseModel):
+    """Provider metadata returned by GET /api/providers."""
+    name: str
+    display_name: str
+
+
+class ProviderModelInfo(BaseModel):
+    """Model metadata returned by GET /api/models."""
+    id: str
+    display_name: str
+    provider: str
+    max_tokens: int = 4096
+    supports_system_prompt: bool = True
+
+
+class ProviderTestRequest(BaseModel):
+    """Request body for POST /api/provider-test."""
+    provider: str
+
+
+class ProviderTestResult(BaseModel):
+    """Response from POST /api/provider-test."""
+    ok: bool
+    provider: str
+    message: str = ""
+    latency_ms: float = 0.0
+
+
+class ProviderSettingRead(BaseModel):
+    """Single provider's settings — api_key is masked."""
+    provider_name: str
+    api_key_masked: str
+    base_url: str = ""
+    enabled: bool = False
+
+
+class ProviderSettingsResponse(BaseModel):
+    """Response for GET /api/settings/providers."""
+    providers: list[ProviderSettingRead]
+
+
+class ProviderSettingUpdate(BaseModel):
+    """Patch body for a single provider's settings."""
+    provider_name: str
+    api_key: Optional[str] = None  # None = don't change
+    base_url: Optional[str] = None
+    enabled: Optional[bool] = None
+
+
+class ProviderSettingsPatch(BaseModel):
+    """Request body for PATCH /api/settings/providers."""
+    providers: list[ProviderSettingUpdate]

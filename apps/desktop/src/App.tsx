@@ -5,6 +5,7 @@ import { ProjectPanel } from "./panels/ProjectPanel";
 import { TaskBoard } from "./panels/TaskBoard";
 import { ApprovalsPanel } from "./panels/ApprovalsPanel";
 import { LogsPanel } from "./panels/LogsPanel";
+import { SettingsPanel } from "./panels/SettingsPanel";
 import { approvalsApi } from "./api/approvals";
 import "./App.css";
 
@@ -20,6 +21,7 @@ const WORKSPACE_TABS: Array<{ id: TabId; icon: string; label: string }> = [
 const SYSTEM_TABS: Array<{ id: TabId; icon: string; label: string }> = [
   { id: "approvals", icon: "\u2713", label: "Approvals" },
   { id: "logs", icon: "\u2261", label: "Logs" },
+  { id: "settings", icon: "\u2699", label: "Settings" },
 ];
 
 function App() {
@@ -97,6 +99,8 @@ function App() {
         return <ApprovalsPanel onCountChange={setPendingCount} />;
       case "logs":
         return <LogsPanel />;
+      case "settings":
+        return <SettingsPanel />;
     }
   };
 
@@ -167,7 +171,7 @@ function App() {
 
       {/* Status Bar */}
       <footer className="status-bar">
-        <span className="status-bar-item">Phase 5: Frontend</span>
+        <span className="status-bar-item">Phase 6A: Providers</span>
         <span className="status-bar-item">
           Runtime:{" "}
           {connectionState === "connected"

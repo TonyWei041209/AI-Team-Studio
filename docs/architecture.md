@@ -20,9 +20,11 @@ AI Team Studio uses a layered architecture:
 +------------------+
 |  Safety + Gate   |  Risk classification, approval gating (Phase 4A)
 +------------------+
-| Agent Executors  |  Mock (Phase 3) → Model calls (Phase 6)
+| Agent Executors  |  Mock (Phase 3) → Model calls (Phase 6B)
 +------------------+
-|     SQLite       |  Local persistence (tasks, runs, logs, approvals)
+| Provider Layer   |  Anthropic, OpenAI-compat, Gemini (Phase 6A)
++------------------+
+|     SQLite       |  Local persistence (tasks, runs, logs, approvals, settings)
 +------------------+
 ```
 
@@ -39,6 +41,7 @@ AI_Team_Studio/
       types/             TypeScript interfaces matching backend Pydantic models
   services/runtime/      Python FastAPI local server
     agents/              Agent definitions, executors, orchestrator
+    providers/           LLM provider abstraction (Anthropic, OpenAI, Gemini)
     tools/               Tool implementations, safety, approval gating
     routers/             API endpoint handlers
   packages/shared/       Shared type definitions (future)
@@ -117,7 +120,8 @@ App.tsx (shell)
   ├── ProjectPanel     List/create/select projects (GET/POST /api/projects)
   ├── TaskBoard        Task list + create for selected project
   ├── ApprovalsPanel   Pending approvals + approve/reject flow
-  └── LogsPanel        Terminal-style log viewer with level filter
+  ├── LogsPanel        Terminal-style log viewer with level filter
+  └── SettingsPanel    Provider config, API keys, test connection (Phase 6A)
 ```
 
 Key design decisions:
@@ -127,3 +131,17 @@ Key design decisions:
 4. **Typed API client**: Centralized `api/client.ts` with `ApiError` class; domain-specific functions in `api/projects.ts`, `api/tasks.ts`, etc.
 5. **Custom hooks pattern**: `useProjects()`, `useTasks(projectId)`, `useApprovals()`, `useLogs(level?)` — consistent loading/error/refresh API
 6. **CSS variables**: All styling uses dark theme variables from `index.css` — no inline colors
+
+## Provider Layer (Phase 6A)
+
+Unified LLM provider abstraction supporting Anthropic, OpenAI-compatible (OpenAI, DeepSeek, Kimi, MiniMax), and Google Gemini.
+
+Key design decisions:
+1. **Abstract BaseProvider**: `complete()`, `list_models()`, `healthcheck()` — all providers implement same interface
+2. **Registry pattern**: `ProviderRegistry` singleton discovers, configures, and exposes all providers
+3. **Settings in SQLite**: API keys stored in `provider_settings` table, never in git-tracked files
+4. **Key masking**: All API responses mask keys (`sk-****1234`), logs never contain full keys
+5. **OpenAI-compatible reuse**: Single `OpenAICompatibleProvider` class with configurable `base_url` for DeepSeek, Kimi, MiniMax
+6. **Startup loading**: Settings applied to live registry during FastAPI lifespan startup
+
+See `docs/providers.md` for full details.

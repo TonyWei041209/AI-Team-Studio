@@ -165,11 +165,32 @@ def _apply_v3(conn: sqlite3.Connection) -> None:
     conn.execute("INSERT INTO schema_version (version) VALUES (3)")
 
 
+def _apply_v4(conn: sqlite3.Connection) -> None:
+    """V4: Provider settings table (Phase 6A).
+
+    Stores API keys and configuration for each LLM provider.
+    API keys are stored in the local SQLite DB only — never in git-tracked files.
+    """
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS provider_settings (
+            provider_name TEXT PRIMARY KEY,
+            api_key TEXT NOT NULL DEFAULT '',
+            base_url TEXT NOT NULL DEFAULT '',
+            enabled INTEGER NOT NULL DEFAULT 0,
+            config_json TEXT NOT NULL DEFAULT '{}',
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+        )
+    """)
+    conn.execute("INSERT INTO schema_version (version) VALUES (4)")
+
+
 # Ordered list of migrations
 _MIGRATIONS = [
     (1, _apply_v1),
     (2, _apply_v2),
     (3, _apply_v3),
+    (4, _apply_v4),
 ]
 
 
