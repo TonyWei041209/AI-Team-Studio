@@ -66,8 +66,8 @@ class ApprovalGate:
     def check_pre_approved(self, approval_id: str) -> bool:
         """Return ``True`` if *approval_id* has been approved.
 
-        Used by the ``execute-approved`` endpoint to verify that the
-        human reviewer approved the action before retrying.
+        .. deprecated:: Phase 4B
+            Use :meth:`consume_approval` for single-use semantics.
         """
         conn = get_connection()
         try:
@@ -78,6 +78,48 @@ class ApprovalGate:
             if row is None:
                 return False
             return row["status"] == ApprovalStatus.APPROVED.value
+        finally:
+            conn.close()
+
+    def consume_approval(self, approval_id: str) -> tuple[bool, str]:
+        """Atomically consume an approved request (Phase 4B).
+
+        Uses a CAS (Compare-And-Swap) update:
+        ``UPDATE … SET status='consumed' WHERE id=? AND status='approved'``
+
+        Returns ``(True, "ok")`` on success.
+        Returns ``(False, reason)`` on failure, where *reason* is one of:
+        ``"not_found"``, ``"pending"``, ``"rejected"``, ``"consumed"``.
+        """
+        conn = get_connection()
+        try:
+            # Atomic CAS: only succeeds if current status is 'approved'
+            from datetime import datetime, timezone
+            now = datetime.now(timezone.utc).isoformat()
+            cursor = conn.execute(
+                """UPDATE approval_requests
+                   SET status = ?, resolved_at = COALESCE(resolved_at, ?)
+                   WHERE id = ? AND status = ?""",
+                (
+                    ApprovalStatus.CONSUMED.value,
+                    now,
+                    approval_id,
+                    ApprovalStatus.APPROVED.value,
+                ),
+            )
+            conn.commit()
+
+            if cursor.rowcount == 1:
+                return True, "ok"
+
+            # CAS failed — determine reason
+            row = conn.execute(
+                "SELECT status FROM approval_requests WHERE id = ?",
+                (approval_id,),
+            ).fetchone()
+            if row is None:
+                return False, "not_found"
+            return False, row["status"]  # "pending", "rejected", or "consumed"
         finally:
             conn.close()
 

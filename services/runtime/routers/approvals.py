@@ -70,6 +70,11 @@ async def resolve_approval(approval_id: str, body: ApprovalResolve):
         ).fetchone()
         if not existing:
             raise HTTPException(status_code=404, detail="ApprovalRequest not found")
+        if existing["status"] == ApprovalStatus.CONSUMED.value:
+            raise HTTPException(
+                status_code=400,
+                detail="Approval has been consumed and cannot be modified",
+            )
         if existing["status"] != ApprovalStatus.PENDING.value:
             raise HTTPException(status_code=400, detail="Approval already resolved")
         if body.status == ApprovalStatus.PENDING:

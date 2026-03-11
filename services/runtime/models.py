@@ -42,6 +42,7 @@ class ApprovalStatus(str, Enum):
     PENDING = "pending"
     APPROVED = "approved"
     REJECTED = "rejected"
+    CONSUMED = "consumed"    # Phase 4B: one-time use after approved execution
 
 
 class ReviewDecision(str, Enum):
