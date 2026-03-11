@@ -125,10 +125,48 @@ def _apply_v2(conn: sqlite3.Connection) -> None:
     conn.execute("INSERT INTO schema_version (version) VALUES (2)")
 
 
+def _apply_v3(conn: sqlite3.Connection) -> None:
+    """V3: Make approval_requests.task_id nullable for direct tool execution (Phase 4A).
+
+    Direct tool invocations via POST /api/tools/execute may not have a task
+    context.  The approval gate still needs to create approval_requests rows,
+    so task_id must accept NULL.
+    """
+    conn.execute("""
+        CREATE TABLE approval_requests_v3 (
+            id TEXT PRIMARY KEY,
+            task_id TEXT REFERENCES tasks(id),
+            run_id TEXT REFERENCES agent_runs(id),
+            action_type TEXT NOT NULL,
+            action_payload TEXT NOT NULL DEFAULT '{}',
+            status TEXT NOT NULL DEFAULT 'pending',
+            reviewer_comment TEXT NOT NULL DEFAULT '',
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            resolved_at TEXT
+        )
+    """)
+    conn.execute("""
+        INSERT INTO approval_requests_v3
+        SELECT id, task_id, run_id, action_type, action_payload,
+               status, reviewer_comment, created_at, resolved_at
+        FROM approval_requests
+    """)
+    conn.execute("DROP TABLE approval_requests")
+    conn.execute("ALTER TABLE approval_requests_v3 RENAME TO approval_requests")
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_approvals_task ON approval_requests(task_id)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_approvals_status ON approval_requests(status)"
+    )
+    conn.execute("INSERT INTO schema_version (version) VALUES (3)")
+
+
 # Ordered list of migrations
 _MIGRATIONS = [
     (1, _apply_v1),
     (2, _apply_v2),
+    (3, _apply_v3),
 ]
 
 

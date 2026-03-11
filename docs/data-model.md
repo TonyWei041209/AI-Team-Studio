@@ -120,3 +120,6 @@ Valid transitions:
 | GET | /api/logs/recent | List recent logs (`?level=debug\|info\|warn\|error`, `?limit=N`, default 50) |
 | POST | /api/tasks/:id/orchestrate | Start orchestration pipeline (optional body: `failure_rate`, `rejection_rate`, `delay_seconds`) |
 | GET | /api/tasks/:id/orchestration-status | Get orchestration state: task status, runs, completion flag |
+| GET | /api/tools | List all registered tools |
+| POST | /api/tools/execute | Execute tool (risk check + approval gating; body: `tool_name`, `params`, optional `project_id`/`task_id`/`run_id`/`role`) |
+| POST | /api/tools/execute-approved | Re-execute blocked tool after approval (body: `approval_id`, `tool_name`, `params`) |

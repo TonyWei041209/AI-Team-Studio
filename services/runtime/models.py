@@ -172,8 +172,8 @@ class ApprovalResolve(BaseModel):
 
 class ApprovalRequest(BaseModel):
     id: str
-    task_id: str
-    run_id: Optional[str]
+    task_id: Optional[str] = None
+    run_id: Optional[str] = None
     action_type: str
     action_payload: str
     status: ApprovalStatus
