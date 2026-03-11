@@ -1,13 +1,12 @@
 """AI Team Studio - Local Runtime Server."""
 
-import sys
 from contextlib import asynccontextmanager
-from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from database import init_db, get_db_path
+from routers import projects, tasks, agent_runs, approvals, logs
 
 
 @asynccontextmanager
@@ -32,6 +31,13 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Register routers
+app.include_router(projects.router)
+app.include_router(tasks.router)
+app.include_router(agent_runs.router)
+app.include_router(approvals.router)
+app.include_router(logs.router)
 
 
 @app.get("/api/health")
