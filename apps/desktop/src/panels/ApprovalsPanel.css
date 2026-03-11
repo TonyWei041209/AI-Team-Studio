@@ -1,0 +1,135 @@
+/* ── Approvals Panel ──────────────────────────────────── */
+
+.approvals-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+  max-width: 720px;
+}
+
+.count-inline {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 2px 8px;
+  margin-left: 8px;
+  background-color: var(--accent-red);
+  color: white;
+  border-radius: 10px;
+  vertical-align: middle;
+}
+
+/* ── Approval list ───────────────────────────────────── */
+
+.approval-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.approval-card {
+  padding: 16px;
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.approval-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.approval-type {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--accent-yellow);
+  font-family: var(--font-mono);
+}
+
+.approval-date {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+
+/* ── Payload details ─────────────────────────────────── */
+
+.approval-payload {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  background-color: var(--bg-tertiary);
+  border-radius: 4px;
+}
+
+.payload-row {
+  display: flex;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.payload-key {
+  color: var(--text-muted);
+  min-width: 50px;
+  flex-shrink: 0;
+}
+
+.payload-value {
+  color: var(--text-secondary);
+}
+
+.payload-code {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+  word-break: break-all;
+}
+
+/* ── Meta ────────────────────────────────────────────── */
+
+.approval-meta {
+  display: flex;
+  gap: 6px;
+  font-size: 11px;
+}
+
+.meta-label {
+  color: var(--text-muted);
+}
+
+.meta-value {
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+}
+
+/* ── Actions ─────────────────────────────────────────── */
+
+.approval-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.approval-actions .btn.active {
+  outline: 2px solid var(--text-primary);
+  outline-offset: 1px;
+}
+
+/* ── Comment form ────────────────────────────────────── */
+
+.approval-comment {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 4px;
+  border-top: 1px solid var(--border-color);
+}
+
+.approval-comment .form-textarea {
+  resize: vertical;
+  min-height: 40px;
+}

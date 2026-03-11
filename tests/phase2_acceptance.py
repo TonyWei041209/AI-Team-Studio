@@ -1,11 +1,37 @@
 """Phase 2 comprehensive acceptance test suite."""
 import json
+import pathlib
+import sqlite3
 import sys
 import urllib.request
 import urllib.error
 
 BASE = "http://127.0.0.1:9800/api"
 results = []
+
+
+# ── Test isolation: wipe all data tables before running ────────────
+def _wipe_db():
+    """Delete all data from all tables to ensure a clean slate.
+
+    Targets only data tables, not ``schema_version``.
+    The server holds no in-memory cache, so no restart is needed.
+    """
+    db_path = pathlib.Path(__file__).resolve().parent.parent / "data" / "ai_team_studio.db"
+    if not db_path.exists():
+        return
+    conn = sqlite3.connect(str(db_path))
+    try:
+        conn.execute("PRAGMA foreign_keys=OFF")
+        for table in ("log_events", "approval_requests", "agent_runs", "tasks", "projects"):
+            conn.execute(f"DELETE FROM {table}")
+        conn.execute("PRAGMA foreign_keys=ON")
+        conn.commit()
+    finally:
+        conn.close()
+
+
+_wipe_db()
 
 
 def req(method, path, body=None):

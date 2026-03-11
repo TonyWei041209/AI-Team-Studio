@@ -31,6 +31,12 @@ AI Team Studio uses a layered architecture:
 ```
 AI_Team_Studio/
   apps/desktop/          Tauri + React + TypeScript frontend
+    src/
+      api/               Typed fetch wrapper + domain API functions
+      components/        Shared UI components (StatusIndicator)
+      hooks/             Custom React hooks (useProjects, useTasks, etc.)
+      panels/            Top-level panel components (Project, Task, Approvals, Logs)
+      types/             TypeScript interfaces matching backend Pydantic models
   services/runtime/      Python FastAPI local server
     agents/              Agent definitions, executors, orchestrator
     tools/               Tool implementations, safety, approval gating
@@ -90,3 +96,34 @@ Key design decisions:
 3. **Standalone tools**: Tools can be called via HTTP API or by the orchestrator/executor
 4. **Role enforcement**: Tool access is checked against `AgentRoleDefinition.allowed_tools` using alias resolution
 5. **Conservative defaults**: Write operations are size-limited, shell has a command whitelist, git is read-only
+
+## Audit Trail (Phase 4B)
+
+Tool execution events are logged to the `log_events` table with `source='tool_audit'`:
+
+1. **Atomic approval consumption**: `consume_approval()` uses SQL CAS (`UPDATE WHERE status='approved'`) — an approval can only be used once
+2. **11 audit event types**: request, risk_classified, blocked, success, failed, role_denied, execute_approved request/success/failed/denied/already_consumed
+3. **Param sanitization**: Sensitive keys (password, token, etc.) redacted to `***`, previews truncated to 200/500 chars
+4. **HTTP status semantics**: 409 for already-consumed, 403 for pending/rejected/not_found denials
+
+## Frontend (Phase 5)
+
+The frontend is a React 19 + TypeScript single-page application inside Tauri's webview:
+
+```
+App.tsx (shell)
+  state: activeTab, selectedProjectId, connectionState, pendingCount
+  │
+  ├── ProjectPanel     List/create/select projects (GET/POST /api/projects)
+  ├── TaskBoard        Task list + create for selected project
+  ├── ApprovalsPanel   Pending approvals + approve/reject flow
+  └── LogsPanel        Terminal-style log viewer with level filter
+```
+
+Key design decisions:
+1. **Zero dependencies added**: No react-router, no state manager, no axios — uses native fetch and useState
+2. **Tab navigation**: Simple `useState<TabId>` in App — no routing library needed for 4 panels
+3. **Lifted state**: `selectedProjectId` lives in App, passed to TaskBoard; each panel manages its own fetch state via custom hooks
+4. **Typed API client**: Centralized `api/client.ts` with `ApiError` class; domain-specific functions in `api/projects.ts`, `api/tasks.ts`, etc.
+5. **Custom hooks pattern**: `useProjects()`, `useTasks(projectId)`, `useApprovals()`, `useLogs(level?)` — consistent loading/error/refresh API
+6. **CSS variables**: All styling uses dark theme variables from `index.css` — no inline colors
