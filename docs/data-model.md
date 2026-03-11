@@ -104,7 +104,7 @@ Valid transitions:
 | PATCH | /api/projects/:id | Update project |
 | DELETE | /api/projects/:id | Delete project |
 | POST | /api/projects/:id/tasks | Create task |
-| GET | /api/projects/:id/tasks | List tasks (filter by status) |
+| GET | /api/projects/:id/tasks?status= | List tasks (optional filter: `?status=pending\|planning\|...`) |
 | GET | /api/tasks/:id | Get task |
 | PATCH | /api/tasks/:id/status | Update task status |
 | POST | /api/tasks/:id/runs | Create agent run |
@@ -116,5 +116,7 @@ Valid transitions:
 | GET | /api/approvals/pending | List pending approvals |
 | PATCH | /api/approvals/:id | Resolve approval |
 | POST | /api/logs | Create log event |
-| GET | /api/tasks/:id/logs | List logs for task |
-| GET | /api/logs/recent | List recent logs |
+| GET | /api/tasks/:id/logs | List logs for task (`?level=debug\|info\|warn\|error`, `?limit=N`, default 100) |
+| GET | /api/logs/recent | List recent logs (`?level=debug\|info\|warn\|error`, `?limit=N`, default 50) |
+| POST | /api/tasks/:id/orchestrate | Start orchestration pipeline (optional body: `failure_rate`, `rejection_rate`, `delay_seconds`) |
+| GET | /api/tasks/:id/orchestration-status | Get orchestration state: task status, runs, completion flag |

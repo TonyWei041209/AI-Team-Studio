@@ -1,7 +1,7 @@
 """Project CRUD endpoints."""
 
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException
 
@@ -14,7 +14,7 @@ router = APIRouter(prefix="/api/projects", tags=["projects"])
 @router.post("", response_model=Project, status_code=201)
 async def create_project(body: ProjectCreate):
     project_id = str(uuid.uuid4())
-    now = datetime.utcnow().isoformat()
+    now = datetime.now(timezone.utc).isoformat()
     conn = get_connection()
     try:
         conn.execute(
@@ -63,7 +63,7 @@ async def update_project(project_id: str, body: ProjectUpdate):
         if not updates:
             return dict(existing)
 
-        updates["updated_at"] = datetime.utcnow().isoformat()
+        updates["updated_at"] = datetime.now(timezone.utc).isoformat()
         set_clause = ", ".join(f"{k} = ?" for k in updates)
         values = list(updates.values()) + [project_id]
         conn.execute(f"UPDATE projects SET {set_clause} WHERE id = ?", values)

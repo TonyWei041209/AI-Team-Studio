@@ -1,7 +1,7 @@
 """LogEvent CRUD endpoints."""
 
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 
 from fastapi import APIRouter
 
@@ -16,7 +16,7 @@ async def create_log(body: LogEventCreate):
     conn = get_connection()
     try:
         log_id = str(uuid.uuid4())
-        now = datetime.utcnow().isoformat()
+        now = datetime.now(timezone.utc).isoformat()
 
         conn.execute(
             """INSERT INTO log_events (id, task_id, run_id, level, source, message, payload, created_at)

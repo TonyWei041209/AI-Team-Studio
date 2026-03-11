@@ -44,6 +44,12 @@ class ApprovalStatus(str, Enum):
     REJECTED = "rejected"
 
 
+class ReviewDecision(str, Enum):
+    APPROVE = "APPROVE"
+    REQUEST_CHANGES = "REQUEST_CHANGES"
+    BLOCK = "BLOCK"
+
+
 class LogLevel(str, Enum):
     DEBUG = "debug"
     INFO = "info"

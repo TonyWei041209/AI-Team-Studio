@@ -12,6 +12,10 @@ target/
 
 # Data
 data/*.db
+data/*.sqlite
+data/*.sqlite3
+data/*.sqlite-wal
+data/*.sqlite-shm
 
 # IDE
 .vscode/
@@ -23,6 +27,12 @@ data/*.db
 .DS_Store
 Thumbs.db
 
+# Logs
+*.log
+
+# Test caches
+.pytest_cache/
+
 # Env
 .env
-.env.local
+.env.*

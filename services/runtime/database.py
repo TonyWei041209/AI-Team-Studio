@@ -136,6 +136,8 @@ def init_db() -> None:
     """Initialize the SQLite database and apply pending migrations."""
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(str(DB_PATH))
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA foreign_keys=ON")
     try:
         current = _get_current_version(conn)
         for version, migrate_fn in _MIGRATIONS:

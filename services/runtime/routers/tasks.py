@@ -1,14 +1,14 @@
 """Task CRUD endpoints with state machine."""
 
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException
 
 from database import get_connection
 from models import (
     Task, TaskCreate, TaskStatus, TaskStatusUpdate,
-    is_valid_transition,
+    TASK_TRANSITIONS, is_valid_transition,
 )
 
 router = APIRouter(prefix="/api", tags=["tasks"])
@@ -24,7 +24,7 @@ async def create_task(project_id: str, body: TaskCreate):
             raise HTTPException(status_code=404, detail="Project not found")
 
         task_id = str(uuid.uuid4())
-        now = datetime.utcnow().isoformat()
+        now = datetime.now(timezone.utc).isoformat()
         role = body.assigned_agent_role.value if body.assigned_agent_role else None
 
         conn.execute(
@@ -83,14 +83,14 @@ async def update_task_status(task_id: str, body: TaskStatusUpdate):
         new_status = body.status
 
         if not is_valid_transition(current_status, new_status):
-            allowed = [s.value for s in __import__("models").TASK_TRANSITIONS.get(current_status, [])]
+            allowed = [s.value for s in TASK_TRANSITIONS.get(current_status, [])]
             raise HTTPException(
                 status_code=400,
                 detail=f"Cannot transition from '{current_status.value}' to '{new_status.value}'. "
                        f"Allowed: {allowed}",
             )
 
-        now = datetime.utcnow().isoformat()
+        now = datetime.now(timezone.utc).isoformat()
         conn.execute(
             "UPDATE tasks SET status = ?, updated_at = ? WHERE id = ?",
             (new_status.value, now, task_id),

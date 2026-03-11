@@ -1,7 +1,7 @@
 """AgentRun CRUD endpoints."""
 
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException
 
@@ -20,7 +20,7 @@ async def create_run(task_id: str, body: AgentRunCreate):
             raise HTTPException(status_code=404, detail="Task not found")
 
         run_id = str(uuid.uuid4())
-        now = datetime.utcnow().isoformat()
+        now = datetime.now(timezone.utc).isoformat()
 
         conn.execute(
             """INSERT INTO agent_runs (id, task_id, role, model_provider, model_name, status, input_summary, created_at)
@@ -68,7 +68,7 @@ async def update_run(run_id: str, body: AgentRunUpdate):
         if not existing:
             raise HTTPException(status_code=404, detail="AgentRun not found")
 
-        now = datetime.utcnow().isoformat()
+        now = datetime.now(timezone.utc).isoformat()
         updates: dict = {}
 
         if body.status is not None:

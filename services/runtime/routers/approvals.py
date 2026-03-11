@@ -1,7 +1,7 @@
 """ApprovalRequest CRUD endpoints."""
 
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException
 
@@ -20,7 +20,7 @@ async def create_approval(task_id: str, body: ApprovalRequestCreate):
             raise HTTPException(status_code=404, detail="Task not found")
 
         approval_id = str(uuid.uuid4())
-        now = datetime.utcnow().isoformat()
+        now = datetime.now(timezone.utc).isoformat()
 
         conn.execute(
             """INSERT INTO approval_requests (id, task_id, run_id, action_type, action_payload, status, created_at)
@@ -75,7 +75,7 @@ async def resolve_approval(approval_id: str, body: ApprovalResolve):
         if body.status == ApprovalStatus.PENDING:
             raise HTTPException(status_code=400, detail="Cannot set status back to pending")
 
-        now = datetime.utcnow().isoformat()
+        now = datetime.now(timezone.utc).isoformat()
         conn.execute(
             "UPDATE approval_requests SET status = ?, reviewer_comment = ?, resolved_at = ? WHERE id = ?",
             (body.status.value, body.reviewer_comment, now, approval_id),
