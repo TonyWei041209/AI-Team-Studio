@@ -2,13 +2,14 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import type { ApprovalRequest, ApprovalResolve } from "../types/api";
 import { approvalsApi } from "../api/approvals";
 
-const POLL_INTERVAL = 5000;
+const POLL_INTERVAL = Number(import.meta.env.VITE_APPROVALS_POLL_MS) || 5000;
 const MAX_FAILURES = 3;
 
 export function useApprovals() {
   const [approvals, setApprovals] = useState<ApprovalRequest[]>([]);
   const [initialLoading, setInitialLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
   const failCountRef = useRef(0);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -36,6 +37,7 @@ export function useApprovals() {
       const data = await approvalsApi.listPending();
       if (!mountedRef.current) return;
       setApprovals(data);
+      setLastUpdated(new Date());
       failCountRef.current = 0;
       setError(null);
     } catch (err) {
@@ -105,5 +107,6 @@ export function useApprovals() {
     error,
     refresh,
     resolve,
+    lastUpdated,
   };
 }

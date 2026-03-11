@@ -19,6 +19,12 @@
   vertical-align: middle;
 }
 
+.approvals-panel .last-updated {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+
 /* ── Approval list ───────────────────────────────────── */
 
 .approval-list {

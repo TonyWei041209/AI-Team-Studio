@@ -2,13 +2,14 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import type { LogEvent } from "../types/api";
 import { logsApi } from "../api/logs";
 
-const POLL_INTERVAL = 8000;
+const POLL_INTERVAL = Number(import.meta.env.VITE_LOGS_POLL_MS) || 8000;
 const MAX_FAILURES = 3;
 
 export function useLogs(level?: string) {
   const [logs, setLogs] = useState<LogEvent[]>([]);
   const [initialLoading, setInitialLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
   const failCountRef = useRef(0);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -37,6 +38,7 @@ export function useLogs(level?: string) {
         const data = await logsApi.recent(level, 100);
         if (!mountedRef.current) return;
         setLogs(data);
+        setLastUpdated(new Date());
         failCountRef.current = 0;
         setError(null);
       } catch (err) {
@@ -94,5 +96,5 @@ export function useLogs(level?: string) {
     }
   }, [fetchData, startPolling, stopPolling]);
 
-  return { logs, loading: initialLoading, error, refresh };
+  return { logs, loading: initialLoading, error, refresh, lastUpdated };
 }

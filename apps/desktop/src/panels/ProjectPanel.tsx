@@ -72,6 +72,7 @@ export function ProjectPanel({
           </button>
           <button
             className="btn btn-primary"
+            data-testid="project-create-btn"
             onClick={() => setShowForm(!showForm)}
           >
             {showForm ? "Cancel" : "+ New Project"}
@@ -86,6 +87,7 @@ export function ProjectPanel({
             <label className="form-label">Name *</label>
             <input
               className="form-input"
+              data-testid="project-name-input"
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
@@ -97,6 +99,7 @@ export function ProjectPanel({
             <label className="form-label">Local Repo Path *</label>
             <input
               className="form-input"
+              data-testid="project-path-input"
               type="text"
               value={repoPath}
               onChange={(e) => setRepoPath(e.target.value)}
@@ -117,6 +120,7 @@ export function ProjectPanel({
           {formError && <div className="form-error">{formError}</div>}
           <button
             className="btn btn-primary"
+            data-testid="project-submit-btn"
             type="submit"
             disabled={submitting || !name.trim() || !repoPath.trim()}
           >
@@ -147,7 +151,7 @@ export function ProjectPanel({
 
       {/* Project list */}
       {!loading && projects.length > 0 && (
-        <div className="project-list">
+        <div className="project-list" data-testid="project-list">
           {projects.map((p) => (
             <div
               key={p.id}

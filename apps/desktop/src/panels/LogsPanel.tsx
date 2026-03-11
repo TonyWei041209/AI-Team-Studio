@@ -20,7 +20,7 @@ const LEVEL_OPTIONS: Array<{ value: string; label: string }> = [
 
 export function LogsPanel() {
   const [selectedLevel, setSelectedLevel] = useState("");
-  const { logs, loading, error, refresh } = useLogs(
+  const { logs, loading, error, refresh, lastUpdated } = useLogs(
     selectedLevel || undefined,
   );
   const logEndRef = useRef<HTMLDivElement>(null);
@@ -61,6 +61,7 @@ export function LogsPanel() {
         <div className="panel-actions">
           <select
             className="form-input logs-level-filter"
+            data-testid="logs-level-filter"
             value={selectedLevel}
             onChange={(e) => setSelectedLevel(e.target.value)}
           >
@@ -70,6 +71,11 @@ export function LogsPanel() {
               </option>
             ))}
           </select>
+          {lastUpdated && (
+            <span className="last-updated" data-testid="logs-last-updated">
+              {lastUpdated.toLocaleTimeString("en-US", { hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+            </span>
+          )}
           <button
             className="btn btn-secondary"
             onClick={refresh}
@@ -102,9 +108,9 @@ export function LogsPanel() {
       {!loading && logs.length > 0 && (
         <div className="log-terminal">
           <div className="log-terminal-header">
-            <span className="log-count">{logs.length} entries</span>
+            <span className="log-count" data-testid="log-count">{logs.length} entries</span>
           </div>
-          <div className="log-entries">
+          <div className="log-entries" data-testid="log-entries">
             {[...logs].reverse().map((log) => (
               <div key={log.id} className="log-entry">
                 <span className="log-date">{formatDate(log.created_at)}</span>
