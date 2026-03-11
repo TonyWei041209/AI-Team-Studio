@@ -441,3 +441,20 @@ class Orchestrator:
             conn.commit()
         finally:
             conn.close()
+
+    # ── Tool access check (Phase 4A enforcement seam) ─────────
+
+    @staticmethod
+    def _check_tool_access(role: AgentRole, tool_name: str) -> bool:
+        """Check whether *role* is allowed to use *tool_name*.
+
+        Uses the role definition's ``allowed_tools`` list together with
+        the ``ToolRegistry`` alias resolution.  Phase 6 executor will
+        call this before each tool invocation.
+        """
+        from agents.definitions import get_definition
+        from tools.base import get_registry
+
+        defn = get_definition(role)
+        registry = get_registry()
+        return registry.is_allowed(tool_name, defn.allowed_tools)

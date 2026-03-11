@@ -18,7 +18,7 @@ class AgentRoleDefinition:
     description          One-line description of the role's purpose.
     required_task_status Task status that must hold before this role can run.
     success_task_status  Task status to set after this role succeeds.
-    allowed_tools        Informational: tools this role may use (enforced in Phase 6).
+    allowed_tools        Tools this role may use (enforced by tool layer since Phase 4A).
     model_provider       Default provider string (overridden per-call in Phase 6).
     model_name           Default model string (overridden per-call in Phase 6).
     output_sections      Expected structured output keys this role produces.
