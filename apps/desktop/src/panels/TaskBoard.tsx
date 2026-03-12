@@ -45,6 +45,20 @@ interface ExecutionProposal {
   created_at: string;
 }
 
+// ── Snapshot types (Phase 6E-B) ─────────────────────────
+interface ExecutionSnapshotResponse {
+  id: string;
+  proposal_id: string;
+  approval_id: string;
+  task_id: string;
+  snapshot_data: string;
+  snapshot_data_parsed?: ProposalData;
+  content_hash: string;
+  risk_level: string;
+  status: string;
+  created_at: string;
+}
+
 const RISK_COLORS: Record<string, string> = {
   low: "var(--accent-green)",
   medium: "var(--accent-yellow)",
@@ -90,6 +104,11 @@ export function TaskBoard({ projectId }: TaskBoardProps) {
   const [proposals, setProposals] = useState<ExecutionProposal[]>([]);
   const [proposalLoading, setProposalLoading] = useState(false);
 
+  // Snapshot viewer (Phase 6E-B)
+  const [snapshots, setSnapshots] = useState<Record<string, ExecutionSnapshotResponse>>({});
+  const [snapshotLoading, setSnapshotLoading] = useState<string | null>(null);
+  const [snapshotError, setSnapshotError] = useState<string | null>(null);
+
   const loadProposals = useCallback(async (taskId: string) => {
     setProposalLoading(true);
     try {
@@ -117,6 +136,24 @@ export function TaskBoard({ projectId }: TaskBoardProps) {
     [expandedTask, loadProposals],
   );
 
+  // Snapshot: freeze then fetch (Phase 6E-B)
+  const freezeAndView = useCallback(async (proposalId: string) => {
+    setSnapshotLoading(proposalId);
+    setSnapshotError(null);
+    try {
+      const snap = await api.post<ExecutionSnapshotResponse>(
+        `/api/proposals/${proposalId}/freeze`,
+      );
+      setSnapshots((prev) => ({ ...prev, [proposalId]: snap }));
+    } catch (err) {
+      setSnapshotError(
+        err instanceof Error ? err.message : "Failed to freeze snapshot",
+      );
+    } finally {
+      setSnapshotLoading(null);
+    }
+  }, []);
+
   // Reset form state when project changes
   useEffect(() => {
     setShowForm(false);
@@ -126,6 +163,8 @@ export function TaskBoard({ projectId }: TaskBoardProps) {
     setFormError(null);
     setExpandedTask(null);
     setProposals([]);
+    setSnapshots({});
+    setSnapshotError(null);
   }, [projectId]);
 
   if (!projectId) {
@@ -427,6 +466,101 @@ export function TaskBoard({ projectId }: TaskBoardProps) {
                                 ))}
                               </ul>
                             </div>
+                          )}
+
+                          {/* Snapshot actions (Phase 6E-B) */}
+                          {p.status === "approved" && (
+                            <div className="snapshot-actions">
+                              {snapshots[p.id] ? (
+                                <button
+                                  className="btn btn-secondary btn-sm"
+                                  onClick={() => setSnapshots((prev) => {
+                                    const next = { ...prev };
+                                    delete next[p.id];
+                                    return next;
+                                  })}
+                                >
+                                  Hide Snapshot
+                                </button>
+                              ) : (
+                                <button
+                                  className="btn btn-secondary btn-sm"
+                                  disabled={snapshotLoading === p.id}
+                                  onClick={() => freezeAndView(p.id)}
+                                >
+                                  {snapshotLoading === p.id
+                                    ? "Loading..."
+                                    : "Freeze & View Snapshot"}
+                                </button>
+                              )}
+                            </div>
+                          )}
+
+                          {/* Snapshot viewer (Phase 6E-B) */}
+                          {snapshots[p.id] && (() => {
+                            const s = snapshots[p.id];
+                            const sd = s.snapshot_data_parsed;
+                            return (
+                              <div className="snapshot-viewer">
+                                <div className="proposal-label">Execution Snapshot</div>
+                                <div className="snapshot-meta">
+                                  <span className="snapshot-meta-item">
+                                    <strong>Status:</strong>{" "}
+                                    <span className="snapshot-frozen-badge">
+                                      {s.status}
+                                    </span>
+                                  </span>
+                                  <span className="snapshot-meta-item">
+                                    <strong>Risk:</strong>{" "}
+                                    <span style={{ color: RISK_COLORS[s.risk_level] || "#888" }}>
+                                      {s.risk_level}
+                                    </span>
+                                  </span>
+                                  <span className="snapshot-meta-item">
+                                    <strong>Hash:</strong>{" "}
+                                    <code className="snapshot-hash">
+                                      {s.content_hash.slice(0, 12)}...
+                                    </code>
+                                  </span>
+                                  <span className="snapshot-meta-item">
+                                    <strong>Frozen:</strong>{" "}
+                                    {formatDate(s.created_at)}
+                                  </span>
+                                </div>
+                                {sd?.change_summary && (
+                                  <div className="snapshot-summary">
+                                    {sd.change_summary}
+                                  </div>
+                                )}
+                                {sd?.proposed_files && sd.proposed_files.length > 0 && (
+                                  <div className="proposal-files">
+                                    <div className="proposal-label">Frozen Files</div>
+                                    {sd.proposed_files.map((f, i) => (
+                                      <div key={i} className="proposal-file-item">
+                                        <span
+                                          className="badge"
+                                          style={{
+                                            color: ACTION_COLORS[f.action] || "#888",
+                                            borderColor: ACTION_COLORS[f.action] || "#888",
+                                            fontSize: 10,
+                                            marginRight: 6,
+                                          }}
+                                        >
+                                          {f.action}
+                                        </span>
+                                        <span style={{ fontFamily: "monospace", fontSize: 12 }}>
+                                          {f.path}
+                                        </span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })()}
+
+                          {snapshotError && snapshotLoading === null && (
+                            <div className="snapshot-error">{snapshotError}</div>
                           )}
                         </div>
                       );

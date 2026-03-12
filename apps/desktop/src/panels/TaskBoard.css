@@ -156,3 +156,63 @@
   padding: 2px 0;
   color: var(--text-secondary);
 }
+
+/* ── Snapshot Viewer (Phase 6E-B) ────────────────────────── */
+
+.snapshot-actions {
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: 1px dashed var(--border-color);
+}
+
+.snapshot-viewer {
+  margin-top: 8px;
+  padding: 8px 10px;
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--accent-green);
+  border-radius: 6px;
+  font-size: 12px;
+}
+
+.snapshot-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 4px;
+  margin-bottom: 6px;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.snapshot-meta-item strong {
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.snapshot-frozen-badge {
+  color: var(--accent-green);
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 10px;
+}
+
+.snapshot-hash {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-muted);
+  background: var(--bg-tertiary);
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+
+.snapshot-summary {
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-bottom: 4px;
+}
+
+.snapshot-error {
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--accent-red);
+}
