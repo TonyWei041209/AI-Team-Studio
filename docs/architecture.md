@@ -115,6 +115,29 @@ Key design decisions:
 8. **Code fence stripping**: Handles common LLM behavior of wrapping JSON in markdown fences
 9. **Output summary truncation**: Large structured outputs are summarized before storage in AgentRun
 
+### Execution Proposals (Phase 6E-A)
+
+Builder output is persisted as `execution_proposals` rows, separate from `agent_runs.output_summary`.
+
+**Data flow:**
+```
+Builder step succeeds
+  → ProposalValidator.generate_risk_report() — pre-execution analysis
+  → INSERT execution_proposals (status=pending)
+  → If requires_approval: INSERT approval_requests (proposal_id FK)
+  → Pipeline continues to QA (proposal NOT executed)
+```
+
+**New table:** `execution_proposals` (V6 migration)
+- Links to `tasks` and `agent_runs` via FKs
+- `proposal_data` stores full Builder JSON output
+- `approval_requests.proposal_id` provides reverse linkage
+
+**Design decision:** Proposals are stored separately from AgentRun because:
+1. Full proposal JSON can be large; AgentRun.output_summary is capped at 2000 chars
+2. Proposals have their own lifecycle (pending → approved → executed)
+3. Clean FK relationship with approval_requests
+
 ## Data Model (Phase 6C)
 
 ### role_model_settings (Schema V5)

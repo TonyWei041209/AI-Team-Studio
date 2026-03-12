@@ -190,3 +190,16 @@ Builder can be enabled for real model calls but operates in **plan-only mode**:
 - Does NOT execute file modifications, shell commands, or git operations
 - Does NOT call the Tool Layer or trigger ApprovalRequests
 - `action: "delete"` in proposed_files is a proposal only, not executable
+
+### Builder Supervised Preparation (Phase 6E-A)
+
+Builder execution proposals are now persisted and linked to the approval system:
+
+- **Proposal persistence:** After Builder completes, output is saved to `execution_proposals` table
+- **Risk analysis:** ProposalValidator scans proposed files and commands for risk
+- **Approval linkage:** High/critical risk proposals auto-create linked ApprovalRequests
+- **No execution:** Proposals are preparation only — no file writes, shell commands, or git operations
+
+**API endpoints:**
+- `GET /api/tasks/{task_id}/proposals` — list proposals for a task
+- `GET /api/proposals/{proposal_id}` — get single proposal with parsed data

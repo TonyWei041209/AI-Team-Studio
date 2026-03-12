@@ -182,7 +182,7 @@ Phase 6C makes model routing **config-driven** via the `role_model_settings` DB 
 | Role | Real Model | Notes |
 |------|-----------|-------|
 | Planner | Supported | Config via Settings, full model integration |
-| Builder | Plan-only (Phase 6D) | Outputs structured change plan, no tool execution |
+| Builder | Supervised preparation (Phase 6E-A) | Outputs execution proposals persisted to DB, linked to approvals, no tool execution |
 | QA | Mock only | Real model blocked |
 | Reviewer | Supported | Config via Settings, full model integration |
 
@@ -202,6 +202,31 @@ Orchestrator
 ## Builder Plan-Only Mode (Phase 6D)
 
 Phase 6D adds Builder to the real model pipeline in **plan-only mode**:
+
+### Phase 6E-A: Builder Supervised Execution Preparation
+
+Builder output is now upgraded to **execution proposals** that integrate with the approval system.
+
+**What changed:**
+- BuilderOutputSchema extended with optional execution fields: `proposed_commands`, `execution_steps`, `risk_level`, `requires_approval`, `approval_reasons`, `estimated_impact`
+- New `execution_proposals` DB table persists Builder proposals separately from AgentRun summaries
+- Proposals automatically linked to ApprovalRequests via `proposal_id` FK
+- ProposalValidator performs pre-execution risk analysis without executing anything
+- Mock Builder output updated to schema-compatible format
+
+**Execution Proposal Schema (new optional fields):**
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| proposed_commands | list[{command, working_dir?, risk_level?, reason}] | [] | Shell commands to execute |
+| execution_steps | list[{step_number, action_type, target, description, risk_level?}] | [] | Ordered execution plan |
+| risk_level | "low"\|"medium"\|"high"\|"critical" | auto-computed | Overall risk assessment |
+| requires_approval | bool | true if risk >= high | Whether human approval needed |
+| approval_reasons | list[str] | auto-generated | Why approval is required |
+| estimated_impact | {files_affected, commands_count, risk_summary} | auto-computed | Impact summary |
+
+**Key constraint:** Builder still does NOT execute proposals. Proposals are persisted and linked to approvals for future supervised execution.
+
+
 
 - Builder outputs a structured change plan (proposed files, steps, reasoning, validation)
 - Builder does NOT execute any file modifications, shell commands, or git operations
