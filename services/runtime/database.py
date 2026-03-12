@@ -218,6 +218,52 @@ def _apply_v5(conn: sqlite3.Connection) -> None:
     conn.execute("INSERT INTO schema_version (version) VALUES (5)")
 
 
+def _apply_v6(conn: sqlite3.Connection) -> None:
+    """V6: Execution proposals table + proposal linkage (Phase 6E-A).
+
+    Builder produces structured execution proposals that are persisted
+    separately from AgentRun output_summary.  Each proposal can be linked
+    to an ApprovalRequest via the new proposal_id FK.
+    """
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS execution_proposals (
+            id TEXT PRIMARY KEY,
+            task_id TEXT REFERENCES tasks(id),
+            run_id TEXT REFERENCES agent_runs(id),
+            role TEXT NOT NULL DEFAULT 'builder',
+            proposal_data TEXT NOT NULL DEFAULT '{}',
+            risk_level TEXT NOT NULL DEFAULT 'medium',
+            requires_approval INTEGER NOT NULL DEFAULT 1,
+            approval_reasons TEXT NOT NULL DEFAULT '[]',
+            status TEXT NOT NULL DEFAULT 'pending',
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+        )
+    """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_proposals_task "
+        "ON execution_proposals(task_id)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_proposals_run "
+        "ON execution_proposals(run_id)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_proposals_status "
+        "ON execution_proposals(status)"
+    )
+    # Add proposal_id FK to approval_requests
+    conn.execute(
+        "ALTER TABLE approval_requests "
+        "ADD COLUMN proposal_id TEXT REFERENCES execution_proposals(id)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_approvals_proposal "
+        "ON approval_requests(proposal_id)"
+    )
+    conn.execute("INSERT INTO schema_version (version) VALUES (6)")
+
+
 # Ordered list of migrations
 _MIGRATIONS = [
     (1, _apply_v1),
@@ -225,6 +271,7 @@ _MIGRATIONS = [
     (3, _apply_v3),
     (4, _apply_v4),
     (5, _apply_v5),
+    (6, _apply_v6),
 ]
 
 

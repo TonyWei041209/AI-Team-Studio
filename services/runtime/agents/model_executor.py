@@ -150,10 +150,16 @@ class ReviewerOutputSchema:
 # ── Builder output schema validation (Phase 6D) ──────────────
 
 _VALID_FILE_ACTIONS = {"create", "modify", "delete"}
+_VALID_RISK_LEVELS = {"low", "medium", "high", "critical"}
+_VALID_ACTION_TYPES = {"file", "shell", "git"}
 
 
 class BuilderOutputSchema:
-    """Validates Builder JSON output against the plan-only schema (Phase 6D)."""
+    """Validates Builder JSON output against the execution proposal schema.
+
+    Phase 6D core fields are required.  Phase 6E-A execution proposal fields
+    are optional (validated only when present) for backward compatibility.
+    """
 
     @staticmethod
     def validate(data: Any) -> tuple[bool, str]:
@@ -226,6 +232,96 @@ class BuilderOutputSchema:
                 if not isinstance(item, str):
                     return False, f"risk_notes[{i}] must be a string"
 
+        # ── Phase 6E-A optional execution proposal fields ──────────
+
+        # proposed_commands: optional, list of command objects
+        pc = data.get("proposed_commands")
+        if pc is not None:
+            if not isinstance(pc, list):
+                return False, "proposed_commands must be a list"
+            for i, item in enumerate(pc):
+                if not isinstance(item, dict):
+                    return False, f"proposed_commands[{i}] must be an object"
+                cmd = item.get("command")
+                if not isinstance(cmd, str) or not cmd.strip():
+                    return False, f"proposed_commands[{i}].command must be a non-empty string"
+                reason = item.get("reason")
+                if not isinstance(reason, str) or not reason.strip():
+                    return False, f"proposed_commands[{i}].reason must be a non-empty string"
+                rl = item.get("risk_level")
+                if rl is not None and (not isinstance(rl, str) or rl not in _VALID_RISK_LEVELS):
+                    return False, (
+                        f"proposed_commands[{i}].risk_level must be one of "
+                        f"{sorted(_VALID_RISK_LEVELS)}, got: {rl!r}"
+                    )
+
+        # execution_steps: optional, list of step objects
+        es = data.get("execution_steps")
+        if es is not None:
+            if not isinstance(es, list):
+                return False, "execution_steps must be a list"
+            for i, item in enumerate(es):
+                if not isinstance(item, dict):
+                    return False, f"execution_steps[{i}] must be an object"
+                sn = item.get("step_number")
+                if not isinstance(sn, (int, float)):
+                    return False, f"execution_steps[{i}].step_number must be an integer"
+                at = item.get("action_type")
+                if not isinstance(at, str) or at not in _VALID_ACTION_TYPES:
+                    return False, (
+                        f"execution_steps[{i}].action_type must be one of "
+                        f"{sorted(_VALID_ACTION_TYPES)}, got: {at!r}"
+                    )
+                tgt = item.get("target")
+                if not isinstance(tgt, str) or not tgt.strip():
+                    return False, f"execution_steps[{i}].target must be a non-empty string"
+                desc = item.get("description")
+                if not isinstance(desc, str) or not desc.strip():
+                    return False, f"execution_steps[{i}].description must be a non-empty string"
+                rl = item.get("risk_level")
+                if rl is not None and (not isinstance(rl, str) or rl not in _VALID_RISK_LEVELS):
+                    return False, (
+                        f"execution_steps[{i}].risk_level must be one of "
+                        f"{sorted(_VALID_RISK_LEVELS)}, got: {rl!r}"
+                    )
+
+        # risk_level: optional top-level risk
+        top_risk = data.get("risk_level")
+        if top_risk is not None and (not isinstance(top_risk, str) or top_risk not in _VALID_RISK_LEVELS):
+            return False, (
+                f"risk_level must be one of {sorted(_VALID_RISK_LEVELS)}, "
+                f"got: {top_risk!r}"
+            )
+
+        # requires_approval: optional bool
+        ra = data.get("requires_approval")
+        if ra is not None and not isinstance(ra, bool):
+            return False, "requires_approval must be a boolean"
+
+        # approval_reasons: optional list of strings
+        ar = data.get("approval_reasons")
+        if ar is not None:
+            if not isinstance(ar, list):
+                return False, "approval_reasons must be a list"
+            for i, item in enumerate(ar):
+                if not isinstance(item, str):
+                    return False, f"approval_reasons[{i}] must be a string"
+
+        # estimated_impact: optional dict
+        ei = data.get("estimated_impact")
+        if ei is not None:
+            if not isinstance(ei, dict):
+                return False, "estimated_impact must be an object"
+            fa = ei.get("files_affected")
+            if fa is not None and not isinstance(fa, (int, float)):
+                return False, "estimated_impact.files_affected must be an integer"
+            cc = ei.get("commands_count")
+            if cc is not None and not isinstance(cc, (int, float)):
+                return False, "estimated_impact.commands_count must be an integer"
+            rs_val = ei.get("risk_summary")
+            if rs_val is not None and not isinstance(rs_val, str):
+                return False, "estimated_impact.risk_summary must be a string"
+
         return True, ""
 
 
@@ -272,6 +368,63 @@ def _load_role_model_config(role: AgentRole) -> dict | None:
         return None
 
 
+def _normalize_builder_proposal(data: dict) -> None:
+    """Fill in missing Phase 6E-A execution proposal fields with computed defaults.
+
+    Mutates *data* in-place.  Called after schema validation passes.
+    """
+    data.setdefault("proposed_commands", [])
+    data.setdefault("execution_steps", [])
+
+    # Auto-compute risk_level if not provided
+    if "risk_level" not in data:
+        max_risk = "low"
+        # File deletions → high
+        for f in data.get("proposed_files", []):
+            if f.get("action") == "delete":
+                max_risk = "high"
+                break
+        # Check proposed commands for dangerous patterns
+        for cmd_item in data.get("proposed_commands", []):
+            cmd_risk = cmd_item.get("risk_level", "low")
+            if cmd_risk in ("high", "critical"):
+                if _risk_rank(cmd_risk) > _risk_rank(max_risk):
+                    max_risk = cmd_risk
+        # At least medium if there are file modifications
+        if max_risk == "low" and data.get("proposed_files"):
+            max_risk = "medium"
+        data["risk_level"] = max_risk
+
+    # Auto-compute requires_approval
+    if "requires_approval" not in data:
+        data["requires_approval"] = data["risk_level"] in ("high", "critical")
+
+    # Auto-compute approval_reasons
+    if "approval_reasons" not in data:
+        reasons: list[str] = []
+        if data["risk_level"] in ("high", "critical"):
+            reasons.append(f"Overall risk level: {data['risk_level']}")
+        for f in data.get("proposed_files", []):
+            if f.get("action") == "delete":
+                reasons.append(f"File deletion: {f.get('path', '?')}")
+        data["approval_reasons"] = reasons
+
+    # Auto-compute estimated_impact
+    if "estimated_impact" not in data:
+        data["estimated_impact"] = {
+            "files_affected": len(data.get("proposed_files", [])),
+            "commands_count": len(data.get("proposed_commands", [])),
+            "risk_summary": f"Risk: {data['risk_level']}, "
+                            f"{len(data.get('proposed_files', []))} files, "
+                            f"{len(data.get('proposed_commands', []))} commands",
+        }
+
+
+def _risk_rank(level: str) -> int:
+    """Return numeric rank for a risk level string."""
+    return {"low": 0, "medium": 1, "high": 2, "critical": 3}.get(level, 0)
+
+
 class ModelAgentExecutor:
     """Executes agent roles using real LLM provider calls.
 
@@ -280,6 +433,7 @@ class ModelAgentExecutor:
 
     Phase 6C: Provider/model are resolved from role_model_settings DB table.
     Phase 6D: Builder added in plan-only mode (outputs change plan, no tool execution).
+    Phase 6E-A: Builder output normalized with execution proposal fields.
     """
 
     _SUPPORTED_ROLES = {AgentRole.PLANNER, AgentRole.BUILDER, AgentRole.REVIEWER}
@@ -454,8 +608,11 @@ class ModelAgentExecutor:
         if isinstance(result, ExecutionResult):
             return result  # validation failed
 
-        # Normalize optional fields
+        # Normalize optional fields (Phase 6D core)
         result.setdefault("risk_notes", [])
+
+        # Normalize Phase 6E-A execution proposal fields
+        _normalize_builder_proposal(result)
 
         return ExecutionResult(success=True, output=result)
 

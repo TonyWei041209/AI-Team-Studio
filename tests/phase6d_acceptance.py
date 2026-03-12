@@ -199,7 +199,9 @@ check("Builder system_prompt forbids file modifications", "file modification" in
 check("Builder system_prompt forbids fabrication", "fabricat" in builder_def.system_prompt.lower() or "MUST NOT claim" in builder_def.system_prompt)
 check("Builder output_sections includes change_summary", "change_summary" in builder_def.output_sections)
 check("Builder output_sections includes proposed_files", "proposed_files" in builder_def.output_sections)
-check("Builder output_sections has 6 items", len(builder_def.output_sections) == 6)
+check("Builder output_sections has at least 6 core items", len(builder_def.output_sections) >= 6 and all(
+    f in builder_def.output_sections for f in ["change_summary", "proposed_files", "change_steps", "reasoning_summary", "validation_plan", "risk_notes"]
+))
 
 # QA should still be mock
 qa_def = get_definition(AgentRole.QA)

@@ -1,11 +1,62 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import type { TaskCreate, TaskStatus, TaskPriority } from "../types/api";
 import { useTasks } from "../hooks/useTasks";
+import { api } from "../api/client";
 import "./TaskBoard.css";
 
 interface TaskBoardProps {
   projectId: string | null;
 }
+
+// ── Proposal types (Phase 6E-A) ────────────────────────────
+
+interface ProposedFile {
+  path: string;
+  action: "create" | "modify" | "delete";
+  reason: string;
+}
+
+interface ProposedCommand {
+  command: string;
+  working_dir?: string;
+  risk_level?: string;
+  reason: string;
+}
+
+interface ProposalData {
+  change_summary?: string;
+  proposed_files?: ProposedFile[];
+  proposed_commands?: ProposedCommand[];
+  risk_level?: string;
+  requires_approval?: boolean;
+  approval_reasons?: string[];
+}
+
+interface ExecutionProposal {
+  id: string;
+  task_id: string;
+  run_id: string;
+  role: string;
+  risk_level: string;
+  requires_approval: boolean;
+  status: string;
+  proposal_data_parsed: ProposalData;
+  approval_reasons_parsed: string[];
+  created_at: string;
+}
+
+const RISK_COLORS: Record<string, string> = {
+  low: "var(--accent-green)",
+  medium: "var(--accent-yellow)",
+  high: "#ff8c00",
+  critical: "var(--accent-red)",
+};
+
+const ACTION_COLORS: Record<string, string> = {
+  create: "var(--accent-green)",
+  modify: "var(--accent-yellow)",
+  delete: "var(--accent-red)",
+};
 
 const STATUS_COLORS: Record<TaskStatus, string> = {
   pending: "var(--text-muted)",
@@ -34,6 +85,38 @@ export function TaskBoard({ projectId }: TaskBoardProps) {
   const [description, setDescription] = useState("");
   const [priority, setPriority] = useState<TaskPriority>("medium");
 
+  // Proposal expansion (Phase 6E-A)
+  const [expandedTask, setExpandedTask] = useState<string | null>(null);
+  const [proposals, setProposals] = useState<ExecutionProposal[]>([]);
+  const [proposalLoading, setProposalLoading] = useState(false);
+
+  const loadProposals = useCallback(async (taskId: string) => {
+    setProposalLoading(true);
+    try {
+      const data = await api.get<{ proposals: ExecutionProposal[] }>(
+        `/api/tasks/${taskId}/proposals`,
+      );
+      setProposals(data.proposals);
+    } catch {
+      setProposals([]);
+    } finally {
+      setProposalLoading(false);
+    }
+  }, []);
+
+  const toggleProposals = useCallback(
+    (taskId: string) => {
+      if (expandedTask === taskId) {
+        setExpandedTask(null);
+        setProposals([]);
+      } else {
+        setExpandedTask(taskId);
+        loadProposals(taskId);
+      }
+    },
+    [expandedTask, loadProposals],
+  );
+
   // Reset form state when project changes
   useEffect(() => {
     setShowForm(false);
@@ -41,6 +124,8 @@ export function TaskBoard({ projectId }: TaskBoardProps) {
     setDescription("");
     setPriority("medium");
     setFormError(null);
+    setExpandedTask(null);
+    setProposals([]);
   }, [projectId]);
 
   if (!projectId) {
@@ -215,7 +300,139 @@ export function TaskBoard({ projectId }: TaskBoardProps) {
                     {t.assigned_agent_role}
                   </span>
                 )}
+                {t.status !== "pending" && (
+                  <button
+                    className="btn btn-secondary btn-sm"
+                    style={{ marginLeft: "auto", fontSize: 11 }}
+                    onClick={() => toggleProposals(t.id)}
+                  >
+                    {expandedTask === t.id ? "Hide Proposals" : "Proposals"}
+                  </button>
+                )}
               </div>
+
+              {/* Execution Proposals (Phase 6E-A) */}
+              {expandedTask === t.id && (
+                <div className="proposal-section">
+                  {proposalLoading && (
+                    <div style={{ fontSize: 12, color: "var(--text-muted)" }}>
+                      Loading proposals...
+                    </div>
+                  )}
+                  {!proposalLoading && proposals.length === 0 && (
+                    <div style={{ fontSize: 12, color: "var(--text-muted)" }}>
+                      No proposals for this task.
+                    </div>
+                  )}
+                  {!proposalLoading &&
+                    proposals.map((p) => {
+                      const pd = p.proposal_data_parsed;
+                      return (
+                        <div key={p.id} className="proposal-card">
+                          <div className="proposal-header">
+                            <span className="proposal-summary">
+                              {pd.change_summary || "Execution Proposal"}
+                            </span>
+                            <span
+                              className="badge"
+                              style={{
+                                color: RISK_COLORS[p.risk_level] || "#888",
+                                borderColor: RISK_COLORS[p.risk_level] || "#888",
+                                fontSize: 10,
+                              }}
+                            >
+                              {p.risk_level}
+                            </span>
+                            {p.requires_approval && (
+                              <span
+                                className="badge"
+                                style={{
+                                  color: "var(--accent-yellow)",
+                                  borderColor: "var(--accent-yellow)",
+                                  fontSize: 10,
+                                }}
+                              >
+                                approval required
+                              </span>
+                            )}
+                            <span
+                              className="badge"
+                              style={{
+                                color: "var(--text-muted)",
+                                borderColor: "var(--text-muted)",
+                                fontSize: 10,
+                              }}
+                            >
+                              {p.status}
+                            </span>
+                          </div>
+
+                          {/* Proposed files */}
+                          {pd.proposed_files && pd.proposed_files.length > 0 && (
+                            <div className="proposal-files">
+                              <div className="proposal-label">Proposed Files</div>
+                              {pd.proposed_files.map((f, i) => (
+                                <div key={i} className="proposal-file-item">
+                                  <span
+                                    className="badge"
+                                    style={{
+                                      color: ACTION_COLORS[f.action] || "#888",
+                                      borderColor: ACTION_COLORS[f.action] || "#888",
+                                      fontSize: 10,
+                                      marginRight: 6,
+                                    }}
+                                  >
+                                    {f.action}
+                                  </span>
+                                  <span style={{ fontFamily: "monospace", fontSize: 12 }}>
+                                    {f.path}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+
+                          {/* Proposed commands */}
+                          {pd.proposed_commands && pd.proposed_commands.length > 0 && (
+                            <div className="proposal-commands">
+                              <div className="proposal-label">Proposed Commands</div>
+                              {pd.proposed_commands.map((c, i) => (
+                                <div key={i} className="proposal-cmd-item">
+                                  <code style={{ fontSize: 11 }}>{c.command}</code>
+                                  {c.risk_level && (
+                                    <span
+                                      className="badge"
+                                      style={{
+                                        color: RISK_COLORS[c.risk_level] || "#888",
+                                        borderColor: RISK_COLORS[c.risk_level] || "#888",
+                                        fontSize: 9,
+                                        marginLeft: 6,
+                                      }}
+                                    >
+                                      {c.risk_level}
+                                    </span>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+
+                          {/* Approval reasons */}
+                          {p.approval_reasons_parsed.length > 0 && (
+                            <div className="proposal-reasons">
+                              <div className="proposal-label">Approval Reasons</div>
+                              <ul style={{ margin: 0, paddingLeft: 16, fontSize: 11 }}>
+                                {p.approval_reasons_parsed.map((r, i) => (
+                                  <li key={i}>{r}</li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                </div>
+              )}
             </div>
           ))}
         </div>

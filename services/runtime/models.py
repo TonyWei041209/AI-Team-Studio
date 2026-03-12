@@ -181,6 +181,7 @@ class ApprovalRequest(BaseModel):
     reviewer_comment: str
     created_at: str
     resolved_at: Optional[str]
+    proposal_id: Optional[str] = None  # Phase 6E-A: FK to execution_proposals
 
 
 # ── LogEvent ───────────────────────────────────────────
@@ -291,3 +292,33 @@ class RoleModelSettingUpdate(BaseModel):
 class RoleModelSettingsPatch(BaseModel):
     """Request body for PATCH /api/settings/role-models."""
     role_models: list[RoleModelSettingUpdate]
+
+
+# ── Execution Proposals (Phase 6E-A) ──────────────────────────────
+
+
+class ProposalStatus(str, Enum):
+    PENDING = "pending"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+    EXPIRED = "expired"
+
+
+class ExecutionProposal(BaseModel):
+    """Persistent execution proposal from Builder agent."""
+    id: str
+    task_id: Optional[str] = None
+    run_id: Optional[str] = None
+    role: str = "builder"
+    proposal_data: str = "{}"           # JSON string — full Builder output
+    risk_level: str = "medium"
+    requires_approval: bool = True
+    approval_reasons: str = "[]"        # JSON array string
+    status: str = "pending"
+    created_at: str
+    updated_at: str
+
+
+class ExecutionProposalResponse(BaseModel):
+    """Response for GET /api/tasks/{task_id}/proposals."""
+    proposals: list[ExecutionProposal]

@@ -143,23 +143,35 @@ class MockAgentExecutor:
     def _builder(self, title: str, desc: str, ctx: dict) -> ExecutionResult:
         is_retry = "rejection_feedback" in ctx
         output = {
-            "changed_files": [
-                "src/feature.py (created)" if not is_retry else "src/feature.py (revised)",
-                "src/utils.py (modified)",
-            ],
-            "what_changed": (
+            "change_summary": (
                 f"{'Revised' if is_retry else 'Implemented'} the core logic for: {title}"
             ),
-            "why": (
+            "proposed_files": [
+                {
+                    "path": "src/feature.py",
+                    "action": "create" if not is_retry else "modify",
+                    "reason": "Core feature implementation",
+                },
+                {
+                    "path": "src/utils.py",
+                    "action": "modify",
+                    "reason": "Utility updates for feature support",
+                },
+            ],
+            "change_steps": [
+                {"step": 1, "description": f"{'Revise' if is_retry else 'Create'} feature module"},
+                {"step": 2, "description": "Update utility functions"},
+            ],
+            "reasoning_summary": (
                 "Addressed reviewer feedback" if is_retry
                 else "Followed the plan from the Planner step"
             ),
-            "validation": {
-                "lint": "pass",
-                "typecheck": "pass",
-                "tests": "pass",
-            },
-            "open_issues": [],
+            "validation_plan": [
+                "Run unit tests",
+                "Check type annotations",
+                "Verify acceptance criteria",
+            ],
+            "risk_notes": [],
         }
         return ExecutionResult(success=True, output=output)
 

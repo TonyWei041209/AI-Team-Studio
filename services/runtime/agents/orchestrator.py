@@ -280,6 +280,10 @@ class Orchestrator:
             )
             self._log(task_id, run_id, "info", defn.role.value,
                       f"{defn.display_name} completed successfully")
+
+            # 5. Create execution proposal after Builder succeeds (Phase 6E-A)
+            if defn.role == AgentRole.BUILDER:
+                self._create_execution_proposal(task_id, run_id, result.output)
         else:
             self._update_run(
                 run_id, RunStatus.FAILED,
@@ -299,6 +303,103 @@ class Orchestrator:
             "output": result.output,
             "decision": result.decision,
         }
+
+    # ── Execution proposal creation (Phase 6E-A) ───────────────
+
+    def _create_execution_proposal(
+        self,
+        task_id: str,
+        run_id: str,
+        builder_output: dict,
+    ) -> str | None:
+        """Persist Builder output as an execution proposal.
+
+        If the proposal requires approval, also creates an ApprovalRequest
+        linked via proposal_id.  Returns proposal_id or None on error.
+        Does NOT execute any part of the proposal.
+        """
+        try:
+            from tools.proposal_validator import ProposalValidator
+
+            validator = ProposalValidator()
+            risk_report = validator.generate_risk_report(builder_output)
+
+            risk_level = builder_output.get("risk_level", risk_report["overall_risk"])
+            requires_approval = builder_output.get(
+                "requires_approval", risk_report["approval_required"]
+            )
+            approval_reasons = builder_output.get(
+                "approval_reasons", risk_report["reasons"]
+            )
+
+            proposal_id = str(uuid.uuid4())
+            now = datetime.now(timezone.utc).isoformat()
+
+            conn = get_connection()
+            try:
+                conn.execute(
+                    """INSERT INTO execution_proposals
+                       (id, task_id, run_id, role, proposal_data, risk_level,
+                        requires_approval, approval_reasons, status,
+                        created_at, updated_at)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (
+                        proposal_id, task_id, run_id, "builder",
+                        json.dumps(builder_output),
+                        risk_level,
+                        1 if requires_approval else 0,
+                        json.dumps(approval_reasons),
+                        "pending", now, now,
+                    ),
+                )
+
+                # Create linked ApprovalRequest if approval needed
+                if requires_approval:
+                    approval_id = str(uuid.uuid4())
+                    payload = json.dumps({
+                        "proposal_id": proposal_id,
+                        "risk_level": risk_level,
+                        "approval_reasons": approval_reasons,
+                        "change_summary": builder_output.get("change_summary", ""),
+                        "files_affected": len(builder_output.get("proposed_files", [])),
+                        "commands_count": len(builder_output.get("proposed_commands", [])),
+                    })
+                    conn.execute(
+                        """INSERT INTO approval_requests
+                           (id, task_id, run_id, action_type, action_payload,
+                            status, proposal_id, created_at)
+                           VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                        (
+                            approval_id, task_id, run_id,
+                            "proposal:builder", payload,
+                            "pending", proposal_id, now,
+                        ),
+                    )
+
+                conn.commit()
+
+                self._log(
+                    task_id, run_id, "info", "orchestrator",
+                    f"Execution proposal created "
+                    f"(risk={risk_level}, "
+                    f"approval={'required' if requires_approval else 'not required'})",
+                )
+                return proposal_id
+            except Exception as exc:
+                conn.rollback()
+                self._log(
+                    task_id, run_id, "error", "orchestrator",
+                    f"Failed to create execution proposal: {exc}",
+                )
+                return None
+            finally:
+                conn.close()
+        except Exception as exc:
+            self._log(
+                task_id, run_id, "error", "orchestrator",
+                f"Proposal validation error: {exc}",
+            )
+            return None
 
     # ── Database helpers (direct SQL, same patterns as routers) ─
 

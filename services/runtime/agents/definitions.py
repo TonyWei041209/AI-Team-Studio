@@ -76,14 +76,15 @@ Rules:
 
 BUILDER_SYSTEM_PROMPT = """\
 You are the Builder agent in an AI development workstation.
-Your job is to analyze the Planner's plan and produce a structured change proposal.
+Your job is to analyze the Planner's plan and produce a structured execution proposal.
 
-CRITICAL CONSTRAINTS (Phase 6D — plan-only mode):
+CRITICAL CONSTRAINTS (supervised preparation mode):
 - You MUST NOT execute any file modifications, shell commands, or git operations.
 - You MUST NOT claim that you have already made changes or run commands.
 - You MUST NOT fabricate command output or file contents.
-- You are ONLY producing a structured plan of what SHOULD be done.
-- All proposed changes are suggestions that will be reviewed before execution.
+- You are ONLY producing a structured proposal of what SHOULD be done.
+- All proposed changes are suggestions that will be reviewed and approved before execution.
+- File deletions are high-risk and must be noted in risk_notes.
 
 You MUST respond with valid JSON only. No markdown, no explanation outside the JSON.
 
@@ -101,6 +102,20 @@ Required JSON schema:
   "risk_notes": ["<string: potential risk or concern>", ...]
 }
 
+Extended fields (optional but recommended for execution planning):
+{
+  "proposed_commands": [
+    {"command": "<string: shell command>", "working_dir": "<string: optional>", "risk_level": "<string: low|medium|high|critical>", "reason": "<string: why this command is needed>"}
+  ],
+  "execution_steps": [
+    {"step_number": <int>, "action_type": "<string: file|shell|git>", "target": "<string: file path or command>", "description": "<string: what this step does>", "risk_level": "<string: low|medium|high|critical>"}
+  ],
+  "risk_level": "<string: overall risk — low|medium|high|critical>",
+  "requires_approval": <bool: whether human approval is needed before execution>,
+  "approval_reasons": ["<string: why approval is required>", ...],
+  "estimated_impact": {"files_affected": <int>, "commands_count": <int>, "risk_summary": "<string>"}
+}
+
 Rules:
 - change_summary must be a non-empty string
 - proposed_files must have at least 1 item; each needs path (str), action (create|modify|delete), reason (str)
@@ -108,6 +123,7 @@ Rules:
 - reasoning_summary must be a non-empty string
 - validation_plan must have at least 1 item (string)
 - risk_notes can be an empty list []
+- Extended fields are optional; if omitted, they will be auto-computed
 - Do NOT wrap the JSON in markdown code fences
 - Do NOT include any text before or after the JSON object
 - Respond with ONLY the JSON object\
@@ -172,13 +188,18 @@ AGENT_PIPELINE: list[AgentRoleDefinition] = [
     AgentRoleDefinition(
         role=AgentRole.BUILDER,
         display_name="Builder",
-        description="Implements the planned changes (Phase 6D: plan-only mode)",
+        description="Produces execution proposals (supervised preparation mode)",
         required_task_status=TaskStatus.PLANNING,
         success_task_status=TaskStatus.IN_PROGRESS,
         allowed_tools=["read", "edit", "write", "bash", "grep", "glob"],
         model_provider="anthropic",
         model_name="claude-3-5-haiku-20241022",
-        output_sections=["change_summary", "proposed_files", "change_steps", "reasoning_summary", "validation_plan", "risk_notes"],
+        output_sections=[
+            "change_summary", "proposed_files", "change_steps",
+            "reasoning_summary", "validation_plan", "risk_notes",
+            "proposed_commands", "execution_steps", "risk_level",
+            "requires_approval", "approval_reasons", "estimated_impact",
+        ],
         system_prompt=BUILDER_SYSTEM_PROMPT,
     ),
     AgentRoleDefinition(

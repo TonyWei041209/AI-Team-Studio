@@ -91,3 +91,68 @@
   border-color: var(--border-color);
   background-color: var(--bg-tertiary);
 }
+
+/* ── Execution Proposals (Phase 6E-A) ─────────────────── */
+
+.proposal-section {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-color);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.proposal-card {
+  padding: 10px 12px;
+  background-color: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  font-size: 12px;
+}
+
+.proposal-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.proposal-summary {
+  font-weight: 600;
+  color: var(--text-primary);
+  font-size: 12px;
+  flex: 1;
+  min-width: 120px;
+}
+
+.proposal-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 4px;
+  margin-top: 6px;
+}
+
+.proposal-files,
+.proposal-commands,
+.proposal-reasons {
+  margin-top: 4px;
+}
+
+.proposal-file-item {
+  display: flex;
+  align-items: center;
+  padding: 2px 0;
+  color: var(--text-secondary);
+}
+
+.proposal-cmd-item {
+  display: flex;
+  align-items: center;
+  padding: 2px 0;
+  color: var(--text-secondary);
+}

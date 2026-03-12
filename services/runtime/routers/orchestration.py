@@ -1,9 +1,12 @@
 """Orchestration API endpoints.
 
-POST /api/tasks/{task_id}/orchestrate        Start the full pipeline
-GET  /api/tasks/{task_id}/orchestration-status  Inspect current state
+POST /api/tasks/{task_id}/orchestrate           Start the full pipeline
+GET  /api/tasks/{task_id}/orchestration-status   Inspect current state
+GET  /api/tasks/{task_id}/proposals              List execution proposals
+GET  /api/proposals/{proposal_id}                Get single proposal
 """
 
+import json
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException
@@ -152,5 +155,73 @@ async def get_orchestration_status(task_id: str):
             "is_complete": is_complete,
             "current_role": current_role,
         }
+    finally:
+        conn.close()
+
+
+# ── Execution proposals (Phase 6E-A) ───────────────────────────
+
+
+@router.get("/tasks/{task_id}/proposals")
+async def get_task_proposals(task_id: str):
+    """List all execution proposals for a task."""
+    conn = get_connection()
+    try:
+        task = conn.execute(
+            "SELECT id FROM tasks WHERE id = ?", (task_id,),
+        ).fetchone()
+        if not task:
+            raise HTTPException(status_code=404, detail="Task not found")
+
+        rows = conn.execute(
+            """SELECT * FROM execution_proposals
+               WHERE task_id = ?
+               ORDER BY created_at DESC""",
+            (task_id,),
+        ).fetchall()
+
+        proposals = []
+        for row in rows:
+            p = dict(row)
+            p["requires_approval"] = bool(p.get("requires_approval", 1))
+            try:
+                p["proposal_data_parsed"] = json.loads(p.get("proposal_data", "{}"))
+            except (json.JSONDecodeError, TypeError):
+                p["proposal_data_parsed"] = {}
+            try:
+                p["approval_reasons_parsed"] = json.loads(p.get("approval_reasons", "[]"))
+            except (json.JSONDecodeError, TypeError):
+                p["approval_reasons_parsed"] = []
+            proposals.append(p)
+
+        return {"proposals": proposals}
+    finally:
+        conn.close()
+
+
+@router.get("/proposals/{proposal_id}")
+async def get_proposal(proposal_id: str):
+    """Get a single execution proposal by ID."""
+    conn = get_connection()
+    try:
+        row = conn.execute(
+            "SELECT * FROM execution_proposals WHERE id = ?",
+            (proposal_id,),
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Proposal not found")
+
+        p = dict(row)
+        p["requires_approval"] = bool(p.get("requires_approval", 1))
+        try:
+            p["proposal_data_parsed"] = json.loads(p.get("proposal_data", "{}"))
+        except (json.JSONDecodeError, TypeError):
+            p["proposal_data_parsed"] = {}
+        try:
+            p["approval_reasons_parsed"] = json.loads(p.get("approval_reasons", "[]"))
+        except (json.JSONDecodeError, TypeError):
+            p["approval_reasons_parsed"] = []
+
+        return p
     finally:
         conn.close()
