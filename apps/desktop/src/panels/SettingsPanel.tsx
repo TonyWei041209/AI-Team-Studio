@@ -8,8 +8,8 @@ import { useProviders } from "../hooks/useProviders";
 import { settingsApi } from "../api/settings";
 import type { ProviderSettingUpdate, RoleModelSetting, RoleModelSettingUpdate } from "../types/api";
 
-// Roles that support real model configuration in Phase 6C
-const CONFIGURABLE_ROLES = ["planner", "reviewer"] as const;
+// Roles that support real model configuration (Phase 6C+6D)
+const CONFIGURABLE_ROLES = ["planner", "builder", "reviewer"] as const;
 
 export function SettingsPanel() {
   const {
@@ -149,11 +149,11 @@ export function SettingsPanel() {
 
   return (
     <div className="settings-panel">
-      {/* ── Role Model Configuration (Phase 6C) ── */}
+      {/* ── Role Model Configuration (Phase 6C+6D) ── */}
       <h2>Role Model Configuration</h2>
       <p className="settings-subtitle">
         Configure which provider and model each agent role uses.
-        Only Planner and Reviewer support real model integration.
+        Planner and Reviewer support full model integration. Builder supports plan-only mode.
       </p>
 
       {roleError && (
@@ -178,6 +178,12 @@ export function SettingsPanel() {
                   {effectiveEnabled ? "Enabled" : "Disabled"}
                 </span>
               </div>
+
+              {role === "builder" && (
+                <div style={{ padding: "4px 8px", marginBottom: 8, background: "rgba(255,200,50,0.1)", borderRadius: 4, fontSize: 12, color: "#cca" }}>
+                  Plan-only mode: Builder outputs a structured change plan. It will NOT execute file modifications, shell commands, or git operations.
+                </div>
+              )}
 
               <div className="provider-field">
                 <label>Provider</label>
@@ -243,10 +249,10 @@ export function SettingsPanel() {
         })}
       </div>
 
-      {/* Builder / QA info */}
+      {/* QA info */}
       <div style={{ margin: "12px 0", padding: "8px 12px", background: "rgba(255,255,255,0.05)", borderRadius: 6, fontSize: 13, color: "#999" }}>
-        <strong>Builder</strong> and <strong>QA</strong> roles use mock executors in the current phase.
-        Real model integration for these roles will be available in a future update.
+        <strong>QA</strong> role uses mock executor in the current phase.
+        Real model integration for QA will be available in a future update.
       </div>
 
       {/* ── Provider Settings (Phase 6A) ── */}

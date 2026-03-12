@@ -89,14 +89,15 @@ async def orchestrate_task(
         rejection_rate=params.rejection_rate,
     )
 
-    # Phase 6C: Per-role executor dispatch based on role_model_settings DB.
+    # Phase 6C+6D: Per-role executor dispatch based on role_model_settings DB.
     # The DB table is the sole truth source for model routing.
     # Orchestrator only decides mock vs model executor; the ModelAgentExecutor
     # internally resolves the specific provider/model from the same DB.
+    # Phase 6D adds Builder (plan-only mode).
     executors: dict[AgentRole, AgentExecutor] = {}
     registry = get_registry()
     role_configs = load_role_model_settings()
-    for role_enum in (AgentRole.PLANNER, AgentRole.REVIEWER):
+    for role_enum in (AgentRole.PLANNER, AgentRole.BUILDER, AgentRole.REVIEWER):
         cfg = role_configs.get(role_enum.value, {})
         if cfg.get("enabled") and cfg.get("provider", "mock") != "mock":
             provider = registry.get(cfg["provider"])

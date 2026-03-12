@@ -82,7 +82,7 @@ Key design decisions:
 5. **Rejection loops**: Reviewer can reject up to 3 times, looping back to Builder each time
 6. **Full audit trail**: Every step creates AgentRun records, log events, and tracks status transitions
 
-## Model Agent Executor (Phase 6B + 6C)
+## Model Agent Executor (Phase 6B + 6C + 6D)
 
 The `ModelAgentExecutor` calls real LLM providers via the ProviderRegistry:
 
@@ -92,7 +92,11 @@ Orchestrator._get_executor(role)
   │                 └── _resolve_provider() reads from role_model_settings DB
   │                 └── ProviderRegistry.get(cfg.provider).complete(model=cfg.model)
   │                 └── Parse JSON → PlannerOutputSchema.validate()
-  ├── BUILDER → MockAgentExecutor (always)
+  ├── BUILDER → ModelAgentExecutor (Phase 6D: plan-only, when enabled + API key)
+  │                 └── _resolve_provider() reads from role_model_settings DB
+  │                 └── ProviderRegistry.get(cfg.provider).complete(model=cfg.model)
+  │                 └── Parse JSON → BuilderOutputSchema.validate()
+  │                 └── NOTE: No tool execution — plan output only
   ├── QA      → MockAgentExecutor (always)
   └── REVIEWER → ModelAgentExecutor (when enabled in role_model_settings + API key)
                       └── _resolve_provider() reads from role_model_settings DB
@@ -104,10 +108,12 @@ Key design decisions:
 1. **Config-driven routing (Phase 6C)**: `role_model_settings` DB table is the sole runtime truth source
 2. **Definitions as seed only**: `definitions.py` provides system prompts and V5 migration defaults, NOT runtime routing
 3. **Dual-model support**: Same provider, different models per role (e.g., Planner→opus, Reviewer→sonnet)
-4. **Structured JSON output**: Planner and Reviewer must return valid JSON matching their schemas
+4. **Structured JSON output**: Planner, Builder, and Reviewer must return valid JSON matching their schemas
 5. **No silent fallback**: If role is enabled but misconfigured, task fails with clear error
-6. **Builder/QA blocked**: Cannot enable real models in Phase 6C; API rejects the request
-7. **Code fence stripping**: Handles common LLM behavior of wrapping JSON in markdown fences
+6. **Builder plan-only (Phase 6D)**: Builder outputs change plan but does NOT execute tools, file ops, or git
+7. **QA blocked**: Cannot enable real models; API rejects the request
+8. **Code fence stripping**: Handles common LLM behavior of wrapping JSON in markdown fences
+9. **Output summary truncation**: Large structured outputs are summarized before storage in AgentRun
 
 ## Data Model (Phase 6C)
 

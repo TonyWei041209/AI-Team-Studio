@@ -7,7 +7,7 @@ Sections
 2. GET /api/settings/role-models
 3. PATCH /api/settings/role-models -- happy path
 4. PATCH /api/settings/role-models -- validation errors
-5. Builder/QA real-model activation blocked
+5. Builder allowed (plan-only), QA real-model blocked
 6. Same provider, different model per role
 7. Settings persistence round-trip
 8. No sensitive info leakage
@@ -185,27 +185,33 @@ check("Error mentions provider not registered", "not registered" in data.get("de
 
 
 # ==============================================================
-# Section 5: Builder/QA real-model activation blocked
+# Section 5: Builder allowed (plan-only), QA still blocked
 # ==============================================================
-print("\n=== Section 5: Builder/QA real-model blocked ===")
+print("\n=== Section 5: Builder allowed (plan-only), QA blocked ===")
 
+# Phase 6D: Builder is allowed for real model config (plan-only mode —
+# outputs structured change plans but does NOT execute tools/files/git).
 code, data = PATCH("/settings/role-models", {
     "role_models": [{"role": "builder", "provider": "anthropic", "model": "claude-sonnet-4-20250514", "enabled": True}]
 })
-check("Builder enable real -> 400", code == 400)
-check("Error mentions builder cannot be enabled", "builder" in data.get("detail", "").lower())
+check("Builder enable real -> 200 (plan-only allowed)", code == 200)
+updated_builder = data.get("role_models", {}).get("builder", {})
+check("Builder provider updated", updated_builder.get("provider") == "anthropic")
+check("Builder model updated", updated_builder.get("model") == "claude-sonnet-4-20250514")
+check("Builder enabled", updated_builder.get("enabled") is True)
 
+# QA remains blocked from real model activation
 code, data = PATCH("/settings/role-models", {
     "role_models": [{"role": "qa", "provider": "anthropic", "model": "claude-sonnet-4-20250514", "enabled": True}]
 })
 check("QA enable real -> 400", code == 400)
 check("Error mentions qa cannot be enabled", "qa" in data.get("detail", "").lower())
 
-# Builder/QA can stay as mock
+# Reset builder back to mock for subsequent sections
 code, data = PATCH("/settings/role-models", {
     "role_models": [{"role": "builder", "provider": "mock", "model": "", "enabled": False}]
 })
-check("Builder mock update -> 200", code == 200)
+check("Builder mock reset -> 200", code == 200)
 
 
 # ==============================================================

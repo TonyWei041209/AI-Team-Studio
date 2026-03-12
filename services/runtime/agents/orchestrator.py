@@ -276,7 +276,7 @@ class Orchestrator:
         if result.success:
             self._update_run(
                 run_id, RunStatus.COMPLETED,
-                output_summary=json.dumps(result.output),
+                output_summary=self._summarize_output(result.output),
             )
             self._log(task_id, run_id, "info", defn.role.value,
                       f"{defn.display_name} completed successfully")
@@ -429,6 +429,28 @@ class Orchestrator:
             conn.commit()
         finally:
             conn.close()
+
+    @staticmethod
+    def _summarize_output(output: dict) -> str:
+        """Create a concise JSON summary for output_summary storage.
+
+        Avoids storing full large structured plans (e.g. Builder change plans)
+        in the database.  Keeps top-level scalar keys and truncates lists.
+        """
+        MAX_SUMMARY_LEN = 2000
+        full = json.dumps(output)
+        if len(full) <= MAX_SUMMARY_LEN:
+            return full
+        # Build a concise summary: keep scalar values, summarize lists
+        summary = {}
+        for k, v in output.items():
+            if isinstance(v, str):
+                summary[k] = v[:200] + "..." if len(v) > 200 else v
+            elif isinstance(v, list):
+                summary[k] = f"[{len(v)} items]"
+            else:
+                summary[k] = v
+        return json.dumps(summary)
 
     @staticmethod
     def _log(

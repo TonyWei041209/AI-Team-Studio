@@ -1,10 +1,10 @@
-"""Model-backed agent executor (Phase 6B + 6C).
+"""Model-backed agent executor (Phase 6B + 6C + 6D).
 
 Calls real LLM providers via the ProviderRegistry for agent execution.
-Currently supports: Planner and Reviewer roles.
+Currently supports: Planner, Builder (plan-only), and Reviewer roles.
 
-Phase 6C: Provider/model resolution is now config-driven via role_model_settings
-database table, falling back to definitions.py defaults only when DB config is absent.
+Phase 6C: Provider/model resolution is config-driven via role_model_settings DB table.
+Phase 6D: Builder support added in plan-only mode (structured change plan, no tool execution).
 """
 
 from __future__ import annotations
@@ -147,6 +147,88 @@ class ReviewerOutputSchema:
         return True, ""
 
 
+# ── Builder output schema validation (Phase 6D) ──────────────
+
+_VALID_FILE_ACTIONS = {"create", "modify", "delete"}
+
+
+class BuilderOutputSchema:
+    """Validates Builder JSON output against the plan-only schema (Phase 6D)."""
+
+    @staticmethod
+    def validate(data: Any) -> tuple[bool, str]:
+        """Check *data* conforms to the Builder plan-only output schema.
+
+        Returns ``(True, "")`` on success or ``(False, "<reason>")`` on failure.
+        """
+        if not isinstance(data, dict):
+            return False, "Output must be a JSON object"
+
+        # change_summary: required, non-empty string
+        cs = data.get("change_summary")
+        if not isinstance(cs, str) or not cs.strip():
+            return False, "change_summary must be a non-empty string"
+
+        # proposed_files: required, list with >= 1 item
+        pf = data.get("proposed_files")
+        if not isinstance(pf, list) or len(pf) == 0:
+            return False, "proposed_files must be a non-empty list"
+        for i, item in enumerate(pf):
+            if not isinstance(item, dict):
+                return False, f"proposed_files[{i}] must be an object"
+            path = item.get("path")
+            if not isinstance(path, str) or not path.strip():
+                return False, f"proposed_files[{i}].path must be a non-empty string"
+            action = item.get("action")
+            if not isinstance(action, str) or action not in _VALID_FILE_ACTIONS:
+                return False, (
+                    f"proposed_files[{i}].action must be one of "
+                    f"{sorted(_VALID_FILE_ACTIONS)}, got: {action!r}"
+                )
+            reason = item.get("reason")
+            if not isinstance(reason, str) or not reason.strip():
+                return False, f"proposed_files[{i}].reason must be a non-empty string"
+
+        # change_steps: required, list with >= 1 item
+        cs_list = data.get("change_steps")
+        if not isinstance(cs_list, list) or len(cs_list) == 0:
+            return False, "change_steps must be a non-empty list"
+        for i, item in enumerate(cs_list):
+            if not isinstance(item, dict):
+                return False, f"change_steps[{i}] must be an object"
+            if "step" not in item or not isinstance(item["step"], (int, float)):
+                return False, f"change_steps[{i}].step must be an integer"
+            if "description" not in item or not isinstance(item["description"], str):
+                return False, f"change_steps[{i}].description must be a string"
+            # target_file is optional
+
+        # reasoning_summary: required, non-empty string
+        rs = data.get("reasoning_summary")
+        if not isinstance(rs, str) or not rs.strip():
+            return False, "reasoning_summary must be a non-empty string"
+
+        # validation_plan: required, list with >= 1 string item
+        vp = data.get("validation_plan")
+        if not isinstance(vp, list) or len(vp) == 0:
+            return False, "validation_plan must be a non-empty list"
+        for i, item in enumerate(vp):
+            if not isinstance(item, str):
+                return False, f"validation_plan[{i}] must be a string"
+
+        # risk_notes: optional, list of strings (can be empty)
+        rn = data.get("risk_notes")
+        if rn is None:
+            pass  # tolerate missing — treat as empty
+        elif not isinstance(rn, list):
+            return False, "risk_notes must be a list"
+        else:
+            for i, item in enumerate(rn):
+                if not isinstance(item, str):
+                    return False, f"risk_notes[{i}] must be a string"
+
+        return True, ""
+
+
 # ── Code-fence stripping ──────────────────────────────────────
 
 _FENCE_RE = re.compile(
@@ -193,14 +275,14 @@ def _load_role_model_config(role: AgentRole) -> dict | None:
 class ModelAgentExecutor:
     """Executes agent roles using real LLM provider calls.
 
-    Currently supports the **Planner** and **Reviewer** roles.
-    Builder and QA will raise ``NotImplementedError``.
+    Currently supports the **Planner**, **Builder** (plan-only), and **Reviewer** roles.
+    QA will raise ``NotImplementedError``.
 
-    Phase 6C: Provider/model are resolved from role_model_settings DB table,
-    falling back to definitions.py defaults when DB config is absent.
+    Phase 6C: Provider/model are resolved from role_model_settings DB table.
+    Phase 6D: Builder added in plan-only mode (outputs change plan, no tool execution).
     """
 
-    _SUPPORTED_ROLES = {AgentRole.PLANNER, AgentRole.REVIEWER}
+    _SUPPORTED_ROLES = {AgentRole.PLANNER, AgentRole.BUILDER, AgentRole.REVIEWER}
 
     def __init__(self, registry: ProviderRegistry | None = None):
         self._registry = registry or get_registry()
@@ -213,6 +295,8 @@ class ModelAgentExecutor:
         """Execute a single agent role via a real model call."""
         if role == AgentRole.PLANNER:
             return await self._execute_planner(task_context)
+        if role == AgentRole.BUILDER:
+            return await self._execute_builder(task_context)
         if role == AgentRole.REVIEWER:
             return await self._execute_reviewer(task_context)
         raise NotImplementedError(
@@ -351,6 +435,49 @@ class ModelAgentExecutor:
         prev = ctx.get("previous_outputs")
         if prev:
             parts.append(f"Previous agent outputs: {json.dumps(prev, indent=2)}")
+        return "\n".join(parts)
+
+    # ── Builder execution (plan-only, Phase 6D) ─────────────
+
+    async def _execute_builder(self, task_context: dict) -> ExecutionResult:
+        """Call a real LLM to produce a structured Builder change plan.
+
+        Phase 6D: Builder operates in plan-only mode. It outputs a structured
+        change plan but does NOT execute any file modifications, shell commands,
+        or git operations.
+        """
+        defn, provider, model_name = self._resolve_provider(AgentRole.BUILDER)
+        user_msg = self._build_builder_user_message(task_context)
+        raw_content = await self._call_model(defn, provider, model_name, user_msg)
+
+        result = self._parse_and_validate(raw_content, "Builder", BuilderOutputSchema)
+        if isinstance(result, ExecutionResult):
+            return result  # validation failed
+
+        # Normalize optional fields
+        result.setdefault("risk_notes", [])
+
+        return ExecutionResult(success=True, output=result)
+
+    @staticmethod
+    def _build_builder_user_message(ctx: dict) -> str:
+        """Assemble the user-facing prompt from task context for Builder."""
+        parts = [
+            f"Task: {ctx.get('title', 'Untitled')}",
+            f"Description: {ctx.get('description', 'No description provided')}",
+            f"Priority: {ctx.get('priority', 'medium')}",
+        ]
+        prev = ctx.get("previous_outputs", {})
+        if prev.get("planner"):
+            parts.append(f"\nPlanner output:\n{json.dumps(prev['planner'], indent=2)}")
+
+        # Include rejection history if this is a retry
+        rejection_history = ctx.get("rejection_history")
+        if rejection_history:
+            parts.append(
+                f"\nPrevious rejection(s):\n{json.dumps(rejection_history, indent=2)}"
+            )
+
         return "\n".join(parts)
 
     # ── Reviewer execution ────────────────────────────────────

@@ -159,8 +159,9 @@ updated_at TEXT
 - `role` must be a valid AgentRole (planner, builder, qa, reviewer)
 - When `enabled=true`: `provider` and `model` must be non-empty
 - `provider` must be a registered provider name
-- **Phase 6C**: Only `planner` and `reviewer` can be enabled for real models
-- **Builder/QA**: Attempts to enable real models are rejected with 400
+- **Phase 6D**: `planner`, `builder`, and `reviewer` can be enabled for real models
+- **QA**: Attempts to enable real models are rejected with 400
+- **Builder**: Enabled in plan-only mode (no tool execution)
 
 ### Dual-Model Support
 
@@ -170,6 +171,7 @@ Same provider, different models per role:
 {
   "role_models": [
     {"role": "planner",  "provider": "anthropic", "model": "claude-sonnet-4-20250514"},
+    {"role": "builder",  "provider": "anthropic", "model": "claude-3-5-haiku-20241022"},
     {"role": "reviewer", "provider": "anthropic", "model": "claude-3-5-haiku-20241022"}
   ]
 }
@@ -180,3 +182,11 @@ Same provider, different models per role:
 `role_model_settings` is the **sole runtime truth source** for model routing.
 `definitions.py` only provides system prompts, role metadata, and seed defaults
 for the V5 migration. It is NOT consulted at runtime for provider/model selection.
+
+### Builder Plan-Only Mode (Phase 6D)
+
+Builder can be enabled for real model calls but operates in **plan-only mode**:
+- Outputs structured change plan (proposed_files, change_steps, reasoning, validation)
+- Does NOT execute file modifications, shell commands, or git operations
+- Does NOT call the Tool Layer or trigger ApprovalRequests
+- `action: "delete"` in proposed_files is a proposal only, not executable

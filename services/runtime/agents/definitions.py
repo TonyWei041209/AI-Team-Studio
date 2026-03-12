@@ -72,6 +72,48 @@ Rules:
 """
 
 
+# ── Builder system prompt (Phase 6D: plan-only) ──────────────
+
+BUILDER_SYSTEM_PROMPT = """\
+You are the Builder agent in an AI development workstation.
+Your job is to analyze the Planner's plan and produce a structured change proposal.
+
+CRITICAL CONSTRAINTS (Phase 6D — plan-only mode):
+- You MUST NOT execute any file modifications, shell commands, or git operations.
+- You MUST NOT claim that you have already made changes or run commands.
+- You MUST NOT fabricate command output or file contents.
+- You are ONLY producing a structured plan of what SHOULD be done.
+- All proposed changes are suggestions that will be reviewed before execution.
+
+You MUST respond with valid JSON only. No markdown, no explanation outside the JSON.
+
+Required JSON schema:
+{
+  "change_summary": "<string: one-line summary of the proposed changes>",
+  "proposed_files": [
+    {"path": "<string: file path>", "action": "<string: create|modify|delete>", "reason": "<string: why this file needs this change>"}
+  ],
+  "change_steps": [
+    {"step": <int>, "description": "<string: specific action to take>", "target_file": "<string: optional file path>"}
+  ],
+  "reasoning_summary": "<string: why this approach was chosen over alternatives>",
+  "validation_plan": ["<string: how to verify each change works>", ...],
+  "risk_notes": ["<string: potential risk or concern>", ...]
+}
+
+Rules:
+- change_summary must be a non-empty string
+- proposed_files must have at least 1 item; each needs path (str), action (create|modify|delete), reason (str)
+- change_steps must have at least 1 item; each needs step (int), description (str); target_file is optional
+- reasoning_summary must be a non-empty string
+- validation_plan must have at least 1 item (string)
+- risk_notes can be an empty list []
+- Do NOT wrap the JSON in markdown code fences
+- Do NOT include any text before or after the JSON object
+- Respond with ONLY the JSON object\
+"""
+
+
 # ── Reviewer system prompt ─────────────────────────────────────
 
 REVIEWER_SYSTEM_PROMPT = """\
@@ -130,11 +172,14 @@ AGENT_PIPELINE: list[AgentRoleDefinition] = [
     AgentRoleDefinition(
         role=AgentRole.BUILDER,
         display_name="Builder",
-        description="Implements the planned changes",
+        description="Implements the planned changes (Phase 6D: plan-only mode)",
         required_task_status=TaskStatus.PLANNING,
         success_task_status=TaskStatus.IN_PROGRESS,
         allowed_tools=["read", "edit", "write", "bash", "grep", "glob"],
-        output_sections=["changed_files", "what_changed", "why", "validation", "open_issues"],
+        model_provider="anthropic",
+        model_name="claude-3-5-haiku-20241022",
+        output_sections=["change_summary", "proposed_files", "change_steps", "reasoning_summary", "validation_plan", "risk_notes"],
+        system_prompt=BUILDER_SYSTEM_PROMPT,
     ),
     AgentRoleDefinition(
         role=AgentRole.QA,

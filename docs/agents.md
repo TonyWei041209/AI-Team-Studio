@@ -181,23 +181,51 @@ Phase 6C makes model routing **config-driven** via the `role_model_settings` DB 
 
 | Role | Real Model | Notes |
 |------|-----------|-------|
-| Planner | ✅ Supported | Config via Settings → Role Model Configuration |
-| Reviewer | ✅ Supported | Config via Settings → Role Model Configuration |
-| Builder | ❌ Mock only | Real model blocked in Phase 6C |
-| QA | ❌ Mock only | Real model blocked in Phase 6C |
+| Planner | Supported | Config via Settings, full model integration |
+| Builder | Plan-only (Phase 6D) | Outputs structured change plan, no tool execution |
+| QA | Mock only | Real model blocked |
+| Reviewer | Supported | Config via Settings, full model integration |
 
-### Executor Selection Flow (Phase 6C)
+### Executor Selection Flow (Phase 6C+6D)
 
 ```
 Orchestrator
   └─ read role_model_settings from DB
-  └─ for each role in (PLANNER, REVIEWER):
+  └─ for each role in (PLANNER, BUILDER, REVIEWER):
        if cfg.enabled AND cfg.provider != "mock" AND provider has API key:
            executors[role] = ModelAgentExecutor
        else:
            use default MockAgentExecutor
-  └─ Builder/QA always use MockAgentExecutor
+  └─ QA always uses MockAgentExecutor
 ```
+
+## Builder Plan-Only Mode (Phase 6D)
+
+Phase 6D adds Builder to the real model pipeline in **plan-only mode**:
+
+- Builder outputs a structured change plan (proposed files, steps, reasoning, validation)
+- Builder does NOT execute any file modifications, shell commands, or git operations
+- Builder does NOT call the Tool Layer or trigger ApprovalRequests
+- All proposed changes are suggestions for review only
+
+### Builder Output Schema
+
+```json
+{
+  "change_summary": "<string: one-line summary>",
+  "proposed_files": [
+    {"path": "<file path>", "action": "create|modify|delete", "reason": "<why>"}
+  ],
+  "change_steps": [
+    {"step": 1, "description": "<what to do>", "target_file": "<optional>"}
+  ],
+  "reasoning_summary": "<string: why this approach>",
+  "validation_plan": ["<how to verify>", ...],
+  "risk_notes": ["<potential risk>", ...]
+}
+```
+
+Note: `action: "delete"` in `proposed_files` is a **proposal only** — it indicates the Builder suggests a file deletion but cannot execute it. Deletions should be flagged as high-risk in `risk_notes`.
 
 ### ModelAgentExecutor Resolution (Phase 6C)
 
