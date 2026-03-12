@@ -295,6 +295,36 @@ def _apply_v7(conn: sqlite3.Connection) -> None:
     conn.execute("INSERT INTO schema_version (version) VALUES (7)")
 
 
+def _apply_v8(conn: sqlite3.Connection) -> None:
+    """V8: Execution requests table (Phase 6E-C).
+
+    An execution request records the intent to execute a frozen snapshot.
+    Status flows: requested -> confirmed | rejected.
+    snapshot_content_hash is copied at creation time for integrity verification.
+    UNIQUE(snapshot_id) ensures one request per snapshot.
+    """
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS execution_requests (
+            id TEXT PRIMARY KEY,
+            task_id TEXT NOT NULL REFERENCES tasks(id),
+            proposal_id TEXT NOT NULL REFERENCES execution_proposals(id),
+            approval_id TEXT NOT NULL REFERENCES approval_requests(id),
+            snapshot_id TEXT NOT NULL UNIQUE REFERENCES execution_snapshots(id),
+            snapshot_content_hash TEXT NOT NULL,
+            risk_level TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'requested'
+                CHECK (status IN ('requested', 'confirmed', 'rejected')),
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+        )
+    """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_exec_requests_task "
+        "ON execution_requests(task_id)"
+    )
+    conn.execute("INSERT INTO schema_version (version) VALUES (8)")
+
+
 # Ordered list of migrations
 _MIGRATIONS = [
     (1, _apply_v1),
@@ -304,6 +334,7 @@ _MIGRATIONS = [
     (5, _apply_v5),
     (6, _apply_v6),
     (7, _apply_v7),
+    (8, _apply_v8),
 ]
 
 
