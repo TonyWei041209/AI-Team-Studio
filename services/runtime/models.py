@@ -322,3 +322,24 @@ class ExecutionProposal(BaseModel):
 class ExecutionProposalResponse(BaseModel):
     """Response for GET /api/tasks/{task_id}/proposals."""
     proposals: list[ExecutionProposal]
+
+
+# ── Execution Snapshots (Phase 6E-B) ─────────────────────────────
+
+
+class ExecutionSnapshot(BaseModel):
+    """Frozen, immutable copy of an approved execution proposal."""
+    id: str
+    proposal_id: str
+    approval_id: str
+    task_id: str
+    snapshot_data: str          # JSON string — frozen copy of proposal_data
+    content_hash: str           # SHA-256 of snapshot_data for tamper detection
+    risk_level: str
+    status: str = "frozen"      # Only 'frozen' allowed in Phase 6E-B
+    created_at: str
+
+
+class ExecutionSnapshotResponse(BaseModel):
+    """Response for snapshot endpoints."""
+    snapshot: ExecutionSnapshot

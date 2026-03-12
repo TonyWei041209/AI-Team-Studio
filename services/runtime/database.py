@@ -264,6 +264,37 @@ def _apply_v6(conn: sqlite3.Connection) -> None:
     conn.execute("INSERT INTO schema_version (version) VALUES (6)")
 
 
+def _apply_v7(conn: sqlite3.Connection) -> None:
+    """V7: Execution snapshots table (Phase 6E-B).
+
+    An execution snapshot is a frozen, immutable copy of an approved
+    proposal.  Once created it cannot be modified or deleted.
+    The content_hash (SHA-256 of snapshot_data) enables tamper detection.
+    """
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS execution_snapshots (
+            id TEXT PRIMARY KEY,
+            proposal_id TEXT NOT NULL UNIQUE REFERENCES execution_proposals(id),
+            approval_id TEXT NOT NULL REFERENCES approval_requests(id),
+            task_id TEXT NOT NULL REFERENCES tasks(id),
+            snapshot_data TEXT NOT NULL,
+            content_hash TEXT NOT NULL,
+            risk_level TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'frozen',
+            created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        )
+    """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_snapshots_task "
+        "ON execution_snapshots(task_id)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_snapshots_proposal "
+        "ON execution_snapshots(proposal_id)"
+    )
+    conn.execute("INSERT INTO schema_version (version) VALUES (7)")
+
+
 # Ordered list of migrations
 _MIGRATIONS = [
     (1, _apply_v1),
@@ -272,6 +303,7 @@ _MIGRATIONS = [
     (4, _apply_v4),
     (5, _apply_v5),
     (6, _apply_v6),
+    (7, _apply_v7),
 ]
 
 
