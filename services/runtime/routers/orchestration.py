@@ -225,3 +225,60 @@ async def get_proposal(proposal_id: str):
         return p
     finally:
         conn.close()
+
+
+# ── Snapshot endpoints (Phase 6E-B) ──────────────────────────────
+
+
+@router.post("/proposals/{proposal_id}/freeze", status_code=201)
+async def freeze_proposal(proposal_id: str):
+    """Freeze an approved proposal into an immutable execution snapshot.
+
+    Idempotent: if snapshot already exists, returns it with 200.
+    """
+    from agents.snapshot_service import freeze_snapshot
+
+    try:
+        snapshot = freeze_snapshot(proposal_id)
+    except ValueError as e:
+        msg = str(e).lower()
+        if "not found" in msg:
+            raise HTTPException(status_code=404, detail=str(e))
+        elif "not approved" in msg:
+            raise HTTPException(status_code=409, detail=str(e))
+        elif "no approved approval" in msg:
+            raise HTTPException(status_code=409, detail=str(e))
+        else:
+            raise HTTPException(status_code=400, detail=str(e))
+
+    # Parse snapshot_data for convenience
+    try:
+        snapshot["snapshot_data_parsed"] = json.loads(
+            snapshot.get("snapshot_data", "{}")
+        )
+    except (json.JSONDecodeError, TypeError):
+        snapshot["snapshot_data_parsed"] = {}
+
+    return snapshot
+
+
+@router.get("/snapshots/{snapshot_id}")
+async def get_snapshot(snapshot_id: str):
+    """Get a single execution snapshot by ID."""
+    conn = get_connection()
+    try:
+        row = conn.execute(
+            "SELECT * FROM execution_snapshots WHERE id = ?",
+            (snapshot_id,),
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Snapshot not found")
+
+        s = dict(row)
+        try:
+            s["snapshot_data_parsed"] = json.loads(s.get("snapshot_data", "{}"))
+        except (json.JSONDecodeError, TypeError):
+            s["snapshot_data_parsed"] = {}
+        return s
+    finally:
+        conn.close()

@@ -318,6 +318,87 @@ def section_7_hash():
         conn.close()
 
 
+# ── Section 8: API - POST freeze endpoint ─────────────────────────
+def section_8_api_freeze():
+    print("\n=== Section 8: API POST /proposals/{id}/freeze ===")
+
+    # Create a fresh proposal for API testing
+    status, proj = POST("/projects", {"name": f"6EB-api-{os.getpid()}", "local_repo_path": "/tmp/6eb-api"})
+    api_proj_id = proj.get("id", "")
+    status, task = POST(f"/projects/{api_proj_id}/tasks", {"title": "6EB API test"})
+    api_task_id = task.get("id", "")
+    POST(f"/tasks/{api_task_id}/orchestrate", {"roles": ["builder"]})
+    _, props = GET(f"/tasks/{api_task_id}/proposals")
+    proposals = props.get("proposals", [])
+    if not proposals:
+        check("API test has proposal", False, "No proposals")
+        return
+    api_proposal_id = proposals[0]["id"]
+
+    # Freeze unapproved -> 409
+    status, data = POST(f"/proposals/{api_proposal_id}/freeze")
+    check("Freeze unapproved via API -> 409", status == 409)
+
+    # Freeze nonexistent -> 404
+    status, data = POST("/proposals/nonexistent-id/freeze")
+    check("Freeze nonexistent via API -> 404", status == 404)
+
+    # Approve the proposal, then freeze via API
+    from database import get_connection
+    import uuid as _uuid
+    from datetime import datetime, timezone
+    conn = get_connection()
+    try:
+        conn.execute("UPDATE execution_proposals SET status = 'approved' WHERE id = ?", (api_proposal_id,))
+        _aid = str(_uuid.uuid4())
+        _now = datetime.now(timezone.utc).isoformat()
+        conn.execute(
+            """INSERT INTO approval_requests
+               (id, task_id, run_id, action_type, action_payload, status, proposal_id, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            (_aid, api_task_id, None, "proposal:builder",
+             json.dumps({"proposal_id": api_proposal_id}), "approved", api_proposal_id, _now),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    status, snap = POST(f"/proposals/{api_proposal_id}/freeze")
+    check("Freeze approved via API -> 201", status == 201)
+    check("API response has snapshot id", "id" in snap)
+    check("API response has snapshot_data_parsed", "snapshot_data_parsed" in snap)
+    check("API response status is frozen", snap.get("status") == "frozen")
+    check("API response has content_hash", len(snap.get("content_hash", "")) == 64)
+
+    # Idempotent re-freeze -> still returns snapshot (200 or 201)
+    status2, snap2 = POST(f"/proposals/{api_proposal_id}/freeze")
+    check("Re-freeze via API -> 2xx", status2 in (200, 201))
+    check("Re-freeze returns same id", snap2.get("id") == snap.get("id"))
+
+    # Store snapshot_id for section 9
+    global _api_snapshot_id
+    _api_snapshot_id = snap.get("id", "")
+
+
+_api_snapshot_id: str = ""
+
+
+# ── Section 9: API - GET snapshot endpoint ─────────────────────────
+def section_9_api_get_snapshot():
+    print("\n=== Section 9: API GET /snapshots/{id} ===")
+
+    status, snap = GET(f"/snapshots/{_api_snapshot_id}")
+    check("GET snapshot -> 200", status == 200)
+    check("Response has id", snap.get("id") == _api_snapshot_id)
+    check("Response has snapshot_data_parsed", "snapshot_data_parsed" in snap)
+    check("Response has content_hash", len(snap.get("content_hash", "")) == 64)
+    check("Response status is frozen", snap.get("status") == "frozen")
+
+    # Nonexistent -> 404
+    status, _ = GET("/snapshots/nonexistent-id")
+    check("GET nonexistent snapshot -> 404", status == 404)
+
+
 # ── Main ──────────────────────────────────────────────────────────
 if __name__ == "__main__":
     section_1_migration()
@@ -327,6 +408,8 @@ if __name__ == "__main__":
     section_5_binding()
     section_6_audit()
     section_7_hash()
+    section_8_api_freeze()
+    section_9_api_get_snapshot()
 
     print(f"\n{'=' * 60}")
     print(f"Phase 6E-B acceptance: {PASS} passed, {FAIL} failed")
