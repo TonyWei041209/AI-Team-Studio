@@ -177,6 +177,8 @@ _EVENT_ORDER: dict[str, int] = {
     "snapshot:frozen": 2,
     "execution_request:created": 3,
     "execution_request:finalized": 4,
+    "execution_result:completed": 5,
+    "execution_result:failed": 5,
 }
 
 
@@ -184,7 +186,7 @@ def _build_task_audit_trail(task_id: str) -> list[dict]:
     """Aggregate the full object chain for a task into a timeline.
 
     Collects events from: execution_proposals, approval_requests,
-    execution_snapshots, execution_requests.
+    execution_snapshots, execution_requests, execution_results.
 
     Each event has top-level fields consumable by Step 2 UI:
       event_type, object_type, object_id, status, timestamp,
@@ -313,6 +315,55 @@ def _build_task_audit_trail(task_id: str) -> list[dict]:
                         "new_status": d["status"],
                     },
                 })
+
+        # ── Execution results (Phase 6F-C) ──
+        rows = conn.execute(
+            """SELECT * FROM execution_results
+               WHERE task_id = ? AND status IN ('completed', 'failed')""",
+            (task_id,),
+        ).fetchall()
+        for r in rows:
+            d = dict(r)
+            ts = d.get("completed_at") or d["created_at"]
+            result_data = d.get("result_data", "{}")
+            if isinstance(result_data, str):
+                try:
+                    rd = json.loads(result_data)
+                except (json.JSONDecodeError, TypeError):
+                    rd = {}
+            else:
+                rd = result_data
+            file_count = len(rd.get("planned_file_actions", []))
+            cmd_count = len(rd.get("planned_command_actions", []))
+            warnings = rd.get("warnings", [])
+            mode = rd.get("mode", "dry_run")
+            if d["status"] == "completed":
+                summary = (
+                    f"Dry-run completed: {file_count} file action(s), "
+                    f"{cmd_count} command action(s)"
+                )
+            else:
+                summary = (
+                    f"Dry-run failed: {file_count} file action(s), "
+                    f"{cmd_count} command action(s)"
+                )
+            events.append({
+                "event_type": f"execution_result:{d['status']}",
+                "object_type": "execution_result",
+                "object_id": d["id"],
+                "status": d["status"],
+                "timestamp": ts,
+                "summary": summary,
+                "related_ids": {
+                    "task_id": task_id,
+                    "execution_request_id": d["execution_request_id"],
+                    "snapshot_id": d["snapshot_id"],
+                },
+                "detail": {
+                    "mode": mode,
+                    "warnings_count": len(warnings),
+                },
+            })
 
         # Stable sort: timestamp ASC, then fixed event order
         events.sort(key=lambda e: (
