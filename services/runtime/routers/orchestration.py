@@ -336,15 +336,16 @@ def _build_task_audit_trail(task_id: str) -> list[dict]:
             file_count = len(rd.get("planned_file_actions", []))
             cmd_count = len(rd.get("planned_command_actions", []))
             warnings = rd.get("warnings", [])
-            mode = rd.get("mode", "dry_run")
+            mode = d.get("mode", rd.get("mode", "dry_run"))
+            mode_label = "Real execution" if mode == "real_run" else "Dry-run"
             if d["status"] == "completed":
                 summary = (
-                    f"Dry-run completed: {file_count} file action(s), "
+                    f"{mode_label} completed: {file_count} file action(s), "
                     f"{cmd_count} command action(s)"
                 )
             else:
                 summary = (
-                    f"Dry-run failed: {file_count} file action(s), "
+                    f"{mode_label} failed: {file_count} file action(s), "
                     f"{cmd_count} command action(s)"
                 )
             events.append({
@@ -664,7 +665,7 @@ async def get_dry_run_result(request_id: str):
 
         # Fetch dry-run result
         row = conn.execute(
-            "SELECT * FROM execution_results WHERE execution_request_id = ?",
+            "SELECT * FROM execution_results WHERE execution_request_id = ? AND mode = 'dry_run'",
             (request_id,),
         ).fetchone()
         if not row:

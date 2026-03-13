@@ -20,7 +20,10 @@ if os.path.abspath(_RUNTIME_DIR) not in sys.path:
     sys.path.insert(0, os.path.abspath(_RUNTIME_DIR))
 
 from agents.execution_eligibility_service import check_execution_eligibility
-from database import get_connection
+from database import get_connection, init_db
+
+# Ensure schema is up to date (V10 adds mode column)
+init_db()
 
 PASS = 0
 FAIL = 0
@@ -145,11 +148,11 @@ def _build_full_chain(
             conn.execute(
                 """INSERT INTO execution_results
                    (id, execution_request_id, task_id, snapshot_id,
-                    snapshot_content_hash, status, result_data,
+                    snapshot_content_hash, mode, status, result_data,
                     started_at, completed_at, created_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (result_id, request_id, task_id, snapshot_id,
-                 content_hash, dry_run_status, result_data,
+                 content_hash, "dry_run", dry_run_status, result_data,
                  now, now, now),
             )
 

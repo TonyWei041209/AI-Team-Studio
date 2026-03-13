@@ -238,7 +238,7 @@ def check_execution_eligibility(execution_request_id: str) -> dict:
         # ── 11. Check dry-run result ──────────────────────────
         dr_row = conn.execute(
             """SELECT status FROM execution_results
-               WHERE execution_request_id = ?""",
+               WHERE execution_request_id = ? AND mode = 'dry_run'""",
             (execution_request_id,),
         ).fetchone()
         if not dr_row:

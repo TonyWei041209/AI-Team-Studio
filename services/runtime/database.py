@@ -367,6 +367,66 @@ def _apply_v9(conn: sqlite3.Connection) -> None:
     conn.execute("INSERT INTO schema_version (version) VALUES (9)")
 
 
+def _apply_v10(conn: sqlite3.Connection) -> None:
+    """V10: Add mode field to execution_results (Phase 7A).
+
+    Adds a ``mode`` column (``dry_run`` or ``real_run``) and changes the
+    unique constraint from ``UNIQUE(execution_request_id)`` to
+    ``UNIQUE(execution_request_id, mode)`` so a single request can have
+    both a dry-run result and a real-run result.
+
+    Existing rows are back-filled with ``mode = 'dry_run'``.
+    """
+    # SQLite cannot add constraints or change UNIQUE in-place.
+    # Strategy: rename → recreate → copy → drop old.
+    conn.execute("ALTER TABLE execution_results RENAME TO _execution_results_v9")
+
+    conn.execute("""
+        CREATE TABLE execution_results (
+            id TEXT PRIMARY KEY,
+            execution_request_id TEXT NOT NULL
+                REFERENCES execution_requests(id),
+            task_id TEXT NOT NULL REFERENCES tasks(id),
+            snapshot_id TEXT NOT NULL REFERENCES execution_snapshots(id),
+            snapshot_content_hash TEXT NOT NULL,
+            mode TEXT NOT NULL DEFAULT 'dry_run'
+                CHECK (mode IN ('dry_run', 'real_run')),
+            status TEXT NOT NULL DEFAULT 'pending'
+                CHECK (status IN ('pending', 'running', 'completed', 'failed')),
+            result_data TEXT NOT NULL DEFAULT '{}',
+            started_at TEXT,
+            completed_at TEXT,
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            UNIQUE (execution_request_id, mode)
+        )
+    """)
+
+    # Copy existing rows, back-fill mode = 'dry_run'
+    conn.execute("""
+        INSERT INTO execution_results
+            (id, execution_request_id, task_id, snapshot_id,
+             snapshot_content_hash, mode, status, result_data,
+             started_at, completed_at, created_at)
+        SELECT id, execution_request_id, task_id, snapshot_id,
+               snapshot_content_hash, 'dry_run', status, result_data,
+               started_at, completed_at, created_at
+        FROM _execution_results_v9
+    """)
+
+    conn.execute("DROP TABLE _execution_results_v9")
+
+    # Recreate indexes
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_exec_results_task "
+        "ON execution_results(task_id)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_exec_results_request "
+        "ON execution_results(execution_request_id)"
+    )
+    conn.execute("INSERT INTO schema_version (version) VALUES (10)")
+
+
 # Ordered list of migrations
 _MIGRATIONS = [
     (1, _apply_v1),
@@ -378,6 +438,7 @@ _MIGRATIONS = [
     (7, _apply_v7),
     (8, _apply_v8),
     (9, _apply_v9),
+    (10, _apply_v10),
 ]
 
 
