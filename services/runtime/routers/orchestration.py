@@ -676,3 +676,58 @@ async def get_dry_run_result(request_id: str):
         return _parse_result_data(dict(row))
     finally:
         conn.close()
+
+
+@router.get("/execution-requests/{request_id}/action-plan")
+async def get_action_plan(request_id: str):
+    """Compile a read-only action plan with policy decisions.
+
+    Returns 200 with the action plan computed from the linked snapshot.
+    Returns 404 if the execution request is not found.
+    Returns 409 if the linked snapshot is missing or snapshot_data is invalid.
+    """
+    from agents.action_policy_service import build_action_plan
+
+    conn = get_connection()
+    try:
+        # Fetch execution request
+        req_row = conn.execute(
+            "SELECT * FROM execution_requests WHERE id = ?",
+            (request_id,),
+        ).fetchone()
+        if not req_row:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Execution request not found: {request_id}",
+            )
+        req = dict(req_row)
+
+        # Fetch linked snapshot
+        snap_row = conn.execute(
+            "SELECT * FROM execution_snapshots WHERE id = ?",
+            (req["snapshot_id"],),
+        ).fetchone()
+        if not snap_row:
+            raise HTTPException(
+                status_code=409,
+                detail=f"Snapshot not found for execution request: {request_id}",
+            )
+        snap = dict(snap_row)
+
+        # Compile action plan (pure computation, no side effects)
+        try:
+            plan = build_action_plan(snap["snapshot_data"])
+        except (json.JSONDecodeError, TypeError, KeyError) as e:
+            raise HTTPException(
+                status_code=409,
+                detail=f"Invalid snapshot data: {e}",
+            )
+
+        return {
+            "execution_request_id": request_id,
+            "snapshot_id": snap["id"],
+            "snapshot_content_hash": snap["content_hash"],
+            **plan,
+        }
+    finally:
+        conn.close()
