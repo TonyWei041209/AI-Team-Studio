@@ -11,6 +11,7 @@ GET  /api/snapshots/{snapshot_id}/execution-request   Get execution request for 
 POST /api/snapshots/{snapshot_id}/request-execution  Create execution request
 GET  /api/execution-requests/{request_id}        Get single execution request
 PATCH /api/execution-requests/{request_id}       Confirm or reject execution request
+POST /api/execution-requests/{request_id}/dry-run  Dry-run execution (Phase 6F-A)
 """
 
 import json
@@ -544,4 +545,35 @@ async def update_execution_request(request_id: str, body: _StatusUpdate):
             raise HTTPException(status_code=400, detail=str(e))
         else:
             raise HTTPException(status_code=400, detail=str(e))
+    return result
+
+
+@router.post("/execution-requests/{request_id}/dry-run")
+async def dry_run_execution(request_id: str):
+    """Run a dry-run execution for a confirmed execution request.
+
+    Returns 200 with the execution result (idempotent on repeat calls).
+    Returns 404 if request not found.
+    Returns 409 if request not confirmed, snapshot missing, or hash mismatch.
+    """
+    from agents.execution_result_service import run_dry_execution
+
+    try:
+        result = run_dry_execution(request_id)
+    except ValueError as e:
+        msg = str(e).lower()
+        if "not found" in msg and "execution request" in msg:
+            raise HTTPException(status_code=404, detail=str(e))
+        else:
+            # not confirmed, snapshot missing, hash mismatch → 409
+            raise HTTPException(status_code=409, detail=str(e))
+
+    # Parse result_data from JSON string to object
+    rd = result.get("result_data", "{}")
+    if isinstance(rd, str):
+        try:
+            result["result_data"] = json.loads(rd)
+        except (json.JSONDecodeError, TypeError):
+            result["result_data"] = {}
+
     return result
