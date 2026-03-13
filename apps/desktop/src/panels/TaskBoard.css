@@ -301,3 +301,67 @@
 .exec-request-btn-reject:hover:not(:disabled) {
   background: rgba(244, 67, 54, 0.1);
 }
+
+/* ── Audit Trail (Phase 6E-E) ────────────────────────────────── */
+
+.audit-trail-section {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-color);
+}
+
+.audit-trail-header {
+  margin-bottom: 6px;
+}
+
+.audit-trail-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.audit-event-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 6px;
+  border-radius: 3px;
+  font-size: 11px;
+}
+
+.audit-event-row:hover {
+  background-color: var(--bg-tertiary);
+}
+
+.audit-event-ts {
+  flex-shrink: 0;
+  width: 110px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+.audit-event-type-badge {
+  flex-shrink: 0;
+  font-size: 9px !important;
+  padding: 1px 6px !important;
+  min-width: 60px;
+  text-align: center;
+}
+
+.audit-event-status {
+  flex-shrink: 0;
+  width: 70px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.audit-event-summary {
+  flex: 1;
+  color: var(--text-secondary);
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

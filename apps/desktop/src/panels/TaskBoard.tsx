@@ -73,6 +73,58 @@ interface ExecutionRequestResponse {
   updated_at: string;
 }
 
+// ── Audit Trail types (Phase 6E-E) ──────────────────────
+interface AuditEvent {
+  event_type: string;
+  object_type: string;
+  object_id: string;
+  status: string;
+  timestamp: string;
+  summary: string;
+  related_ids: Record<string, string>;
+  detail: Record<string, unknown>;
+}
+
+interface AuditTrailResponse {
+  task_id: string;
+  events: AuditEvent[];
+  count: number;
+}
+
+const OBJECT_TYPE_COLORS: Record<string, string> = {
+  proposal: "var(--accent-blue)",
+  approval: "var(--accent-yellow)",
+  snapshot: "var(--accent-green)",
+  execution_request: "#ff8c00",
+};
+
+const AUDIT_STATUS_COLORS: Record<string, string> = {
+  approved: "var(--accent-green)",
+  rejected: "var(--accent-red)",
+  frozen: "var(--accent-green)",
+  requested: "var(--accent-yellow)",
+  confirmed: "var(--accent-green)",
+  pending: "var(--text-muted)",
+};
+
+/** Format timestamp: today → HH:mm:ss, otherwise → YYYY-MM-DD HH:mm */
+function formatAuditTimestamp(iso: string): string {
+  try {
+    const d = new Date(iso);
+    const now = new Date();
+    const isToday =
+      d.getFullYear() === now.getFullYear() &&
+      d.getMonth() === now.getMonth() &&
+      d.getDate() === now.getDate();
+    if (isToday) {
+      return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+    }
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+  } catch {
+    return iso;
+  }
+}
+
 const RISK_COLORS: Record<string, string> = {
   low: "var(--accent-green)",
   medium: "var(--accent-yellow)",
@@ -133,6 +185,13 @@ export function TaskBoard({ projectId }: TaskBoardProps) {
   const [execRequests, setExecRequests] = useState<Record<string, ExecutionRequestResponse>>({});
   const [execReqLoading, setExecReqLoading] = useState<string | null>(null);
   const [execReqError, setExecReqError] = useState<string | null>(null);
+
+  // Audit trail (Phase 6E-E)
+  const [auditTrailTaskId, setAuditTrailTaskId] = useState<string | null>(null);
+  const [auditTrailEvents, setAuditTrailEvents] = useState<AuditEvent[]>([]);
+  const [auditTrailCount, setAuditTrailCount] = useState<number | null>(null);
+  const [auditTrailLoading, setAuditTrailLoading] = useState(false);
+  const [auditTrailError, setAuditTrailError] = useState<string | null>(null);
 
   const loadProposals = useCallback(async (taskId: string) => {
     setProposalLoading(true);
@@ -211,6 +270,40 @@ export function TaskBoard({ projectId }: TaskBoardProps) {
     [],
   );
 
+  // Audit trail: toggle open/close (Phase 6E-E)
+  const toggleAuditTrail = useCallback(
+    async (taskId: string) => {
+      if (auditTrailTaskId === taskId) {
+        // Close
+        setAuditTrailTaskId(null);
+        setAuditTrailEvents([]);
+        setAuditTrailCount(null);
+        setAuditTrailError(null);
+        return;
+      }
+      // Open and load
+      setAuditTrailTaskId(taskId);
+      setAuditTrailLoading(true);
+      setAuditTrailError(null);
+      setAuditTrailEvents([]);
+      setAuditTrailCount(null);
+      try {
+        const data = await api.get<AuditTrailResponse>(
+          `/api/tasks/${taskId}/audit-trail`,
+        );
+        setAuditTrailEvents(data.events);
+        setAuditTrailCount(data.count);
+      } catch {
+        setAuditTrailError("Failed to load audit trail");
+        setAuditTrailEvents([]);
+        setAuditTrailCount(null);
+      } finally {
+        setAuditTrailLoading(false);
+      }
+    },
+    [auditTrailTaskId],
+  );
+
   // When a snapshot is loaded, also check for existing execution request
   const freezeAndViewWithReqCheck = useCallback(async (proposalId: string) => {
     setSnapshotLoading(proposalId);
@@ -244,6 +337,10 @@ export function TaskBoard({ projectId }: TaskBoardProps) {
     setSnapshotError(null);
     setExecRequests({});
     setExecReqError(null);
+    setAuditTrailTaskId(null);
+    setAuditTrailEvents([]);
+    setAuditTrailCount(null);
+    setAuditTrailError(null);
   }, [projectId]);
 
   if (!projectId) {
@@ -427,7 +524,73 @@ export function TaskBoard({ projectId }: TaskBoardProps) {
                     {expandedTask === t.id ? "Hide Proposals" : "Proposals"}
                   </button>
                 )}
+                <button
+                  className="btn btn-secondary btn-sm"
+                  style={{ fontSize: 11 }}
+                  onClick={() => toggleAuditTrail(t.id)}
+                >
+                  {auditTrailTaskId === t.id
+                    ? "Hide Audit Trail"
+                    : auditTrailCount !== null && auditTrailTaskId === t.id
+                      ? `Audit Trail (${auditTrailCount} events)`
+                      : "Audit Trail"}
+                </button>
               </div>
+
+              {/* Audit Trail (Phase 6E-E) */}
+              {auditTrailTaskId === t.id && (
+                <div className="audit-trail-section">
+                  <div className="audit-trail-header">
+                    <span className="proposal-label" style={{ margin: 0 }}>
+                      {auditTrailCount !== null
+                        ? `Audit Trail (${auditTrailCount} events)`
+                        : "Audit Trail"}
+                    </span>
+                  </div>
+                  {auditTrailLoading && (
+                    <div style={{ fontSize: 12, color: "var(--text-muted)" }}>
+                      Loading audit trail...
+                    </div>
+                  )}
+                  {auditTrailError && (
+                    <div className="snapshot-error">{auditTrailError}</div>
+                  )}
+                  {!auditTrailLoading && !auditTrailError && auditTrailEvents.length === 0 && (
+                    <div style={{ fontSize: 12, color: "var(--text-muted)" }}>
+                      No audit events yet
+                    </div>
+                  )}
+                  {!auditTrailLoading && auditTrailEvents.length > 0 && (
+                    <div className="audit-trail-list">
+                      {auditTrailEvents.map((ev, idx) => (
+                        <div key={`${ev.object_id}-${ev.event_type}-${idx}`} className="audit-event-row">
+                          <span className="audit-event-ts">
+                            {formatAuditTimestamp(ev.timestamp)}
+                          </span>
+                          <span
+                            className="badge audit-event-type-badge"
+                            style={{
+                              color: OBJECT_TYPE_COLORS[ev.object_type] || "var(--text-muted)",
+                              borderColor: OBJECT_TYPE_COLORS[ev.object_type] || "var(--text-muted)",
+                            }}
+                          >
+                            {ev.object_type.replace("_", " ")}
+                          </span>
+                          <span
+                            className="audit-event-status"
+                            style={{
+                              color: AUDIT_STATUS_COLORS[ev.status] || "var(--text-muted)",
+                            }}
+                          >
+                            {ev.status}
+                          </span>
+                          <span className="audit-event-summary">{ev.summary}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Execution Proposals (Phase 6E-A) */}
               {expandedTask === t.id && (
