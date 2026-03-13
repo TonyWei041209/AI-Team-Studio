@@ -134,6 +134,7 @@ Valid transitions:
 | PATCH | /api/execution-requests/:id | Confirm or reject execution request |
 | POST | /api/execution-requests/:id/dry-run | Trigger dry-run execution (idempotent) |
 | GET | /api/execution-requests/:id/dry-run | Read dry-run result |
+| GET | /api/execution-requests/:id/action-plan | Read computed action plan (pure, not stored) |
 
 ## Execution Pipeline (Phase 6E)
 
@@ -307,3 +308,71 @@ Repeat POST returns 200 with existing result. POST on non-confirmed request retu
 - The dry-run service reads the frozen snapshot, iterates proposed file actions and command actions, and marks each as `simulated`.
 - `snapshot_content_hash` is verified at execution time for tamper detection.
 - Warnings are generated for potentially risky operations (e.g., delete, force push).
+
+## Action Plan (Phase 6G-A)
+
+### Overview
+
+An action plan is a **computed, read-only** view of a confirmed execution request's snapshot.
+It normalizes raw snapshot data into standardized actions and evaluates each against a policy gate.
+Action plans are **not stored in the database** — they are computed on-the-fly from snapshot data.
+
+### Action Plan Contract
+
+`GET /api/execution-requests/:id/action-plan` returns:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| execution_request_id | UUID | Source execution request |
+| snapshot_id | UUID | Source snapshot |
+| snapshot_content_hash | string | SHA-256 hash for integrity verification |
+| actions | array | List of normalized actions (see below) |
+| overall_risk | enum | Highest risk across all actions: safe/low/high/critical |
+| has_denied | boolean | Whether any action was denied |
+| needs_confirmation_count | integer | Count of actions needing confirmation |
+| summary | string | Human-readable summary, e.g. "4 action(s): 2 allowed, 1 need confirmation, 1 denied" |
+
+### NormalizedAction
+
+Each element in the `actions` array:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| type | enum | file_create / file_modify / file_delete / command_run / git_commit / git_checkout / unsupported |
+| target | string | File path or full command string |
+| params | dict | Metadata: `{"operation": "create"}` for files, extra command fields for commands |
+| risk_level | enum | safe / low / high / critical |
+| policy_decision | enum | allow / deny / needs_confirmation |
+| reason | string | Human-readable explanation of the policy decision |
+
+### Policy Decision Semantics
+
+| Decision | Meaning |
+|----------|---------|
+| `allow` | Safe to execute without further confirmation |
+| `deny` | Must not be executed (critical risk or unsupported) |
+| `needs_confirmation` | Requires explicit human confirmation before execution |
+
+### Policy Rules Summary
+
+| Action | Risk | Decision |
+|--------|------|----------|
+| file_create / file_modify | SAFE/LOW | allow |
+| file_create / file_modify | HIGH | needs_confirmation |
+| file_create / file_modify | CRITICAL | deny |
+| file_delete (any) | SAFE/LOW | needs_confirmation |
+| file_delete | HIGH/CRITICAL | deny |
+| command_run (whitelisted) | SAFE/LOW | allow |
+| command_run (not whitelisted) | SAFE/LOW | needs_confirmation |
+| command_run | HIGH | needs_confirmation |
+| command_run | CRITICAL | deny |
+| git_commit / git_checkout | non-CRITICAL | needs_confirmation |
+| git_commit / git_checkout | CRITICAL | deny |
+| unsupported | any | deny |
+
+### Key Semantic Clarifications
+
+- **confirmed ≠ executed**: `confirmed` on an execution request means "human confirmed intent", not that any action has been carried out.
+- **dry-run ≠ executed**: Dry-run simulates the execution plan without side effects. No files are written, no commands run.
+- **action plan ≠ permission**: The action plan shows what *would* happen and the policy evaluation, but does not grant permission to execute. It is purely informational.
+- **Pure computation**: Action plans reuse `tools.safety.RiskClassifier` and `tools.shell_executor.COMMAND_WHITELIST` for consistent risk evaluation across the system.
