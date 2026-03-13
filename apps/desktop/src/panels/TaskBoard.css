@@ -273,3 +273,31 @@
   color: var(--text-muted);
   font-style: italic;
 }
+
+.exec-request-buttons {
+  display: flex;
+  gap: 8px;
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px dashed var(--border-color);
+}
+
+.exec-request-btn-confirm {
+  color: var(--accent-green);
+  border: 1px solid var(--accent-green);
+  background: transparent;
+}
+
+.exec-request-btn-confirm:hover:not(:disabled) {
+  background: rgba(76, 175, 80, 0.1);
+}
+
+.exec-request-btn-reject {
+  color: var(--accent-red);
+  border: 1px solid var(--accent-red);
+  background: transparent;
+}
+
+.exec-request-btn-reject:hover:not(:disabled) {
+  background: rgba(244, 67, 54, 0.1);
+}

@@ -86,6 +86,12 @@ const ACTION_COLORS: Record<string, string> = {
   delete: "var(--accent-red)",
 };
 
+const EXEC_REQUEST_STATUS_COLORS: Record<string, string> = {
+  requested: "var(--accent-yellow)",
+  confirmed: "var(--accent-green)",
+  rejected: "var(--accent-red)",
+};
+
 const STATUS_COLORS: Record<TaskStatus, string> = {
   pending: "var(--text-muted)",
   planning: "var(--accent-blue)",
@@ -182,6 +188,28 @@ export function TaskBoard({ projectId }: TaskBoardProps) {
       setExecReqLoading(null);
     }
   }, []);
+
+  // Execution request: confirm or reject (Phase 6E-D)
+  const updateExecRequestStatus = useCallback(
+    async (snapshotId: string, requestId: string, newStatus: "confirmed" | "rejected") => {
+      setExecReqLoading(snapshotId);
+      setExecReqError(null);
+      try {
+        const updated = await api.patch<ExecutionRequestResponse>(
+          `/api/execution-requests/${requestId}`,
+          { status: newStatus },
+        );
+        setExecRequests((prev) => ({ ...prev, [snapshotId]: updated }));
+      } catch (err) {
+        setExecReqError(
+          err instanceof Error ? err.message : "Failed to update execution request",
+        );
+      } finally {
+        setExecReqLoading(null);
+      }
+    },
+    [],
+  );
 
   // When a snapshot is loaded, also check for existing execution request
   const freezeAndViewWithReqCheck = useCallback(async (proposalId: string) => {
@@ -609,44 +637,68 @@ export function TaskBoard({ projectId }: TaskBoardProps) {
 
                                 {/* Execution Request (Phase 6E-C) */}
                                 <div className="exec-request-section">
-                                  {execRequests[s.id] ? (
-                                    <div className="exec-request-card">
+                                  {execRequests[s.id] ? (() => {
+                                    const er = execRequests[s.id];
+                                    const statusColor = EXEC_REQUEST_STATUS_COLORS[er.status] || "var(--text-muted)";
+                                    const isTerminal = er.status === "confirmed" || er.status === "rejected";
+                                    const cardBorderColor = isTerminal ? statusColor : "var(--accent-yellow)";
+                                    return (
+                                    <div className="exec-request-card" style={{ borderColor: cardBorderColor }}>
                                       <div className="proposal-label">Execution Request</div>
                                       <div className="exec-request-meta">
                                         <span className="exec-request-meta-item">
                                           <strong>ID:</strong>{" "}
                                           <code className="snapshot-hash">
-                                            {execRequests[s.id].id.slice(0, 8)}...
+                                            {er.id.slice(0, 8)}...
                                           </code>
                                         </span>
                                         <span className="exec-request-meta-item">
                                           <strong>Status:</strong>{" "}
-                                          <span className="exec-request-status">
-                                            {execRequests[s.id].status}
+                                          <span className="exec-request-status" style={{ color: statusColor }}>
+                                            {er.status}
                                           </span>
                                         </span>
                                         <span className="exec-request-meta-item">
                                           <strong>Risk:</strong>{" "}
-                                          <span style={{ color: RISK_COLORS[execRequests[s.id].risk_level] || "#888" }}>
-                                            {execRequests[s.id].risk_level}
+                                          <span style={{ color: RISK_COLORS[er.risk_level] || "#888" }}>
+                                            {er.risk_level}
                                           </span>
                                         </span>
                                         <span className="exec-request-meta-item">
                                           <strong>Created:</strong>{" "}
-                                          {formatDate(execRequests[s.id].created_at)}
+                                          {formatDate(er.created_at)}
                                         </span>
                                         <span className="exec-request-meta-item">
                                           <strong>Hash:</strong>{" "}
                                           <code className="snapshot-hash">
-                                            {execRequests[s.id].snapshot_content_hash.slice(0, 12)}...
+                                            {er.snapshot_content_hash.slice(0, 12)}...
                                           </code>
                                         </span>
                                       </div>
                                       <div className="exec-request-notice">
                                         This records an execution intent only. No file, shell, or git operations are performed.
                                       </div>
+                                      {!isTerminal && (
+                                        <div className="exec-request-buttons">
+                                          <button
+                                            className="btn btn-sm exec-request-btn-confirm"
+                                            disabled={execReqLoading === s.id}
+                                            onClick={() => updateExecRequestStatus(s.id, er.id, "confirmed")}
+                                          >
+                                            {execReqLoading === s.id ? "Updating..." : "Confirm Request"}
+                                          </button>
+                                          <button
+                                            className="btn btn-sm exec-request-btn-reject"
+                                            disabled={execReqLoading === s.id}
+                                            onClick={() => updateExecRequestStatus(s.id, er.id, "rejected")}
+                                          >
+                                            Reject Request
+                                          </button>
+                                        </div>
+                                      )}
                                     </div>
-                                  ) : (
+                                    );
+                                  })() : (
                                     <div className="exec-request-action">
                                       <button
                                         className="btn btn-secondary btn-sm"
