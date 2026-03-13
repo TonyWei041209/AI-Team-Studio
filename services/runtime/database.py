@@ -325,6 +325,48 @@ def _apply_v8(conn: sqlite3.Connection) -> None:
     conn.execute("INSERT INTO schema_version (version) VALUES (8)")
 
 
+def _apply_v9(conn: sqlite3.Connection) -> None:
+    """V9: Execution results table (Phase 6F-A).
+
+    Records the outcome of executing a confirmed execution request.
+    In 6F-A only dry-run results are stored (no real file/shell/git ops).
+
+    Status values:
+      - pending  : reserved for async execution (not used in 6F-A)
+      - running  : reserved for async execution (not used in 6F-A)
+      - completed: dry-run finished successfully
+      - failed   : dry-run encountered an error
+
+    UNIQUE(execution_request_id) ensures one result per request.
+    snapshot_content_hash is copied for integrity verification.
+    """
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS execution_results (
+            id TEXT PRIMARY KEY,
+            execution_request_id TEXT NOT NULL UNIQUE
+                REFERENCES execution_requests(id),
+            task_id TEXT NOT NULL REFERENCES tasks(id),
+            snapshot_id TEXT NOT NULL REFERENCES execution_snapshots(id),
+            snapshot_content_hash TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'pending'
+                CHECK (status IN ('pending', 'running', 'completed', 'failed')),
+            result_data TEXT NOT NULL DEFAULT '{}',
+            started_at TEXT,
+            completed_at TEXT,
+            created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        )
+    """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_exec_results_task "
+        "ON execution_results(task_id)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_exec_results_request "
+        "ON execution_results(execution_request_id)"
+    )
+    conn.execute("INSERT INTO schema_version (version) VALUES (9)")
+
+
 # Ordered list of migrations
 _MIGRATIONS = [
     (1, _apply_v1),
@@ -335,6 +377,7 @@ _MIGRATIONS = [
     (6, _apply_v6),
     (7, _apply_v7),
     (8, _apply_v8),
+    (9, _apply_v9),
 ]
 
 
