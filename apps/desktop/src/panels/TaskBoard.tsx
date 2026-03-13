@@ -166,6 +166,45 @@ const AUDIT_STATUS_COLORS: Record<string, string> = {
   pending: "var(--text-muted)",
 };
 
+// ── Real-Run Result types (Phase 7B-1) ───────────────────
+interface RealRunFileResult {
+  path: string;
+  operation: string;
+  status: string;
+  error?: string;
+  reason?: string;
+  before_hash: string | null;
+  after_hash: string | null;
+}
+
+interface RealRunResultData {
+  mode: string;
+  summary: string;
+  file_results: RealRunFileResult[];
+  stopped_at: number | null;
+  stop_reason: string | null;
+}
+
+interface RealRunResult {
+  id: string;
+  execution_request_id: string;
+  task_id: string;
+  snapshot_id: string;
+  snapshot_content_hash: string;
+  mode: string;
+  status: string;
+  result_data: RealRunResultData;
+  started_at: string | null;
+  completed_at: string | null;
+  created_at: string;
+}
+
+const REAL_RUN_FILE_STATUS_COLORS: Record<string, string> = {
+  success: "var(--accent-green)",
+  failed: "var(--accent-red)",
+  skipped: "var(--text-muted)",
+};
+
 const POLICY_DECISION_COLORS: Record<string, string> = {
   allow: "var(--accent-green)",
   deny: "var(--accent-red)",
@@ -267,6 +306,11 @@ export function TaskBoard({ projectId }: TaskBoardProps) {
   const [actionPlans, setActionPlans] = useState<Record<string, ActionPlanResponse>>({});
   const [actionPlanLoading, setActionPlanLoading] = useState<string | null>(null);
   const [actionPlanError, setActionPlanError] = useState<string | null>(null);
+
+  // Real-run result (Phase 7B-1) — keyed by execution_request_id
+  const [realRunResults, setRealRunResults] = useState<Record<string, RealRunResult | "empty">>({});
+  const [realRunLoading, setRealRunLoading] = useState<string | null>(null);
+  const [realRunError, setRealRunError] = useState<string | null>(null);
 
   const loadProposals = useCallback(async (taskId: string) => {
     setProposalLoading(true);
@@ -406,6 +450,27 @@ export function TaskBoard({ projectId }: TaskBoardProps) {
     }
   }, []);
 
+  // Load real-run result (Phase 7B-1) — on-demand, 404 = empty
+  const loadRealRunResult = useCallback(async (requestId: string) => {
+    setRealRunLoading(requestId);
+    setRealRunError(null);
+    try {
+      const result = await api.getOrNull<RealRunResult>(
+        `/api/execution-requests/${requestId}/real-run`,
+      );
+      if (result) {
+        setRealRunResults((prev) => ({ ...prev, [requestId]: result }));
+      } else {
+        // 404 → empty state
+        setRealRunResults((prev) => ({ ...prev, [requestId]: "empty" }));
+      }
+    } catch {
+      setRealRunError("Failed to load execution result");
+    } finally {
+      setRealRunLoading(null);
+    }
+  }, []);
+
   // Audit trail: toggle open/close (Phase 6E-E)
   const toggleAuditTrail = useCallback(
     async (taskId: string) => {
@@ -481,6 +546,8 @@ export function TaskBoard({ projectId }: TaskBoardProps) {
     setDryRunError(null);
     setActionPlans({});
     setActionPlanError(null);
+    setRealRunResults({});
+    setRealRunError(null);
   }, [projectId]);
 
   if (!projectId) {
@@ -1233,6 +1300,106 @@ export function TaskBoard({ projectId }: TaskBoardProps) {
                                               </span>
                                             </div>
                                           )}
+                                        </div>
+                                      );
+                                    })()}
+                                    {/* Real-Run Execution Result Viewer (Phase 7B-1) */}
+                                    {(() => {
+                                      const rr = realRunResults[er.id];
+                                      const rrLoading = realRunLoading === er.id;
+                                    return (
+                                      <div className="real-run-section">
+                                        {rr && rr !== "empty" ? (
+                                          <div className="real-run-result-card">
+                                            <div className="proposal-label">Execution Result</div>
+                                            <div className="real-run-meta">
+                                              <span className="real-run-mode-badge">REAL RUN</span>
+                                              <span
+                                                className="real-run-status-badge"
+                                                style={{
+                                                  color: rr.status === "completed" ? "var(--accent-green)" : "var(--accent-red)",
+                                                  borderColor: rr.status === "completed" ? "var(--accent-green)" : "var(--accent-red)",
+                                                }}
+                                              >
+                                                {rr.status}
+                                              </span>
+                                              <span className="real-run-ts">{formatAuditTimestamp(rr.created_at)}</span>
+                                            </div>
+                                            <div className="real-run-summary">{rr.result_data?.summary}</div>
+                                            {rr.status === "failed" && rr.result_data?.stop_reason && (
+                                              <div className="real-run-stop-reason">
+                                                <strong>Stopped at file #{rr.result_data.stopped_at}:</strong>{" "}
+                                                {rr.result_data.stop_reason}
+                                              </div>
+                                            )}
+                                            <div className="real-run-file-list">
+                                              {rr.result_data?.file_results?.map((fr, i) => (
+                                                <div key={i} className="real-run-file-item">
+                                                  <span
+                                                    className="badge"
+                                                    style={{
+                                                      color: REAL_RUN_FILE_STATUS_COLORS[fr.status] || "var(--text-muted)",
+                                                      borderColor: REAL_RUN_FILE_STATUS_COLORS[fr.status] || "var(--text-muted)",
+                                                      fontSize: 9,
+                                                      minWidth: 40,
+                                                      textAlign: "center",
+                                                    }}
+                                                  >
+                                                    {fr.status}
+                                                  </span>
+                                                  <span className="real-run-file-op">{fr.operation}</span>
+                                                  <span className="real-run-file-path">{fr.path}</span>
+                                                  {fr.before_hash && (
+                                                    <span className="real-run-hash" title={fr.before_hash}>
+                                                      {fr.before_hash.substring(0, 8)}→
+                                                    </span>
+                                                  )}
+                                                  {fr.after_hash && (
+                                                    <span className="real-run-hash" title={fr.after_hash}>
+                                                      {fr.after_hash.substring(0, 8)}
+                                                    </span>
+                                                  )}
+                                                  {fr.error && (
+                                                    <span className="real-run-file-error">{fr.error}</span>
+                                                  )}
+                                                </div>
+                                              ))}
+                                              {(!rr.result_data?.file_results || rr.result_data.file_results.length === 0) && (
+                                                <div className="dry-run-empty">No file results</div>
+                                              )}
+                                            </div>
+                                          </div>
+                                        ) : rr === "empty" ? (
+                                          <div className="real-run-empty">No real execution result yet</div>
+                                        ) : rrLoading ? (
+                                          <div className="dry-run-loading">Loading execution result...</div>
+                                        ) : realRunError && realRunLoading === null ? (
+                                          <div className="dry-run-error-section">
+                                            <span className="snapshot-error" style={{ marginTop: 0 }}>
+                                              Failed to load execution result
+                                            </span>
+                                            <button
+                                              className="btn btn-secondary btn-sm"
+                                              style={{ marginLeft: 8, fontSize: 10 }}
+                                              onClick={() => loadRealRunResult(er.id)}
+                                            >
+                                              Retry
+                                            </button>
+                                          </div>
+                                        ) : (
+                                          <div className="dry-run-trigger">
+                                            <button
+                                              className="btn btn-secondary btn-sm"
+                                              style={{ color: "#ff8c00", borderColor: "#ff8c00" }}
+                                              onClick={() => loadRealRunResult(er.id)}
+                                            >
+                                              View Execution Result
+                                            </button>
+                                            <span className="exec-request-hint">
+                                              Shows real file execution result (read-only).
+                                            </span>
+                                          </div>
+                                        )}
                                         </div>
                                       );
                                     })()}

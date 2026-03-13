@@ -681,6 +681,40 @@ async def get_dry_run_result(request_id: str):
         conn.close()
 
 
+@router.get("/execution-requests/{request_id}/real-run")
+async def get_real_run_result(request_id: str):
+    """Read an existing real-run result for an execution request.
+
+    Returns 200 with the execution result if it exists.
+    Returns 404 if the execution request or its real-run result is not found.
+    """
+    conn = get_connection()
+    try:
+        req_row = conn.execute(
+            "SELECT id FROM execution_requests WHERE id = ?",
+            (request_id,),
+        ).fetchone()
+        if not req_row:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Execution request not found: {request_id}",
+            )
+
+        row = conn.execute(
+            "SELECT * FROM execution_results WHERE execution_request_id = ? AND mode = 'real_run'",
+            (request_id,),
+        ).fetchone()
+        if not row:
+            raise HTTPException(
+                status_code=404,
+                detail=f"No real-run result for execution request: {request_id}",
+            )
+
+        return _parse_result_data(dict(row))
+    finally:
+        conn.close()
+
+
 @router.get("/execution-requests/{request_id}/action-plan")
 async def get_action_plan(request_id: str):
     """Compile a read-only action plan with policy decisions.
