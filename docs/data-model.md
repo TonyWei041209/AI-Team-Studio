@@ -123,3 +123,117 @@ Valid transitions:
 | GET | /api/tools | List all registered tools |
 | POST | /api/tools/execute | Execute tool (risk check + approval gating; body: `tool_name`, `params`, optional `project_id`/`task_id`/`run_id`/`role`) |
 | POST | /api/tools/execute-approved | Re-execute blocked tool after approval (body: `approval_id`, `tool_name`, `params`) |
+| GET | /api/tasks/:id/proposals | List execution proposals |
+| GET | /api/tasks/:id/audit-trail | Aggregated audit timeline |
+| GET | /api/proposals/:id | Get single proposal |
+| POST | /api/proposals/:id/freeze | Freeze approved proposal into snapshot |
+| GET | /api/snapshots/:id | Get single snapshot |
+| GET | /api/snapshots/:id/execution-request | Get execution request for snapshot |
+| POST | /api/snapshots/:id/request-execution | Create execution request |
+| GET | /api/execution-requests/:id | Get single execution request |
+| PATCH | /api/execution-requests/:id | Confirm or reject execution request |
+
+## Execution Pipeline (Phase 6E)
+
+### Object Chain
+
+```
+task
+ └─ execution_proposal   (Builder output, structured plan)
+      └─ approval_request (human decision: approved / rejected)
+           └─ execution_snapshot  (frozen immutable copy, SHA-256 hash)
+                └─ execution_request  (execution intent record)
+                     └─ confirmed / rejected  (terminal, irreversible)
+```
+
+### ExecutionProposal
+
+Builder agent produces a structured execution plan.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| id | UUID | Primary key |
+| task_id | UUID | FK → Task |
+| run_id | UUID | FK → AgentRun |
+| role | string | Agent role (default: "builder") |
+| proposal_data | JSON string | Structured plan (files, commands, summary) |
+| risk_level | enum | low/medium/high/critical |
+| requires_approval | boolean | Whether human approval needed |
+| approval_reasons | JSON string | List of reasons for approval |
+| status | enum | pending/approved/rejected |
+| created_at | datetime | Creation timestamp |
+| updated_at | datetime | Last update timestamp |
+
+### ExecutionSnapshot
+
+Frozen immutable copy of an approved proposal. Created via `freeze_snapshot()`.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| id | UUID | Primary key |
+| proposal_id | UUID | FK → ExecutionProposal (UNIQUE) |
+| approval_id | UUID | FK → ApprovalRequest |
+| task_id | UUID | FK → Task |
+| snapshot_data | JSON string | Frozen copy of proposal_data |
+| content_hash | string | SHA-256 of snapshot_data (tamper detection) |
+| risk_level | string | Inherited from proposal |
+| status | enum | frozen (only valid value) |
+| created_at | datetime | Creation timestamp |
+
+**Immutability guarantee**: Once created, snapshot_data and content_hash never change.
+One proposal can have at most one snapshot (UNIQUE constraint on proposal_id).
+
+### ExecutionRequest
+
+Records execution intent, bound to a frozen snapshot.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| id | UUID | Primary key |
+| task_id | UUID | FK → Task |
+| proposal_id | UUID | FK → ExecutionProposal |
+| approval_id | UUID | FK → ApprovalRequest |
+| snapshot_id | UUID | FK → ExecutionSnapshot (UNIQUE) |
+| snapshot_content_hash | string | Copied from snapshot at creation |
+| risk_level | string | Inherited from snapshot |
+| status | enum | requested/confirmed/rejected |
+| created_at | datetime | Creation timestamp |
+| updated_at | datetime | Last update timestamp |
+
+### Execution Request State Machine
+
+```
+requested ──→ confirmed   (terminal, irreversible)
+    │
+    └──────→ rejected     (terminal, irreversible)
+```
+
+**Critical semantics**:
+- `confirmed` means "human has confirmed execution intent"
+- `confirmed` does NOT mean "execution has occurred"
+- No executor exists yet — Phase 6F will add dry-run capability
+- Terminal states cannot be changed (409 Conflict on retry)
+- One snapshot can have at most one execution request (UNIQUE constraint)
+
+### Audit Trail
+
+`GET /api/tasks/{task_id}/audit-trail` aggregates the full object chain into a flat timeline.
+
+Each event has 8 top-level fields:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| event_type | string | e.g. `proposal:created`, `approval:decided` |
+| object_type | string | proposal / approval / snapshot / execution_request |
+| object_id | UUID | ID of the source object |
+| status | string | Current status of the object |
+| timestamp | datetime | When the event occurred |
+| summary | string | Human-readable one-liner |
+| related_ids | dict | Cross-references (task_id, proposal_id, etc.) |
+| detail | dict | Supplementary data (not required by UI) |
+
+Event types: `proposal:created`, `approval:decided`, `snapshot:frozen`,
+`execution_request:created`, `execution_request:finalized`.
+
+Sort: timestamp ASC, then fixed event order for tie-breaking.
+Only decided approvals included (pending filtered out).
