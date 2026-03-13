@@ -131,6 +131,7 @@ const OBJECT_TYPE_COLORS: Record<string, string> = {
   approval: "var(--accent-yellow)",
   snapshot: "var(--accent-green)",
   execution_request: "#ff8c00",
+  execution_result: "var(--accent-blue)",
 };
 
 const AUDIT_STATUS_COLORS: Record<string, string> = {
@@ -139,6 +140,8 @@ const AUDIT_STATUS_COLORS: Record<string, string> = {
   frozen: "var(--accent-green)",
   requested: "var(--accent-yellow)",
   confirmed: "var(--accent-green)",
+  completed: "var(--accent-green)",
+  failed: "var(--accent-red)",
   pending: "var(--text-muted)",
 };
 
