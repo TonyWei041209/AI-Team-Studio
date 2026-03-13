@@ -108,6 +108,27 @@ interface DryRunResult {
   created_at: string;
 }
 
+// ── Action Plan types (Phase 6G-A) ──────────────────────
+interface ActionPlanAction {
+  type: string;
+  target: string;
+  params: Record<string, unknown>;
+  risk_level: string;
+  policy_decision: string;
+  reason: string;
+}
+
+interface ActionPlanResponse {
+  execution_request_id: string;
+  snapshot_id: string;
+  snapshot_content_hash: string;
+  actions: ActionPlanAction[];
+  overall_risk: string;
+  has_denied: boolean;
+  needs_confirmation_count: number;
+  summary: string;
+}
+
 // ── Audit Trail types (Phase 6E-E) ──────────────────────
 interface AuditEvent {
   event_type: string;
@@ -143,6 +164,12 @@ const AUDIT_STATUS_COLORS: Record<string, string> = {
   completed: "var(--accent-green)",
   failed: "var(--accent-red)",
   pending: "var(--text-muted)",
+};
+
+const POLICY_DECISION_COLORS: Record<string, string> = {
+  allow: "var(--accent-green)",
+  deny: "var(--accent-red)",
+  needs_confirmation: "var(--accent-yellow)",
 };
 
 /** Format timestamp: today → HH:mm:ss, otherwise → YYYY-MM-DD HH:mm */
@@ -235,6 +262,11 @@ export function TaskBoard({ projectId }: TaskBoardProps) {
   const [dryRunResults, setDryRunResults] = useState<Record<string, DryRunResult>>({});
   const [dryRunLoading, setDryRunLoading] = useState<string | null>(null);
   const [dryRunError, setDryRunError] = useState<string | null>(null);
+
+  // Action plan (Phase 6G-A) — keyed by execution_request_id
+  const [actionPlans, setActionPlans] = useState<Record<string, ActionPlanResponse>>({});
+  const [actionPlanLoading, setActionPlanLoading] = useState<string | null>(null);
+  const [actionPlanError, setActionPlanError] = useState<string | null>(null);
 
   const loadProposals = useCallback(async (taskId: string) => {
     setProposalLoading(true);
@@ -358,6 +390,22 @@ export function TaskBoard({ projectId }: TaskBoardProps) {
     }
   }, []);
 
+  // Action plan: load on demand (Phase 6G-A)
+  const loadActionPlan = useCallback(async (requestId: string) => {
+    setActionPlanLoading(requestId);
+    setActionPlanError(null);
+    try {
+      const plan = await api.get<ActionPlanResponse>(
+        `/api/execution-requests/${requestId}/action-plan`,
+      );
+      setActionPlans((prev) => ({ ...prev, [requestId]: plan }));
+    } catch {
+      setActionPlanError("Failed to load action plan");
+    } finally {
+      setActionPlanLoading(null);
+    }
+  }, []);
+
   // Audit trail: toggle open/close (Phase 6E-E)
   const toggleAuditTrail = useCallback(
     async (taskId: string) => {
@@ -431,6 +479,8 @@ export function TaskBoard({ projectId }: TaskBoardProps) {
     setAuditTrailError(null);
     setDryRunResults({});
     setDryRunError(null);
+    setActionPlans({});
+    setActionPlanError(null);
   }, [projectId]);
 
   if (!projectId) {
@@ -1081,6 +1131,105 @@ export function TaskBoard({ projectId }: TaskBoardProps) {
                                               </button>
                                               <span className="exec-request-hint">
                                                 Simulates execution without performing any real operations.
+                                              </span>
+                                            </div>
+                                          )}
+                                        </div>
+                                      );
+                                    })()}
+
+                                    {/* Action Plan Viewer (Phase 6G-A) */}
+                                    {(() => {
+                                      const ap = actionPlans[er.id];
+                                      const apLoading = actionPlanLoading === er.id;
+                                      return (
+                                        <div className="action-plan-section">
+                                          {ap ? (
+                                            <div className="action-plan-card">
+                                              <div className="proposal-label">Action Plan</div>
+                                              <div className="action-plan-meta">
+                                                <span className="action-plan-summary">{ap.summary}</span>
+                                                <span
+                                                  className="badge"
+                                                  style={{
+                                                    color: RISK_COLORS[ap.overall_risk] || "var(--text-muted)",
+                                                    borderColor: RISK_COLORS[ap.overall_risk] || "var(--text-muted)",
+                                                    fontSize: 9,
+                                                  }}
+                                                >
+                                                  {ap.overall_risk}
+                                                </span>
+                                                {ap.has_denied && (
+                                                  <span className="badge" style={{
+                                                    color: "var(--accent-red)", borderColor: "var(--accent-red)", fontSize: 9,
+                                                  }}>
+                                                    HAS DENIED
+                                                  </span>
+                                                )}
+                                                {ap.needs_confirmation_count > 0 && (
+                                                  <span className="badge" style={{
+                                                    color: "var(--accent-yellow)", borderColor: "var(--accent-yellow)", fontSize: 9,
+                                                  }}>
+                                                    {ap.needs_confirmation_count} NEED CONFIRM
+                                                  </span>
+                                                )}
+                                              </div>
+                                              <div className="action-plan-list">
+                                                {ap.actions.map((a, i) => (
+                                                  <div key={i} className="action-plan-item">
+                                                    <span
+                                                      className="badge"
+                                                      style={{
+                                                        color: POLICY_DECISION_COLORS[a.policy_decision] || "var(--text-muted)",
+                                                        borderColor: POLICY_DECISION_COLORS[a.policy_decision] || "var(--text-muted)",
+                                                        fontSize: 9,
+                                                        minWidth: 40,
+                                                        textAlign: "center",
+                                                      }}
+                                                    >
+                                                      {a.policy_decision.replace("_", " ")}
+                                                    </span>
+                                                    <span className="action-plan-type">{a.type.replace("_", " ")}</span>
+                                                    <span className="action-plan-target">{a.target}</span>
+                                                    <span
+                                                      className="action-plan-risk"
+                                                      style={{ color: RISK_COLORS[a.risk_level] || "var(--text-muted)" }}
+                                                    >
+                                                      {a.risk_level}
+                                                    </span>
+                                                  </div>
+                                                ))}
+                                                {ap.actions.length === 0 && (
+                                                  <div className="dry-run-empty">No actions in plan</div>
+                                                )}
+                                              </div>
+                                            </div>
+                                          ) : apLoading ? (
+                                            <div className="dry-run-loading">Loading action plan...</div>
+                                          ) : actionPlanError && actionPlanLoading === null ? (
+                                            <div className="dry-run-error-section">
+                                              <span className="snapshot-error" style={{ marginTop: 0 }}>
+                                                Failed to load action plan
+                                              </span>
+                                              <button
+                                                className="btn btn-secondary btn-sm"
+                                                style={{ marginLeft: 8, fontSize: 10 }}
+                                                onClick={() => loadActionPlan(er.id)}
+                                              >
+                                                Retry
+                                              </button>
+                                            </div>
+                                          ) : (
+                                            <div className="dry-run-trigger">
+                                              <button
+                                                className="btn btn-secondary btn-sm"
+                                                style={{ color: "var(--accent-blue)", borderColor: "var(--accent-blue)" }}
+                                                onClick={() => loadActionPlan(er.id)}
+                                              >
+                                                View Action Plan
+                                              </button>
+                                              <span className="exec-request-hint">
+                                                Shows normalized actions with policy decisions.
                                               </span>
                                             </div>
                                           )}
