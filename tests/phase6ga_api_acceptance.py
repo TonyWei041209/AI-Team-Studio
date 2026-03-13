@@ -192,7 +192,8 @@ if actions:
     check("action has target", "target" in a0)
     check("action has risk_level", a0.get("risk_level") in ("safe", "low", "high", "critical"))
     check("action has policy_decision", a0.get("policy_decision") in ("allow", "deny", "needs_confirmation"))
-    check("action has policy_reason", isinstance(a0.get("policy_reason"), str))
+    check("action has reason", isinstance(a0.get("reason"), str))
+    check("action has params", isinstance(a0.get("params"), dict))
 
 
 # ══════════════════════════════════════════════════════════════

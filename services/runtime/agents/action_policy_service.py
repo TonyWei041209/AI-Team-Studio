@@ -51,17 +51,19 @@ class PolicyDecision(str, Enum):
 class NormalizedAction:
     type: ActionType
     target: str
+    params: dict = field(default_factory=dict)
     risk_level: str = "safe"
     policy_decision: str = "allow"
-    policy_reason: str = ""
+    reason: str = ""
 
     def to_dict(self) -> dict:
         return {
             "type": self.type.value,
             "target": self.target,
+            "params": self.params,
             "risk_level": self.risk_level,
             "policy_decision": self.policy_decision,
-            "policy_reason": self.policy_reason,
+            "reason": self.reason,
         }
 
 
@@ -120,7 +122,8 @@ def compile_actions(snapshot_data: dict) -> list[NormalizedAction]:
         path = f.get("path", "") if isinstance(f, dict) else str(f)
         operation = f.get("operation", "") if isinstance(f, dict) else ""
         action_type = _FILE_OP_MAP.get(operation.lower(), ActionType.unsupported)
-        actions.append(NormalizedAction(type=action_type, target=path))
+        file_params = {"operation": operation} if operation else {}
+        actions.append(NormalizedAction(type=action_type, target=path, params=file_params))
 
     # ── Command actions ──
     for c in snapshot_data.get("proposed_commands", []):
@@ -134,7 +137,10 @@ def compile_actions(snapshot_data: dict) -> list[NormalizedAction]:
             action_type = ActionType.git_checkout
         else:
             action_type = ActionType.command_run
-        actions.append(NormalizedAction(type=action_type, target=cmd))
+        cmd_params: dict = {}
+        if isinstance(c, dict):
+            cmd_params = {k: v for k, v in c.items() if k != "command"}
+        actions.append(NormalizedAction(type=action_type, target=cmd, params=cmd_params))
 
     return actions
 
@@ -154,111 +160,114 @@ def _extract_base_command(cmd: str) -> str:
 def _evaluate_file_action(action: NormalizedAction) -> NormalizedAction:
     """Evaluate policy for a file action."""
     risk, reason = _classifier.classify("write_file", {"path": action.target})
+    p = action.params
 
     if action.type == ActionType.file_delete:
         # Deletions always need at least confirmation
         if _RISK_RANK[risk.value] >= _RISK_RANK["high"]:
             return NormalizedAction(
-                type=action.type, target=action.target,
+                type=action.type, target=action.target, params=p,
                 risk_level=risk.value,
                 policy_decision=PolicyDecision.deny.value,
-                policy_reason=reason or "File deletion in sensitive location",
+                reason=reason or "File deletion in sensitive location",
             )
         return NormalizedAction(
-            type=action.type, target=action.target,
+            type=action.type, target=action.target, params=p,
             risk_level=risk.value if risk != RiskLevel.SAFE else "low",
             policy_decision=PolicyDecision.needs_confirmation.value,
-            policy_reason="File deletion requires confirmation",
+            reason="File deletion requires confirmation",
         )
 
     # file_create / file_modify
     if risk == RiskLevel.CRITICAL:
         return NormalizedAction(
-            type=action.type, target=action.target,
+            type=action.type, target=action.target, params=p,
             risk_level=risk.value,
             policy_decision=PolicyDecision.deny.value,
-            policy_reason=reason,
+            reason=reason,
         )
     if risk == RiskLevel.HIGH:
         return NormalizedAction(
-            type=action.type, target=action.target,
+            type=action.type, target=action.target, params=p,
             risk_level=risk.value,
             policy_decision=PolicyDecision.needs_confirmation.value,
-            policy_reason=reason,
+            reason=reason,
         )
     # SAFE or LOW
     return NormalizedAction(
-        type=action.type, target=action.target,
+        type=action.type, target=action.target, params=p,
         risk_level=risk.value,
         policy_decision=PolicyDecision.allow.value,
-        policy_reason="Non-sensitive file operation",
+        reason="Non-sensitive file operation",
     )
 
 
 def _evaluate_command_action(action: NormalizedAction) -> NormalizedAction:
     """Evaluate policy for a command_run action."""
     risk, reason = _classifier.classify("shell", {"command": action.target})
+    p = action.params
 
     if risk == RiskLevel.CRITICAL:
         return NormalizedAction(
-            type=action.type, target=action.target,
+            type=action.type, target=action.target, params=p,
             risk_level=risk.value,
             policy_decision=PolicyDecision.deny.value,
-            policy_reason=reason,
+            reason=reason,
         )
     if risk == RiskLevel.HIGH:
         return NormalizedAction(
-            type=action.type, target=action.target,
+            type=action.type, target=action.target, params=p,
             risk_level=risk.value,
             policy_decision=PolicyDecision.needs_confirmation.value,
-            policy_reason=reason,
+            reason=reason,
         )
 
     # SAFE or LOW — check whitelist
     base_cmd = _extract_base_command(action.target)
     if base_cmd in COMMAND_WHITELIST:
         return NormalizedAction(
-            type=action.type, target=action.target,
+            type=action.type, target=action.target, params=p,
             risk_level=risk.value,
             policy_decision=PolicyDecision.allow.value,
-            policy_reason="Whitelisted command",
+            reason="Whitelisted command",
         )
     # Not whitelisted
     return NormalizedAction(
-        type=action.type, target=action.target,
+        type=action.type, target=action.target, params=p,
         risk_level="low" if risk == RiskLevel.SAFE else risk.value,
         policy_decision=PolicyDecision.needs_confirmation.value,
-        policy_reason=f"Command '{base_cmd}' not in whitelist",
+        reason=f"Command '{base_cmd}' not in whitelist",
     )
 
 
 def _evaluate_git_action(action: NormalizedAction) -> NormalizedAction:
     """Evaluate policy for git_commit / git_checkout actions."""
     risk, reason = _classifier.classify("shell", {"command": action.target})
+    p = action.params
 
     if risk == RiskLevel.CRITICAL:
         return NormalizedAction(
-            type=action.type, target=action.target,
+            type=action.type, target=action.target, params=p,
             risk_level=risk.value,
             policy_decision=PolicyDecision.deny.value,
-            policy_reason=reason,
+            reason=reason,
         )
     # All non-critical git writes need confirmation
     return NormalizedAction(
-        type=action.type, target=action.target,
+        type=action.type, target=action.target, params=p,
         risk_level=risk.value if risk != RiskLevel.SAFE else "low",
         policy_decision=PolicyDecision.needs_confirmation.value,
-        policy_reason="Git write operation requires confirmation",
+        reason="Git write operation requires confirmation",
     )
 
 
 def _evaluate_unsupported(action: NormalizedAction) -> NormalizedAction:
     """Unsupported actions are always denied."""
     return NormalizedAction(
-        type=action.type, target=action.target,
+        type=action.type, target=action.target, params=action.params,
         risk_level="high",
         policy_decision=PolicyDecision.deny.value,
-        policy_reason="Unsupported action type",
+        reason="Unsupported action type",
     )
 
 

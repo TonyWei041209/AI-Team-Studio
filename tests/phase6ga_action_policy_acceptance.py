@@ -264,6 +264,9 @@ d = plan_ser.to_dict()
 check("to_dict has actions key", "actions" in d)
 check("action dict has type", d["actions"][0]["type"] == "file_create")
 check("action dict has policy_decision", d["actions"][0]["policy_decision"] == "allow")
+check("action dict has reason (not policy_reason)", "reason" in d["actions"][0] and "policy_reason" not in d["actions"][0])
+check("action dict has params", isinstance(d["actions"][0].get("params"), dict))
+check("file action params has operation", d["actions"][0]["params"].get("operation") == "create")
 
 
 # ══════════════════════════════════════════════════════════════
