@@ -485,6 +485,217 @@ def section_13_api_get_by_snapshot():
         check("Real snapshot with no request -> 404", False, "No proposals for test")
 
 
+# ── Section 14: Status change — not found ─────────────────────
+def section_14_status_not_found():
+    print("\n=== Section 14: Status change — request not found ===")
+    from agents.execution_request_service import update_execution_request_status
+
+    try:
+        update_execution_request_status("nonexistent-id", "confirmed")
+        check("Nonexistent request raises ValueError", False)
+    except ValueError as e:
+        check("Nonexistent request raises ValueError", True)
+        check("Error mentions 'not found'", "not found" in str(e).lower())
+
+
+# ── Section 15: Status change — confirm ───────────────────────
+_confirmed_request_id: str = ""
+
+
+def section_15_confirm():
+    print("\n=== Section 15: requested -> confirmed ===")
+    from agents.execution_request_service import (
+        create_execution_request,
+        update_execution_request_status,
+    )
+    from agents.snapshot_service import freeze_snapshot
+    from database import get_connection
+    import uuid as _uuid
+    from datetime import datetime, timezone
+
+    # Create a fresh chain: proposal -> approval -> snapshot -> request
+    status, proj = POST("/projects", {"name": f"6ED-confirm-{os.getpid()}", "local_repo_path": "/tmp/6ed-confirm"})
+    _, task = POST(f"/projects/{proj['id']}/tasks", {"title": "6ED confirm test"})
+    task_id = task["id"]
+    POST(f"/tasks/{task_id}/orchestrate", {"roles": ["builder"]})
+    _, props = GET(f"/tasks/{task_id}/proposals")
+    proposals = props.get("proposals", [])
+    if not proposals:
+        check("Has proposal for confirm test", False)
+        return
+    prop_id = proposals[0]["id"]
+
+    conn = get_connection()
+    try:
+        conn.execute("UPDATE execution_proposals SET status = 'approved' WHERE id = ?", (prop_id,))
+        aid = str(_uuid.uuid4())
+        now = datetime.now(timezone.utc).isoformat()
+        conn.execute(
+            """INSERT INTO approval_requests
+               (id, task_id, run_id, action_type, action_payload, status, proposal_id, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            (aid, task_id, None, "proposal:builder",
+             json.dumps({"proposal_id": prop_id}), "approved", prop_id, now),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    snap = freeze_snapshot(prop_id)
+    req = create_execution_request(snap["id"])
+
+    global _confirmed_request_id
+    _confirmed_request_id = req["id"]
+
+    result = update_execution_request_status(req["id"], "confirmed")
+    check("Result status is 'confirmed'", result["status"] == "confirmed")
+    check("updated_at changed", result["updated_at"] != result["created_at"])
+
+
+# ── Section 16: Status change — reject ────────────────────────
+_rejected_request_id: str = ""
+
+
+def section_16_reject():
+    print("\n=== Section 16: requested -> rejected ===")
+    from agents.execution_request_service import (
+        create_execution_request,
+        update_execution_request_status,
+    )
+    from agents.snapshot_service import freeze_snapshot
+    from database import get_connection
+    import uuid as _uuid
+    from datetime import datetime, timezone
+
+    status, proj = POST("/projects", {"name": f"6ED-reject-{os.getpid()}", "local_repo_path": "/tmp/6ed-reject"})
+    _, task = POST(f"/projects/{proj['id']}/tasks", {"title": "6ED reject test"})
+    task_id = task["id"]
+    POST(f"/tasks/{task_id}/orchestrate", {"roles": ["builder"]})
+    _, props = GET(f"/tasks/{task_id}/proposals")
+    proposals = props.get("proposals", [])
+    if not proposals:
+        check("Has proposal for reject test", False)
+        return
+    prop_id = proposals[0]["id"]
+
+    conn = get_connection()
+    try:
+        conn.execute("UPDATE execution_proposals SET status = 'approved' WHERE id = ?", (prop_id,))
+        aid = str(_uuid.uuid4())
+        now = datetime.now(timezone.utc).isoformat()
+        conn.execute(
+            """INSERT INTO approval_requests
+               (id, task_id, run_id, action_type, action_payload, status, proposal_id, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            (aid, task_id, None, "proposal:builder",
+             json.dumps({"proposal_id": prop_id}), "approved", prop_id, now),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    snap = freeze_snapshot(prop_id)
+    req = create_execution_request(snap["id"])
+
+    global _rejected_request_id
+    _rejected_request_id = req["id"]
+
+    result = update_execution_request_status(req["id"], "rejected", reason="Risk too high")
+    check("Result status is 'rejected'", result["status"] == "rejected")
+    check("updated_at changed", result["updated_at"] != result["created_at"])
+
+
+# ── Section 17: Terminal states are immutable ──────────────────
+def section_17_terminal():
+    print("\n=== Section 17: Terminal states cannot change ===")
+    from agents.execution_request_service import update_execution_request_status
+
+    # confirmed -> confirmed
+    try:
+        update_execution_request_status(_confirmed_request_id, "confirmed")
+        check("confirmed -> confirmed blocked", False)
+    except ValueError as e:
+        check("confirmed -> confirmed blocked", True)
+        check("Error mentions transition", "cannot transition" in str(e).lower())
+
+    # confirmed -> rejected
+    try:
+        update_execution_request_status(_confirmed_request_id, "rejected")
+        check("confirmed -> rejected blocked", False)
+    except ValueError as e:
+        check("confirmed -> rejected blocked", True)
+
+    # rejected -> confirmed
+    try:
+        update_execution_request_status(_rejected_request_id, "confirmed")
+        check("rejected -> confirmed blocked", False)
+    except ValueError as e:
+        check("rejected -> confirmed blocked", True)
+
+    # rejected -> rejected
+    try:
+        update_execution_request_status(_rejected_request_id, "rejected")
+        check("rejected -> rejected blocked", False)
+    except ValueError as e:
+        check("rejected -> rejected blocked", True)
+
+
+# ── Section 18: Invalid status value rejected ──────────────────
+def section_18_invalid_status():
+    print("\n=== Section 18: Invalid status values rejected ===")
+    from agents.execution_request_service import update_execution_request_status
+
+    for bad in ["queued", "completed", "failed", "running", ""]:
+        try:
+            update_execution_request_status(_confirmed_request_id, bad)
+            check(f"Invalid status '{bad}' rejected", False)
+        except ValueError:
+            check(f"Invalid status '{bad}' rejected", True)
+
+
+# ── Section 19: Audit logs for status changes ──────────────────
+def section_19_status_audit():
+    print("\n=== Section 19: Audit logs for status changes ===")
+    from database import get_connection
+
+    conn = get_connection()
+    try:
+        logs = conn.execute(
+            """SELECT payload FROM log_events
+               WHERE source = 'execution_request_service'
+               ORDER BY created_at""",
+        ).fetchall()
+
+        status_change_logs = []
+        for (payload_str,) in logs:
+            p = json.loads(payload_str)
+            if p.get("event_type") == "execution_request:status_change":
+                status_change_logs.append(p)
+
+        check("At least 2 status_change audit logs", len(status_change_logs) >= 2)
+
+        # Find the confirmed one
+        confirm_log = next(
+            (l for l in status_change_logs if l.get("new_status") == "confirmed"), None
+        )
+        check("Confirm log exists", confirm_log is not None)
+        if confirm_log:
+            check("Confirm log has old_status='requested'", confirm_log.get("old_status") == "requested")
+            check("Confirm log has request_id", len(confirm_log.get("request_id", "")) > 0)
+            check("Confirm log has snapshot_id", len(confirm_log.get("snapshot_id", "")) > 0)
+
+        # Find the rejected one (with reason)
+        reject_log = next(
+            (l for l in status_change_logs if l.get("new_status") == "rejected"), None
+        )
+        check("Reject log exists", reject_log is not None)
+        if reject_log:
+            check("Reject log has old_status='requested'", reject_log.get("old_status") == "requested")
+            check("Reject log has reason", reject_log.get("reason") == "Risk too high")
+    finally:
+        conn.close()
+
+
 # ── Main ──────────────────────────────────────────────────────
 if __name__ == "__main__":
     section_1_migration()
@@ -500,8 +711,14 @@ if __name__ == "__main__":
     section_11_api_create()
     section_12_api_get()
     section_13_api_get_by_snapshot()
+    section_14_status_not_found()
+    section_15_confirm()
+    section_16_reject()
+    section_17_terminal()
+    section_18_invalid_status()
+    section_19_status_audit()
 
     print(f"\n{'=' * 60}")
-    print(f"Phase 6E-C acceptance: {PASS} passed, {FAIL} failed")
+    print(f"Phase 6E-C/D acceptance: {PASS} passed, {FAIL} failed")
     print(f"{'=' * 60}")
     sys.exit(1 if FAIL else 0)
