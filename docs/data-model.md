@@ -132,6 +132,8 @@ Valid transitions:
 | POST | /api/snapshots/:id/request-execution | Create execution request |
 | GET | /api/execution-requests/:id | Get single execution request |
 | PATCH | /api/execution-requests/:id | Confirm or reject execution request |
+| POST | /api/execution-requests/:id/dry-run | Trigger dry-run execution (idempotent) |
+| GET | /api/execution-requests/:id/dry-run | Read dry-run result |
 
 ## Execution Pipeline (Phase 6E)
 
@@ -224,7 +226,7 @@ Each event has 8 top-level fields:
 | Field | Type | Description |
 |-------|------|-------------|
 | event_type | string | e.g. `proposal:created`, `approval:decided` |
-| object_type | string | proposal / approval / snapshot / execution_request |
+| object_type | string | proposal / approval / snapshot / execution_request / execution_result |
 | object_id | UUID | ID of the source object |
 | status | string | Current status of the object |
 | timestamp | datetime | When the event occurred |
@@ -233,7 +235,75 @@ Each event has 8 top-level fields:
 | detail | dict | Supplementary data (not required by UI) |
 
 Event types: `proposal:created`, `approval:decided`, `snapshot:frozen`,
-`execution_request:created`, `execution_request:finalized`.
+`execution_request:created`, `execution_request:finalized`,
+`execution_result:completed`, `execution_result:failed`.
 
 Sort: timestamp ASC, then fixed event order for tie-breaking.
 Only decided approvals included (pending filtered out).
+Only completed/failed execution results included (pending/running filtered out).
+
+## Dry-Run Execution (Phase 6F)
+
+### Object Chain (extended)
+
+```
+task
+ └─ execution_proposal   (Builder output, structured plan)
+      └─ approval_request (human decision: approved / rejected)
+           └─ execution_snapshot  (frozen immutable copy, SHA-256 hash)
+                └─ execution_request  (execution intent record)
+                     └─ confirmed / rejected  (terminal, irreversible)
+                          └─ execution_result  (dry-run simulation output)
+```
+
+### ExecutionResult
+
+Records the outcome of a dry-run execution against a confirmed execution request.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| id | UUID | Primary key |
+| execution_request_id | UUID | FK → ExecutionRequest (UNIQUE) |
+| task_id | UUID | FK → Task |
+| snapshot_id | UUID | FK → ExecutionSnapshot |
+| snapshot_content_hash | string | Copied from snapshot at creation (tamper detection) |
+| status | enum | pending/running/completed/failed |
+| result_data | JSON string | Structured dry-run output (see below) |
+| started_at | datetime? | When execution began |
+| completed_at | datetime? | When execution finished |
+| created_at | datetime | Creation timestamp |
+
+**result_data structure:**
+
+```json
+{
+  "mode": "dry_run",
+  "summary": "Dry-run completed: 2 file action(s), 1 command action(s)",
+  "planned_file_actions": [
+    {"path": "src/foo.py", "action": "create", "status": "simulated"}
+  ],
+  "planned_command_actions": [
+    {"command": "npm install", "working_dir": "/tmp/proj", "status": "simulated"}
+  ],
+  "warnings": [],
+  "snapshot_content_hash": "sha256..."
+}
+```
+
+**Idempotency**: One execution request can have at most one result (UNIQUE constraint).
+Repeat POST returns 200 with existing result. POST on non-confirmed request returns 409.
+
+### Dry-Run API Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | /api/execution-requests/:id/dry-run | Trigger dry-run (idempotent, 200/409) |
+| GET | /api/execution-requests/:id/dry-run | Read dry-run result (200/404) |
+
+### Dry-Run Semantics
+
+- **dry-run ≠ real execution**: No files are written, no commands are run, no git operations occur.
+- Only `confirmed` execution requests can trigger a dry-run (409 otherwise).
+- The dry-run service reads the frozen snapshot, iterates proposed file actions and command actions, and marks each as `simulated`.
+- `snapshot_content_hash` is verified at execution time for tamper detection.
+- Warnings are generated for potentially risky operations (e.g., delete, force push).
