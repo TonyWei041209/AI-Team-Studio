@@ -12,6 +12,7 @@ POST /api/snapshots/{snapshot_id}/request-execution  Create execution request
 GET  /api/execution-requests/{request_id}        Get single execution request
 PATCH /api/execution-requests/{request_id}       Confirm or reject execution request
 POST /api/execution-requests/{request_id}/dry-run  Dry-run execution (Phase 6F-A)
+GET  /api/execution-requests/{request_id}/dry-run   Read existing dry-run result (Phase 6F-B)
 """
 
 import json
@@ -577,3 +578,50 @@ async def dry_run_execution(request_id: str):
             result["result_data"] = {}
 
     return result
+
+
+def _parse_result_data(row: dict) -> dict:
+    """Parse result_data JSON string to object in-place and return."""
+    rd = row.get("result_data", "{}")
+    if isinstance(rd, str):
+        try:
+            row["result_data"] = json.loads(rd)
+        except (json.JSONDecodeError, TypeError):
+            row["result_data"] = {}
+    return row
+
+
+@router.get("/execution-requests/{request_id}/dry-run")
+async def get_dry_run_result(request_id: str):
+    """Read an existing dry-run result for an execution request.
+
+    Returns 200 with the execution result if it exists.
+    Returns 404 if the execution request or its dry-run result is not found.
+    """
+    conn = get_connection()
+    try:
+        # Check execution request exists
+        req_row = conn.execute(
+            "SELECT id FROM execution_requests WHERE id = ?",
+            (request_id,),
+        ).fetchone()
+        if not req_row:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Execution request not found: {request_id}",
+            )
+
+        # Fetch dry-run result
+        row = conn.execute(
+            "SELECT * FROM execution_results WHERE execution_request_id = ?",
+            (request_id,),
+        ).fetchone()
+        if not row:
+            raise HTTPException(
+                status_code=404,
+                detail=f"No dry-run result for execution request: {request_id}",
+            )
+
+        return _parse_result_data(dict(row))
+    finally:
+        conn.close()

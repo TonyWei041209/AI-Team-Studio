@@ -215,12 +215,49 @@ check("same status on repeat", result2.get("status") == result.get("status"))
 
 
 # ══════════════════════════════════════════════════════════════════
+# Section 5: GET dry-run — request not found -> 404
+# ══════════════════════════════════════════════════════════════════
+print("\n[S5]  GET dry-run: request not found -> 404")
+s, body = GET("/execution-requests/nonexistent-read-xyz/dry-run")
+check("GET 404 on missing request", s == 404, f"got {s}")
+
+
+# ══════════════════════════════════════════════════════════════════
+# Section 6: GET dry-run — request exists but no result -> 404
+# ══════════════════════════════════════════════════════════════════
+print("\n[S6]  GET dry-run: no result yet -> 404")
+# ids_requested was created in S2 — request exists but never had dry-run
+s, body = GET(f"/execution-requests/{ids_requested['request_id']}/dry-run")
+check("GET 404 on no result", s == 404, f"got {s}")
+
+
+# ══════════════════════════════════════════════════════════════════
+# Section 7: GET dry-run — result exists -> 200
+# ══════════════════════════════════════════════════════════════════
+print("\n[S7]  GET dry-run: result exists -> 200")
+# ids was created in S3 and had dry-run executed
+s, read_result = GET(f"/execution-requests/{ids['request_id']}/dry-run")
+check("GET 200 on existing result", s == 200, f"got {s}")
+check("GET id matches POST id", read_result.get("id") == result.get("id"))
+check("GET execution_request_id", read_result.get("execution_request_id") == ids["request_id"])
+check("GET task_id", read_result.get("task_id") == ids["task_id"])
+check("GET snapshot_id", read_result.get("snapshot_id") == ids["snapshot_id"])
+check("GET snapshot_content_hash", bool(read_result.get("snapshot_content_hash")))
+check("GET status", read_result.get("status") == "completed")
+check("GET has created_at", bool(read_result.get("created_at")))
+
+rd_get = read_result.get("result_data", {})
+check("GET result_data is dict", isinstance(rd_get, dict), f"type={type(rd_get).__name__}")
+check("GET result_data.mode", rd_get.get("mode") == "dry_run")
+
+
+# ══════════════════════════════════════════════════════════════════
 # Summary
 # ══════════════════════════════════════════════════════════════════
 total = PASS + FAIL
 print()
 print("-" * 60)
-print(f"  6F-A API: {total} checks  Pass: {PASS}  Fail: {FAIL}")
+print(f"  6F-A/B API: {total} checks  Pass: {PASS}  Fail: {FAIL}")
 print("-" * 60)
 
 if FAIL:
