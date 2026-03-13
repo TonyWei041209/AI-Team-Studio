@@ -9,6 +9,7 @@ GET  /api/snapshots/{snapshot_id}                Get single snapshot
 GET  /api/snapshots/{snapshot_id}/execution-request   Get execution request for snapshot
 POST /api/snapshots/{snapshot_id}/request-execution  Create execution request
 GET  /api/execution-requests/{request_id}        Get single execution request
+PATCH /api/execution-requests/{request_id}       Confirm or reject execution request
 """
 
 import json
@@ -342,3 +343,30 @@ async def get_execution_request(request_id: str):
         return dict(row)
     finally:
         conn.close()
+
+
+class _StatusUpdate(BaseModel):
+    status: str
+    reason: Optional[str] = None
+
+
+@router.patch("/execution-requests/{request_id}")
+async def update_execution_request(request_id: str, body: _StatusUpdate):
+    """Confirm or reject an execution request."""
+    from agents.execution_request_service import update_execution_request_status
+
+    try:
+        result = update_execution_request_status(
+            request_id, body.status, reason=body.reason
+        )
+    except ValueError as e:
+        msg = str(e).lower()
+        if "not found" in msg:
+            raise HTTPException(status_code=404, detail=str(e))
+        elif "cannot transition" in msg:
+            raise HTTPException(status_code=409, detail=str(e))
+        elif "invalid status" in msg:
+            raise HTTPException(status_code=400, detail=str(e))
+        else:
+            raise HTTPException(status_code=400, detail=str(e))
+    return result

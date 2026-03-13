@@ -84,6 +84,10 @@ def POST(path: str, body: Any = None):
     return _req("POST", path, body)
 
 
+def PATCH(path: str, body: Any = None):
+    return _req("PATCH", path, body)
+
+
 def check(name: str, condition: bool, detail: str = ""):
     global PASS, FAIL
     if condition:
@@ -696,6 +700,98 @@ def section_19_status_audit():
         conn.close()
 
 
+# ── Section 20: API PATCH — confirm via API ───────────────────
+def _make_api_request_chain():
+    """Helper: create a full chain and return (snapshot_id, request_id)."""
+    from database import get_connection
+    import uuid as _uuid
+    from datetime import datetime, timezone
+
+    status, proj = POST("/projects", {"name": f"6ED-api-{os.getpid()}-{_uuid.uuid4().hex[:6]}", "local_repo_path": f"/tmp/6ed-api-{_uuid.uuid4().hex[:6]}"})
+    _, task = POST(f"/projects/{proj['id']}/tasks", {"title": "6ED API chain"})
+    task_id = task["id"]
+    POST(f"/tasks/{task_id}/orchestrate", {"roles": ["builder"]})
+    _, props = GET(f"/tasks/{task_id}/proposals")
+    proposals = props.get("proposals", [])
+    if not proposals:
+        return None, None
+    prop_id = proposals[0]["id"]
+
+    conn = get_connection()
+    try:
+        conn.execute("UPDATE execution_proposals SET status = 'approved' WHERE id = ?", (prop_id,))
+        aid = str(_uuid.uuid4())
+        now = datetime.now(timezone.utc).isoformat()
+        conn.execute(
+            """INSERT INTO approval_requests
+               (id, task_id, run_id, action_type, action_payload, status, proposal_id, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            (aid, task_id, None, "proposal:builder",
+             json.dumps({"proposal_id": prop_id}), "approved", prop_id, now),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    _, snap = POST(f"/proposals/{prop_id}/freeze")
+    snap_id = snap.get("id", "")
+    _, req = POST(f"/snapshots/{snap_id}/request-execution")
+    return snap_id, req.get("id", "")
+
+
+def section_20_api_confirm():
+    print("\n=== Section 20: API PATCH confirm ===")
+    _, req_id = _make_api_request_chain()
+    if not req_id:
+        check("Has request for API confirm test", False)
+        return
+
+    # Not found
+    status, _ = PATCH("/execution-requests/nonexistent", {"status": "confirmed"})
+    check("PATCH nonexistent -> 404", status == 404)
+
+    # Confirm
+    status, result = PATCH(f"/execution-requests/{req_id}", {"status": "confirmed"})
+    check("PATCH confirm -> 200", status == 200)
+    check("Result status is 'confirmed'", result.get("status") == "confirmed")
+
+    # Terminal: try again
+    status2, _ = PATCH(f"/execution-requests/{req_id}", {"status": "rejected"})
+    check("PATCH after confirmed -> 409", status2 == 409)
+
+
+# ── Section 21: API PATCH — reject via API ────────────────────
+def section_21_api_reject():
+    print("\n=== Section 21: API PATCH reject ===")
+    _, req_id = _make_api_request_chain()
+    if not req_id:
+        check("Has request for API reject test", False)
+        return
+
+    status, result = PATCH(f"/execution-requests/{req_id}", {"status": "rejected", "reason": "Not ready"})
+    check("PATCH reject -> 200", status == 200)
+    check("Result status is 'rejected'", result.get("status") == "rejected")
+
+    # Terminal
+    status2, _ = PATCH(f"/execution-requests/{req_id}", {"status": "confirmed"})
+    check("PATCH after rejected -> 409", status2 == 409)
+
+
+# ── Section 22: API PATCH — invalid status ────────────────────
+def section_22_api_invalid():
+    print("\n=== Section 22: API PATCH invalid status ===")
+    _, req_id = _make_api_request_chain()
+    if not req_id:
+        check("Has request for invalid status test", False)
+        return
+
+    status, _ = PATCH(f"/execution-requests/{req_id}", {"status": "queued"})
+    check("PATCH invalid status 'queued' -> 400", status == 400)
+
+    status2, _ = PATCH(f"/execution-requests/{req_id}", {"status": "completed"})
+    check("PATCH invalid status 'completed' -> 400", status2 == 400)
+
+
 # ── Main ──────────────────────────────────────────────────────
 if __name__ == "__main__":
     section_1_migration()
@@ -717,6 +813,9 @@ if __name__ == "__main__":
     section_17_terminal()
     section_18_invalid_status()
     section_19_status_audit()
+    section_20_api_confirm()
+    section_21_api_reject()
+    section_22_api_invalid()
 
     print(f"\n{'=' * 60}")
     print(f"Phase 6E-C/D acceptance: {PASS} passed, {FAIL} failed")
