@@ -4,6 +4,11 @@ POST /api/tasks/{task_id}/orchestrate           Start the full pipeline
 GET  /api/tasks/{task_id}/orchestration-status   Inspect current state
 GET  /api/tasks/{task_id}/proposals              List execution proposals
 GET  /api/proposals/{proposal_id}                Get single proposal
+POST /api/proposals/{proposal_id}/freeze         Freeze approved proposal
+GET  /api/snapshots/{snapshot_id}                Get single snapshot
+GET  /api/snapshots/{snapshot_id}/execution-request   Get execution request for snapshot
+POST /api/snapshots/{snapshot_id}/request-execution  Create execution request
+GET  /api/execution-requests/{request_id}        Get single execution request
 """
 
 import json
@@ -280,5 +285,60 @@ async def get_snapshot(snapshot_id: str):
         except (json.JSONDecodeError, TypeError):
             s["snapshot_data_parsed"] = {}
         return s
+    finally:
+        conn.close()
+
+
+@router.get("/snapshots/{snapshot_id}/execution-request")
+async def get_snapshot_execution_request(snapshot_id: str):
+    """Get the execution request linked to a snapshot, if any."""
+    conn = get_connection()
+    try:
+        row = conn.execute(
+            "SELECT * FROM execution_requests WHERE snapshot_id = ?",
+            (snapshot_id,),
+        ).fetchone()
+        if not row:
+            raise HTTPException(
+                status_code=404,
+                detail="No execution request for this snapshot",
+            )
+        return dict(row)
+    finally:
+        conn.close()
+
+
+@router.post("/snapshots/{snapshot_id}/request-execution", status_code=201)
+async def request_execution(snapshot_id: str):
+    """Create an execution request for a frozen snapshot."""
+    from agents.execution_request_service import create_execution_request
+
+    try:
+        result = create_execution_request(snapshot_id)
+    except ValueError as e:
+        msg = str(e).lower()
+        if "not found" in msg:
+            raise HTTPException(status_code=404, detail=str(e))
+        elif "not frozen" in msg:
+            raise HTTPException(status_code=409, detail=str(e))
+        else:
+            raise HTTPException(status_code=400, detail=str(e))
+    return result
+
+
+@router.get("/execution-requests/{request_id}")
+async def get_execution_request(request_id: str):
+    """Get a single execution request by ID."""
+    conn = get_connection()
+    try:
+        row = conn.execute(
+            "SELECT * FROM execution_requests WHERE id = ?",
+            (request_id,),
+        ).fetchone()
+        if not row:
+            raise HTTPException(
+                status_code=404, detail="Execution request not found"
+            )
+        return dict(row)
     finally:
         conn.close()

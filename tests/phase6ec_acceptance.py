@@ -348,6 +348,143 @@ def section_10_traceability():
         conn.close()
 
 
+# ── Section 11: API - POST request-execution ─────────────────
+def section_11_api_create():
+    print("\n=== Section 11: API POST /snapshots/{id}/request-execution ===")
+
+    # Create a fresh snapshot for API testing
+    status, proj = POST("/projects", {"name": f"6EC-api-{os.getpid()}", "local_repo_path": "/tmp/6ec-api"})
+    api_proj_id = proj.get("id", "")
+    status, task = POST(f"/projects/{api_proj_id}/tasks", {"title": "6EC API test"})
+    api_task_id = task.get("id", "")
+    POST(f"/tasks/{api_task_id}/orchestrate", {"roles": ["builder"]})
+    _, props = GET(f"/tasks/{api_task_id}/proposals")
+    proposals = props.get("proposals", [])
+    if not proposals:
+        check("API test has proposal", False, "No proposals")
+        return
+    api_proposal_id = proposals[0]["id"]
+
+    # Approve and freeze
+    from database import get_connection
+    import uuid as _uuid
+    from datetime import datetime, timezone
+    conn = get_connection()
+    try:
+        conn.execute("UPDATE execution_proposals SET status = 'approved' WHERE id = ?", (api_proposal_id,))
+        _aid = str(_uuid.uuid4())
+        _now = datetime.now(timezone.utc).isoformat()
+        conn.execute(
+            """INSERT INTO approval_requests
+               (id, task_id, run_id, action_type, action_payload, status, proposal_id, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            (_aid, api_task_id, None, "proposal:builder",
+             json.dumps({"proposal_id": api_proposal_id}), "approved", api_proposal_id, _now),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    status, snap = POST(f"/proposals/{api_proposal_id}/freeze")
+    check("Freeze -> 201", status == 201)
+    api_snapshot_id = snap.get("id", "")
+
+    # Nonexistent snapshot -> 404
+    status, _ = POST("/snapshots/nonexistent-id/request-execution")
+    check("Request nonexistent snapshot -> 404", status == 404)
+
+    # Request execution on frozen snapshot -> 201
+    status, req = POST(f"/snapshots/{api_snapshot_id}/request-execution")
+    check("Request execution -> 201", status == 201)
+    check("Response has id", "id" in req)
+    check("Response has snapshot_id", req.get("snapshot_id") == api_snapshot_id)
+    check("Response status is 'requested'", req.get("status") == "requested")
+    check("Response has snapshot_content_hash", len(req.get("snapshot_content_hash", "")) == 64)
+
+    # Idempotent re-request -> still 201
+    status2, req2 = POST(f"/snapshots/{api_snapshot_id}/request-execution")
+    check("Re-request -> 201", status2 == 201)
+    check("Re-request returns same id", req2.get("id") == req.get("id"))
+
+    # Store for later sections
+    global _api_request_id, _api_snapshot_id_global
+    _api_request_id = req.get("id", "")
+    _api_snapshot_id_global = api_snapshot_id
+
+
+_api_request_id: str = ""
+_api_snapshot_id_global: str = ""
+
+
+# ── Section 12: API - GET execution-request ───────────────────
+def section_12_api_get():
+    print("\n=== Section 12: API GET /execution-requests/{id} ===")
+
+    status, req = GET(f"/execution-requests/{_api_request_id}")
+    check("GET request -> 200", status == 200)
+    check("Response has id", req.get("id") == _api_request_id)
+    check("Response has snapshot_id", len(req.get("snapshot_id", "")) > 0)
+    check("Response has snapshot_content_hash", len(req.get("snapshot_content_hash", "")) == 64)
+    check("Response status is 'requested'", req.get("status") == "requested")
+
+    # Nonexistent -> 404
+    status, _ = GET("/execution-requests/nonexistent-id")
+    check("GET nonexistent request -> 404", status == 404)
+
+
+# ── Section 13: API - GET snapshot execution-request ──────────
+def section_13_api_get_by_snapshot():
+    print("\n=== Section 13: API GET /snapshots/{id}/execution-request ===")
+
+    # Snapshot that has a request -> 200
+    status, req = GET(f"/snapshots/{_api_snapshot_id_global}/execution-request")
+    check("GET by snapshot -> 200", status == 200)
+    check("Response has id", req.get("id") == _api_request_id)
+    check("Response has snapshot_id", req.get("snapshot_id") == _api_snapshot_id_global)
+    check("Response status is 'requested'", req.get("status") == "requested")
+
+    # Snapshot with no request -> 404
+    # Use a fake snapshot id that doesn't exist in execution_requests
+    status, _ = GET("/snapshots/nonexistent-snapshot/execution-request")
+    check("Snapshot with no request -> 404", status == 404)
+
+    # Use a real snapshot that has no request (create a fresh one)
+    status2, proj2 = POST("/projects", {"name": f"6EC-s13-{os.getpid()}", "local_repo_path": "/tmp/6ec-s13"})
+    proj2_id = proj2.get("id", "")
+    _, task2 = POST(f"/projects/{proj2_id}/tasks", {"title": "6EC s13 no-req"})
+    task2_id = task2.get("id", "")
+    POST(f"/tasks/{task2_id}/orchestrate", {"roles": ["builder"]})
+    _, props2 = GET(f"/tasks/{task2_id}/proposals")
+    proposals2 = props2.get("proposals", [])
+    if proposals2:
+        prop2_id = proposals2[0]["id"]
+        # Approve + freeze but do NOT create execution request
+        from database import get_connection
+        import uuid as _uuid
+        from datetime import datetime, timezone
+        conn = get_connection()
+        try:
+            conn.execute("UPDATE execution_proposals SET status = 'approved' WHERE id = ?", (prop2_id,))
+            _aid2 = str(_uuid.uuid4())
+            _now2 = datetime.now(timezone.utc).isoformat()
+            conn.execute(
+                """INSERT INTO approval_requests
+                   (id, task_id, run_id, action_type, action_payload, status, proposal_id, created_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                (_aid2, task2_id, None, "proposal:builder",
+                 json.dumps({"proposal_id": prop2_id}), "approved", prop2_id, _now2),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+        _, snap2 = POST(f"/proposals/{prop2_id}/freeze")
+        snap2_id = snap2.get("id", "")
+        status3, _ = GET(f"/snapshots/{snap2_id}/execution-request")
+        check("Real snapshot with no request -> 404", status3 == 404)
+    else:
+        check("Real snapshot with no request -> 404", False, "No proposals for test")
+
+
 # ── Main ──────────────────────────────────────────────────────
 if __name__ == "__main__":
     section_1_migration()
@@ -360,6 +497,9 @@ if __name__ == "__main__":
     section_8_timestamps()
     section_9_audit()
     section_10_traceability()
+    section_11_api_create()
+    section_12_api_get()
+    section_13_api_get_by_snapshot()
 
     print(f"\n{'=' * 60}")
     print(f"Phase 6E-C acceptance: {PASS} passed, {FAIL} failed")
