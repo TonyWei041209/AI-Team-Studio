@@ -3,6 +3,7 @@
 POST /api/tasks/{task_id}/orchestrate           Start the full pipeline
 GET  /api/tasks/{task_id}/orchestration-status   Inspect current state
 GET  /api/tasks/{task_id}/proposals              List execution proposals
+GET  /api/tasks/{task_id}/audit-trail            Aggregated audit timeline
 GET  /api/proposals/{proposal_id}                Get single proposal
 POST /api/proposals/{proposal_id}/freeze         Freeze approved proposal
 GET  /api/snapshots/{snapshot_id}                Get single snapshot
@@ -163,6 +164,180 @@ async def get_orchestration_status(task_id: str):
         }
     finally:
         conn.close()
+
+
+# ── Audit trail (Phase 6E-E) ───────────────────────────────────
+
+# Fixed event order for stable sorting when timestamps are equal.
+_EVENT_ORDER: dict[str, int] = {
+    "proposal:created": 0,
+    "approval:decided": 1,
+    "snapshot:frozen": 2,
+    "execution_request:created": 3,
+    "execution_request:finalized": 4,
+}
+
+
+def _build_task_audit_trail(task_id: str) -> list[dict]:
+    """Aggregate the full object chain for a task into a timeline.
+
+    Collects events from: execution_proposals, approval_requests,
+    execution_snapshots, execution_requests.
+
+    Each event has top-level fields consumable by Step 2 UI:
+      event_type, object_type, object_id, status, timestamp,
+      summary, related_ids, detail (supplementary).
+
+    Sort: timestamp ASC, then _EVENT_ORDER for tie-breaking.
+    Only includes approvals with decided status (approved/rejected).
+    """
+    conn = get_connection()
+    try:
+        events: list[dict] = []
+
+        # ── Proposals ──
+        rows = conn.execute(
+            "SELECT * FROM execution_proposals WHERE task_id = ?",
+            (task_id,),
+        ).fetchall()
+        for r in rows:
+            d = dict(r)
+            events.append({
+                "event_type": "proposal:created",
+                "object_type": "proposal",
+                "object_id": d["id"],
+                "status": d["status"],
+                "timestamp": d["created_at"],
+                "summary": f"Proposal created (risk={d['risk_level']})",
+                "related_ids": {"task_id": task_id},
+                "detail": {
+                    "role": d.get("role", "builder"),
+                    "risk_level": d["risk_level"],
+                },
+            })
+
+        # ── Approvals (only decided: approved / rejected) ──
+        rows = conn.execute(
+            """SELECT * FROM approval_requests
+               WHERE task_id = ? AND status IN ('approved', 'rejected')""",
+            (task_id,),
+        ).fetchall()
+        for r in rows:
+            d = dict(r)
+            ts = d.get("resolved_at") or d["created_at"]
+            events.append({
+                "event_type": "approval:decided",
+                "object_type": "approval",
+                "object_id": d["id"],
+                "status": d["status"],
+                "timestamp": ts,
+                "summary": f"Approval {d['status']}",
+                "related_ids": {
+                    "task_id": task_id,
+                    "proposal_id": d.get("proposal_id", ""),
+                },
+                "detail": {
+                    "action_type": d.get("action_type", ""),
+                    "reviewer_comment": d.get("reviewer_comment", ""),
+                },
+            })
+
+        # ── Snapshots ──
+        rows = conn.execute(
+            "SELECT * FROM execution_snapshots WHERE task_id = ?",
+            (task_id,),
+        ).fetchall()
+        for r in rows:
+            d = dict(r)
+            events.append({
+                "event_type": "snapshot:frozen",
+                "object_type": "snapshot",
+                "object_id": d["id"],
+                "status": d["status"],
+                "timestamp": d["created_at"],
+                "summary": f"Snapshot frozen (hash={d['content_hash'][:8]})",
+                "related_ids": {
+                    "task_id": task_id,
+                    "proposal_id": d["proposal_id"],
+                    "approval_id": d["approval_id"],
+                },
+                "detail": {
+                    "content_hash": d["content_hash"],
+                    "risk_level": d["risk_level"],
+                },
+            })
+
+        # ── Execution requests ──
+        rows = conn.execute(
+            "SELECT * FROM execution_requests WHERE task_id = ?",
+            (task_id,),
+        ).fetchall()
+        for r in rows:
+            d = dict(r)
+            # creation event
+            events.append({
+                "event_type": "execution_request:created",
+                "object_type": "execution_request",
+                "object_id": d["id"],
+                "status": "requested",
+                "timestamp": d["created_at"],
+                "summary": f"Execution request created (risk={d['risk_level']})",
+                "related_ids": {
+                    "task_id": task_id,
+                    "snapshot_id": d["snapshot_id"],
+                    "proposal_id": d["proposal_id"],
+                    "approval_id": d["approval_id"],
+                },
+                "detail": {
+                    "snapshot_content_hash": d["snapshot_content_hash"],
+                    "risk_level": d["risk_level"],
+                },
+            })
+            # finalized event (only if terminal)
+            if d["status"] in ("confirmed", "rejected"):
+                events.append({
+                    "event_type": "execution_request:finalized",
+                    "object_type": "execution_request",
+                    "object_id": d["id"],
+                    "status": d["status"],
+                    "timestamp": d["updated_at"],
+                    "summary": f"Execution request {d['status']}",
+                    "related_ids": {
+                        "task_id": task_id,
+                        "snapshot_id": d["snapshot_id"],
+                    },
+                    "detail": {
+                        "old_status": "requested",
+                        "new_status": d["status"],
+                    },
+                })
+
+        # Stable sort: timestamp ASC, then fixed event order
+        events.sort(key=lambda e: (
+            e["timestamp"],
+            _EVENT_ORDER.get(e["event_type"], 99),
+        ))
+
+        return events
+    finally:
+        conn.close()
+
+
+@router.get("/tasks/{task_id}/audit-trail")
+async def get_task_audit_trail(task_id: str):
+    """Aggregated audit timeline for a task's execution pipeline."""
+    conn = get_connection()
+    try:
+        task = conn.execute(
+            "SELECT id FROM tasks WHERE id = ?", (task_id,),
+        ).fetchone()
+        if not task:
+            raise HTTPException(status_code=404, detail="Task not found")
+    finally:
+        conn.close()
+
+    events = _build_task_audit_trail(task_id)
+    return {"task_id": task_id, "events": events, "count": len(events)}
 
 
 # ── Execution proposals (Phase 6E-A) ───────────────────────────
