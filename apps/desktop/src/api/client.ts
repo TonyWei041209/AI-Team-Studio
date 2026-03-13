@@ -58,4 +58,14 @@ export const api = {
     request<T>(path, { method: "PATCH", body: JSON.stringify(body) }),
   delete: (path: string) =>
     request<void>(path, { method: "DELETE" }),
+
+  /** Try GET; return null on 404 instead of throwing. */
+  getOrNull: async <T>(path: string): Promise<T | null> => {
+    try {
+      return await request<T>(path);
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 404) return null;
+      throw err;
+    }
+  },
 };

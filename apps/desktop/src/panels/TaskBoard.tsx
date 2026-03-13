@@ -59,6 +59,20 @@ interface ExecutionSnapshotResponse {
   created_at: string;
 }
 
+// ── Execution Request types (Phase 6E-C) ────────────────
+interface ExecutionRequestResponse {
+  id: string;
+  task_id: string;
+  proposal_id: string;
+  approval_id: string;
+  snapshot_id: string;
+  snapshot_content_hash: string;
+  risk_level: string;
+  status: string;
+  created_at: string;
+  updated_at: string;
+}
+
 const RISK_COLORS: Record<string, string> = {
   low: "var(--accent-green)",
   medium: "var(--accent-yellow)",
@@ -109,6 +123,11 @@ export function TaskBoard({ projectId }: TaskBoardProps) {
   const [snapshotLoading, setSnapshotLoading] = useState<string | null>(null);
   const [snapshotError, setSnapshotError] = useState<string | null>(null);
 
+  // Execution request (Phase 6E-C) — keyed by snapshot_id
+  const [execRequests, setExecRequests] = useState<Record<string, ExecutionRequestResponse>>({});
+  const [execReqLoading, setExecReqLoading] = useState<string | null>(null);
+  const [execReqError, setExecReqError] = useState<string | null>(null);
+
   const loadProposals = useCallback(async (taskId: string) => {
     setProposalLoading(true);
     try {
@@ -136,8 +155,36 @@ export function TaskBoard({ projectId }: TaskBoardProps) {
     [expandedTask, loadProposals],
   );
 
-  // Snapshot: freeze then fetch (Phase 6E-B)
-  const freezeAndView = useCallback(async (proposalId: string) => {
+  // Execution request: load existing for a snapshot (Phase 6E-C)
+  const loadExecRequest = useCallback(async (snapshotId: string) => {
+    const existing = await api.getOrNull<ExecutionRequestResponse>(
+      `/api/snapshots/${snapshotId}/execution-request`,
+    );
+    if (existing) {
+      setExecRequests((prev) => ({ ...prev, [snapshotId]: existing }));
+    }
+  }, []);
+
+  // Execution request: create (Phase 6E-C)
+  const requestExecution = useCallback(async (snapshotId: string) => {
+    setExecReqLoading(snapshotId);
+    setExecReqError(null);
+    try {
+      const req = await api.post<ExecutionRequestResponse>(
+        `/api/snapshots/${snapshotId}/request-execution`,
+      );
+      setExecRequests((prev) => ({ ...prev, [snapshotId]: req }));
+    } catch (err) {
+      setExecReqError(
+        err instanceof Error ? err.message : "Failed to create execution request",
+      );
+    } finally {
+      setExecReqLoading(null);
+    }
+  }, []);
+
+  // When a snapshot is loaded, also check for existing execution request
+  const freezeAndViewWithReqCheck = useCallback(async (proposalId: string) => {
     setSnapshotLoading(proposalId);
     setSnapshotError(null);
     try {
@@ -145,6 +192,8 @@ export function TaskBoard({ projectId }: TaskBoardProps) {
         `/api/proposals/${proposalId}/freeze`,
       );
       setSnapshots((prev) => ({ ...prev, [proposalId]: snap }));
+      // Also load execution request if one exists
+      await loadExecRequest(snap.id);
     } catch (err) {
       setSnapshotError(
         err instanceof Error ? err.message : "Failed to freeze snapshot",
@@ -152,7 +201,7 @@ export function TaskBoard({ projectId }: TaskBoardProps) {
     } finally {
       setSnapshotLoading(null);
     }
-  }, []);
+  }, [loadExecRequest]);
 
   // Reset form state when project changes
   useEffect(() => {
@@ -165,6 +214,8 @@ export function TaskBoard({ projectId }: TaskBoardProps) {
     setProposals([]);
     setSnapshots({});
     setSnapshotError(null);
+    setExecRequests({});
+    setExecReqError(null);
   }, [projectId]);
 
   if (!projectId) {
@@ -486,7 +537,7 @@ export function TaskBoard({ projectId }: TaskBoardProps) {
                                 <button
                                   className="btn btn-secondary btn-sm"
                                   disabled={snapshotLoading === p.id}
-                                  onClick={() => freezeAndView(p.id)}
+                                  onClick={() => freezeAndViewWithReqCheck(p.id)}
                                 >
                                   {snapshotLoading === p.id
                                     ? "Loading..."
@@ -555,6 +606,66 @@ export function TaskBoard({ projectId }: TaskBoardProps) {
                                     ))}
                                   </div>
                                 )}
+
+                                {/* Execution Request (Phase 6E-C) */}
+                                <div className="exec-request-section">
+                                  {execRequests[s.id] ? (
+                                    <div className="exec-request-card">
+                                      <div className="proposal-label">Execution Request</div>
+                                      <div className="exec-request-meta">
+                                        <span className="exec-request-meta-item">
+                                          <strong>ID:</strong>{" "}
+                                          <code className="snapshot-hash">
+                                            {execRequests[s.id].id.slice(0, 8)}...
+                                          </code>
+                                        </span>
+                                        <span className="exec-request-meta-item">
+                                          <strong>Status:</strong>{" "}
+                                          <span className="exec-request-status">
+                                            {execRequests[s.id].status}
+                                          </span>
+                                        </span>
+                                        <span className="exec-request-meta-item">
+                                          <strong>Risk:</strong>{" "}
+                                          <span style={{ color: RISK_COLORS[execRequests[s.id].risk_level] || "#888" }}>
+                                            {execRequests[s.id].risk_level}
+                                          </span>
+                                        </span>
+                                        <span className="exec-request-meta-item">
+                                          <strong>Created:</strong>{" "}
+                                          {formatDate(execRequests[s.id].created_at)}
+                                        </span>
+                                        <span className="exec-request-meta-item">
+                                          <strong>Hash:</strong>{" "}
+                                          <code className="snapshot-hash">
+                                            {execRequests[s.id].snapshot_content_hash.slice(0, 12)}...
+                                          </code>
+                                        </span>
+                                      </div>
+                                      <div className="exec-request-notice">
+                                        This records an execution intent only. No file, shell, or git operations are performed.
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <div className="exec-request-action">
+                                      <button
+                                        className="btn btn-secondary btn-sm"
+                                        disabled={execReqLoading === s.id}
+                                        onClick={() => requestExecution(s.id)}
+                                      >
+                                        {execReqLoading === s.id
+                                          ? "Requesting..."
+                                          : "Request Execution"}
+                                      </button>
+                                      <span className="exec-request-hint">
+                                        Records execution intent only — does not execute files, shell, or git operations.
+                                      </span>
+                                    </div>
+                                  )}
+                                  {execReqError && execReqLoading === null && (
+                                    <div className="snapshot-error">{execReqError}</div>
+                                  )}
+                                </div>
                               </div>
                             );
                           })()}
