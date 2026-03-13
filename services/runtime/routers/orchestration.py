@@ -18,6 +18,8 @@ GET  /api/execution-requests/{request_id}/dry-run   Read existing dry-run result
 import json
 from typing import Optional
 
+import os
+
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
@@ -732,3 +734,113 @@ async def get_action_plan(request_id: str):
         }
     finally:
         conn.close()
+
+
+@router.post("/execution-requests/{request_id}/execute")
+async def execute_scoped(request_id: str):
+    """Trigger real (scoped) file execution for a confirmed request.
+
+    Pre-conditions checked by API layer:
+    1. Execution request exists → 404
+    2. Status is 'confirmed' → 409
+    3. Project workspace_root exists and is a directory → 422
+    4. Eligibility gate passes → 409 + blocked_reasons
+
+    Execution semantics:
+    - Only file_create / file_modify (Phase 7A)
+    - Fail-fast: first failure stops, no rollback
+    - Idempotent: repeat calls return existing result with is_new=false
+
+    Returns 200 with execution result (status=completed or failed).
+    """
+    from agents.execution_eligibility_service import check_execution_eligibility
+    from agents.scoped_file_executor import execute_scoped_files
+
+    conn = get_connection()
+    try:
+        # 1. Request exists?
+        req_row = conn.execute(
+            "SELECT * FROM execution_requests WHERE id = ?",
+            (request_id,),
+        ).fetchone()
+        if not req_row:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Execution request not found: {request_id}",
+            )
+        req = dict(req_row)
+
+        # 2. Status confirmed?
+        if req["status"] != "confirmed":
+            raise HTTPException(
+                status_code=409,
+                detail=f"Execution request status is '{req['status']}', must be 'confirmed'",
+            )
+
+        # 3. Workspace exists?
+        task_row = conn.execute(
+            "SELECT project_id FROM tasks WHERE id = ?",
+            (req["task_id"],),
+        ).fetchone()
+        if not task_row:
+            raise HTTPException(
+                status_code=409,
+                detail="Task not found for execution request",
+            )
+        proj_row = conn.execute(
+            "SELECT local_repo_path FROM projects WHERE id = ?",
+            (dict(task_row)["project_id"],),
+        ).fetchone()
+        if not proj_row:
+            raise HTTPException(
+                status_code=409,
+                detail="Project not found for execution request",
+            )
+        workspace_root = dict(proj_row)["local_repo_path"]
+        if not workspace_root or not os.path.isdir(workspace_root):
+            raise HTTPException(
+                status_code=422,
+                detail=f"Project workspace_root is not a valid directory: {workspace_root}",
+            )
+    finally:
+        conn.close()
+
+    # 4. Eligibility gate
+    elig = check_execution_eligibility(request_id)
+    if not elig["eligible"]:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "message": "Execution request is not eligible",
+                "blocked_reasons": elig["blocked_reasons"],
+                "summary": elig["summary"],
+            },
+        )
+
+    # Check for existing real_run result (idempotent)
+    conn = get_connection()
+    try:
+        existing_row = conn.execute(
+            "SELECT * FROM execution_results WHERE execution_request_id = ? AND mode = 'real_run'",
+            (request_id,),
+        ).fetchone()
+    finally:
+        conn.close()
+
+    if existing_row:
+        result = _parse_result_data(dict(existing_row))
+        result["is_new"] = False
+        return result
+
+    # Execute
+    try:
+        raw_result = execute_scoped_files(request_id, workspace_root)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=409,
+            detail=str(e),
+        )
+
+    result = _parse_result_data(dict(raw_result))
+    result["is_new"] = True
+    return result
