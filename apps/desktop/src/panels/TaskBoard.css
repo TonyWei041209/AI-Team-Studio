@@ -302,6 +302,133 @@
   background: rgba(244, 67, 54, 0.1);
 }
 
+/* ── Dry-Run Result (Phase 6F-B) ─────────────────────────────── */
+
+.dry-run-section {
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: 1px dashed var(--border-color);
+}
+
+.dry-run-result-card {
+  padding: 8px 10px;
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--accent-blue);
+  border-radius: 6px;
+  font-size: 12px;
+}
+
+.dry-run-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 4px;
+  margin-bottom: 6px;
+}
+
+.dry-run-mode-badge {
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--accent-blue);
+  background: rgba(100, 180, 255, 0.1);
+  padding: 2px 8px;
+  border-radius: 3px;
+  letter-spacing: 0.5px;
+}
+
+.dry-run-status-badge {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.dry-run-ts {
+  font-size: 10px;
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+  margin-left: auto;
+}
+
+.dry-run-summary {
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+}
+
+.dry-run-list-section {
+  margin-top: 4px;
+}
+
+.dry-run-action-item {
+  display: flex;
+  align-items: center;
+  padding: 2px 0;
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+.dry-run-action-status {
+  margin-left: auto;
+  font-size: 9px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  font-family: var(--font-mono);
+}
+
+.dry-run-workdir {
+  font-size: 10px;
+  color: var(--text-muted);
+  margin-left: 6px;
+}
+
+.dry-run-empty {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-style: italic;
+  padding: 2px 0;
+}
+
+.dry-run-warnings {
+  margin-top: 6px;
+  padding: 4px 8px;
+  background: rgba(255, 193, 7, 0.05);
+  border-radius: 4px;
+}
+
+.dry-run-warning-item {
+  font-size: 11px;
+  color: var(--accent-yellow);
+  padding: 1px 0;
+}
+
+.dry-run-loading {
+  font-size: 12px;
+  color: var(--text-muted);
+  padding: 4px 0;
+}
+
+.dry-run-error-section {
+  display: flex;
+  align-items: center;
+  padding: 4px 0;
+}
+
+.dry-run-trigger {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 0;
+}
+
+.dry-run-btn {
+  color: var(--accent-blue);
+  border-color: var(--accent-blue);
+}
+
+.dry-run-btn:hover:not(:disabled) {
+  background: rgba(100, 180, 255, 0.1);
+}
+
 /* ── Audit Trail (Phase 6E-E) ────────────────────────────────── */
 
 .audit-trail-section {

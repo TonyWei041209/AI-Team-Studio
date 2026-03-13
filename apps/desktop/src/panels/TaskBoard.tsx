@@ -73,6 +73,41 @@ interface ExecutionRequestResponse {
   updated_at: string;
 }
 
+// ── Dry-Run Result types (Phase 6F-B) ───────────────────
+interface DryRunFileAction {
+  path: string;
+  action: string;
+  status: string;
+}
+
+interface DryRunCommandAction {
+  command: string;
+  working_dir: string;
+  status: string;
+}
+
+interface DryRunResultData {
+  mode: string;
+  summary: string;
+  planned_file_actions: DryRunFileAction[];
+  planned_command_actions: DryRunCommandAction[];
+  warnings: string[];
+  snapshot_content_hash?: string;
+}
+
+interface DryRunResult {
+  id: string;
+  execution_request_id: string;
+  task_id: string;
+  snapshot_id: string;
+  snapshot_content_hash: string;
+  status: string;
+  result_data: DryRunResultData;
+  started_at: string | null;
+  completed_at: string | null;
+  created_at: string;
+}
+
 // ── Audit Trail types (Phase 6E-E) ──────────────────────
 interface AuditEvent {
   event_type: string;
@@ -193,6 +228,11 @@ export function TaskBoard({ projectId }: TaskBoardProps) {
   const [auditTrailLoading, setAuditTrailLoading] = useState(false);
   const [auditTrailError, setAuditTrailError] = useState<string | null>(null);
 
+  // Dry-run results (Phase 6F-B) — keyed by execution_request_id
+  const [dryRunResults, setDryRunResults] = useState<Record<string, DryRunResult>>({});
+  const [dryRunLoading, setDryRunLoading] = useState<string | null>(null);
+  const [dryRunError, setDryRunError] = useState<string | null>(null);
+
   const loadProposals = useCallback(async (taskId: string) => {
     setProposalLoading(true);
     try {
@@ -227,6 +267,15 @@ export function TaskBoard({ projectId }: TaskBoardProps) {
     );
     if (existing) {
       setExecRequests((prev) => ({ ...prev, [snapshotId]: existing }));
+      // If confirmed, also try loading dry-run result (Phase 6F-B)
+      if (existing.status === "confirmed") {
+        const drResult = await api.getOrNull<DryRunResult>(
+          `/api/execution-requests/${existing.id}/dry-run`,
+        );
+        if (drResult) {
+          setDryRunResults((prev) => ({ ...prev, [existing.id]: drResult }));
+        }
+      }
     }
   }, []);
 
@@ -269,6 +318,42 @@ export function TaskBoard({ projectId }: TaskBoardProps) {
     },
     [],
   );
+
+  // Dry-run: load existing result (Phase 6F-B)
+  const loadDryRunResult = useCallback(async (requestId: string) => {
+    setDryRunLoading(requestId);
+    setDryRunError(null);
+    try {
+      const result = await api.getOrNull<DryRunResult>(
+        `/api/execution-requests/${requestId}/dry-run`,
+      );
+      if (result) {
+        setDryRunResults((prev) => ({ ...prev, [requestId]: result }));
+      }
+    } catch {
+      setDryRunError("Failed to load dry-run result");
+    } finally {
+      setDryRunLoading(null);
+    }
+  }, []);
+
+  // Dry-run: trigger execution (Phase 6F-B)
+  const triggerDryRun = useCallback(async (requestId: string) => {
+    setDryRunLoading(requestId);
+    setDryRunError(null);
+    try {
+      const result = await api.post<DryRunResult>(
+        `/api/execution-requests/${requestId}/dry-run`,
+      );
+      setDryRunResults((prev) => ({ ...prev, [requestId]: result }));
+    } catch (err) {
+      setDryRunError(
+        err instanceof Error ? err.message : "Failed to run dry-run",
+      );
+    } finally {
+      setDryRunLoading(null);
+    }
+  }, []);
 
   // Audit trail: toggle open/close (Phase 6E-E)
   const toggleAuditTrail = useCallback(
@@ -341,6 +426,8 @@ export function TaskBoard({ projectId }: TaskBoardProps) {
     setAuditTrailEvents([]);
     setAuditTrailCount(null);
     setAuditTrailError(null);
+    setDryRunResults({});
+    setDryRunError(null);
   }, [projectId]);
 
   if (!projectId) {
@@ -805,7 +892,7 @@ export function TaskBoard({ projectId }: TaskBoardProps) {
                                     const statusColor = EXEC_REQUEST_STATUS_COLORS[er.status] || "var(--text-muted)";
                                     const isTerminal = er.status === "confirmed" || er.status === "rejected";
                                     const cardBorderColor = isTerminal ? statusColor : "var(--accent-yellow)";
-                                    return (
+                                    return (<>
                                     <div className="exec-request-card" style={{ borderColor: cardBorderColor }}>
                                       <div className="proposal-label">Execution Request</div>
                                       <div className="exec-request-meta">
@@ -860,8 +947,145 @@ export function TaskBoard({ projectId }: TaskBoardProps) {
                                         </div>
                                       )}
                                     </div>
-                                    );
-                                  })() : (
+
+                                    {/* Dry-Run Result (Phase 6F-B) */}
+                                    {er.status === "confirmed" && (() => {
+                                      const dr = dryRunResults[er.id];
+                                      const drLoading = dryRunLoading === er.id;
+                                      return (
+                                        <div className="dry-run-section">
+                                          {dr ? (
+                                            <div className="dry-run-result-card">
+                                              <div className="proposal-label">Dry-Run Result</div>
+                                              <div className="dry-run-meta">
+                                                <span className="dry-run-mode-badge">
+                                                  {dr.result_data.mode?.toUpperCase() || "DRY RUN"}
+                                                </span>
+                                                <span
+                                                  className="dry-run-status-badge"
+                                                  style={{
+                                                    color: dr.status === "completed"
+                                                      ? "var(--accent-green)"
+                                                      : "var(--accent-red)",
+                                                  }}
+                                                >
+                                                  {dr.status}
+                                                </span>
+                                                <span className="dry-run-ts">
+                                                  {formatAuditTimestamp(dr.created_at)}
+                                                </span>
+                                              </div>
+                                              {dr.result_data.summary && (
+                                                <div className="dry-run-summary">
+                                                  {dr.result_data.summary}
+                                                </div>
+                                              )}
+
+                                              {/* Planned file actions */}
+                                              <div className="dry-run-list-section">
+                                                <div className="proposal-label">Planned File Actions</div>
+                                                {dr.result_data.planned_file_actions.length > 0 ? (
+                                                  dr.result_data.planned_file_actions.map((fa, i) => (
+                                                    <div key={i} className="dry-run-action-item">
+                                                      <span
+                                                        className="badge"
+                                                        style={{
+                                                          color: ACTION_COLORS[fa.action] || "#888",
+                                                          borderColor: ACTION_COLORS[fa.action] || "#888",
+                                                          fontSize: 10,
+                                                          marginRight: 6,
+                                                        }}
+                                                      >
+                                                        {fa.action}
+                                                      </span>
+                                                      <span style={{ fontFamily: "monospace", fontSize: 11 }}>
+                                                        {fa.path}
+                                                      </span>
+                                                      <span className="dry-run-action-status">
+                                                        {fa.status}
+                                                      </span>
+                                                    </div>
+                                                  ))
+                                                ) : (
+                                                  <div className="dry-run-empty">
+                                                    No file actions planned
+                                                  </div>
+                                                )}
+                                              </div>
+
+                                              {/* Planned command actions */}
+                                              <div className="dry-run-list-section">
+                                                <div className="proposal-label">Planned Command Actions</div>
+                                                {dr.result_data.planned_command_actions.length > 0 ? (
+                                                  dr.result_data.planned_command_actions.map((ca, i) => (
+                                                    <div key={i} className="dry-run-action-item">
+                                                      <code style={{ fontSize: 11 }}>{ca.command}</code>
+                                                      {ca.working_dir && (
+                                                        <span className="dry-run-workdir">
+                                                          in {ca.working_dir}
+                                                        </span>
+                                                      )}
+                                                      <span className="dry-run-action-status">
+                                                        {ca.status}
+                                                      </span>
+                                                    </div>
+                                                  ))
+                                                ) : (
+                                                  <div className="dry-run-empty">
+                                                    No command actions planned
+                                                  </div>
+                                                )}
+                                              </div>
+
+                                              {/* Warnings */}
+                                              {dr.result_data.warnings.length > 0 && (
+                                                <div className="dry-run-warnings">
+                                                  <div className="proposal-label" style={{ color: "var(--accent-yellow)" }}>
+                                                    Warnings
+                                                  </div>
+                                                  {dr.result_data.warnings.map((w, i) => (
+                                                    <div key={i} className="dry-run-warning-item">
+                                                      {w}
+                                                    </div>
+                                                  ))}
+                                                </div>
+                                              )}
+                                            </div>
+                                          ) : drLoading ? (
+                                            <div className="dry-run-loading">
+                                              Loading dry-run result...
+                                            </div>
+                                          ) : dryRunError && dryRunLoading === null ? (
+                                            <div className="dry-run-error-section">
+                                              <span className="snapshot-error" style={{ marginTop: 0 }}>
+                                                Failed to load dry-run result
+                                              </span>
+                                              <button
+                                                className="btn btn-secondary btn-sm"
+                                                style={{ marginLeft: 8, fontSize: 10 }}
+                                                onClick={() => loadDryRunResult(er.id)}
+                                              >
+                                                Retry
+                                              </button>
+                                            </div>
+                                          ) : (
+                                            <div className="dry-run-trigger">
+                                              <button
+                                                className="btn btn-secondary btn-sm dry-run-btn"
+                                                onClick={() => triggerDryRun(er.id)}
+                                              >
+                                                Run Dry-Run
+                                              </button>
+                                              <span className="exec-request-hint">
+                                                Simulates execution without performing any real operations.
+                                              </span>
+                                            </div>
+                                          )}
+                                        </div>
+                                      );
+                                    })()}
+                                  </>);
+                                    })() : (
                                     <div className="exec-request-action">
                                       <button
                                         className="btn btn-secondary btn-sm"
