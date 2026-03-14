@@ -16,6 +16,7 @@ GET  /api/execution-requests/{request_id}/dry-run   Read existing dry-run result
 GET  /api/execution-requests/{request_id}/real-run   Read existing real-run result (Phase 7B-1)
 GET  /api/execution-requests/{request_id}/action-plan  Action plan with policy decisions (Phase 6G-A)
 POST /api/execution-requests/{request_id}/execute    Real file execution (Phase 7A)
+GET  /api/execution-requests/{request_id}/rollback   Read existing rollback result (Phase 7D-1)
 POST /api/execution-results/{result_id}/rollback     Rollback real execution (Phase 7C-3)
 """
 
@@ -894,6 +895,40 @@ async def execute_scoped(request_id: str):
     result = _parse_result_data(dict(raw_result))
     result["is_new"] = True
     return result
+
+
+@router.get("/execution-requests/{request_id}/rollback")
+async def get_rollback_result(request_id: str):
+    """Read an existing rollback result for an execution request.
+
+    Returns 200 with the rollback result if it exists.
+    Returns 404 if the execution request or its rollback result is not found.
+    """
+    conn = get_connection()
+    try:
+        req_row = conn.execute(
+            "SELECT id FROM execution_requests WHERE id = ?",
+            (request_id,),
+        ).fetchone()
+        if not req_row:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Execution request not found: {request_id}",
+            )
+
+        row = conn.execute(
+            "SELECT * FROM execution_results WHERE execution_request_id = ? AND mode = 'rollback'",
+            (request_id,),
+        ).fetchone()
+        if not row:
+            raise HTTPException(
+                status_code=404,
+                detail=f"No rollback result for execution request: {request_id}",
+            )
+
+        return _parse_result_data(dict(row))
+    finally:
+        conn.close()
 
 
 @router.post("/execution-results/{result_id}/rollback")

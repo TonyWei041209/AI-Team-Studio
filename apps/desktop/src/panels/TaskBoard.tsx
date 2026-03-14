@@ -199,9 +199,43 @@ interface RealRunResult {
   created_at: string;
 }
 
+// ── Rollback Result types (Phase 7D-1) ─────────────────
+interface RollbackFileResult {
+  path: string;
+  operation: string;
+  status: string;
+  error?: string;
+}
+
+interface RollbackResultData {
+  mode: string;
+  summary: string;
+  file_results: RollbackFileResult[];
+}
+
+interface RollbackResult {
+  id: string;
+  execution_request_id: string;
+  task_id: string;
+  snapshot_id: string;
+  snapshot_content_hash: string;
+  mode: string;
+  status: string;
+  result_data: RollbackResultData;
+  created_at: string;
+}
+
 const REAL_RUN_FILE_STATUS_COLORS: Record<string, string> = {
   success: "var(--accent-green)",
   failed: "var(--accent-red)",
+  skipped: "var(--text-muted)",
+};
+
+const ROLLBACK_FILE_STATUS_COLORS: Record<string, string> = {
+  restored: "var(--accent-green)",
+  deleted: "var(--accent-green)",
+  already_absent: "var(--text-muted)",
+  rollback_failed: "var(--accent-red)",
   skipped: "var(--text-muted)",
 };
 
@@ -315,6 +349,11 @@ export function TaskBoard({ projectId }: TaskBoardProps) {
   // Execute trigger (Phase 7B-2)
   const [executeLoading, setExecuteLoading] = useState<string | null>(null);
   const [executeError, setExecuteError] = useState<Record<string, string | null>>({});
+
+  // Rollback result (Phase 7D-1) — keyed by execution_request_id
+  const [rollbackResults, setRollbackResults] = useState<Record<string, RollbackResult | "empty">>({});
+  const [rollbackLoading, setRollbackLoading] = useState<string | null>(null);
+  const [rollbackError, setRollbackError] = useState<string | null>(null);
 
   const loadProposals = useCallback(async (taskId: string) => {
     setProposalLoading(true);
@@ -514,6 +553,27 @@ export function TaskBoard({ projectId }: TaskBoardProps) {
       setExecuteError((prev) => ({ ...prev, [requestId]: msg }));
     } finally {
       setExecuteLoading(null);
+    }
+  }, []);
+
+  // Load rollback result (Phase 7D-1) — on-demand, 404 = empty
+  const loadRollbackResult = useCallback(async (requestId: string) => {
+    setRollbackLoading(requestId);
+    setRollbackError(null);
+    try {
+      const result = await api.getOrNull<RollbackResult>(
+        `/api/execution-requests/${requestId}/rollback`,
+      );
+      if (result) {
+        setRollbackResults((prev) => ({ ...prev, [requestId]: result }));
+      } else {
+        // 404 → empty state
+        setRollbackResults((prev) => ({ ...prev, [requestId]: "empty" }));
+      }
+    } catch {
+      setRollbackError("Failed to load rollback result");
+    } finally {
+      setRollbackLoading(null);
     }
   }, []);
 
@@ -1464,6 +1524,90 @@ export function TaskBoard({ projectId }: TaskBoardProps) {
                                             </button>
                                             <span className="exec-request-hint">
                                               Shows real file execution result (read-only).
+                                            </span>
+                                          </div>
+                                        )}
+                                        </div>
+                                      );
+                                    })()}
+
+                                    {/* Rollback Result Viewer (Phase 7D-1) */}
+                                    {(() => {
+                                      const rb = rollbackResults[er.id];
+                                      const rbLoading = rollbackLoading === er.id;
+                                    return (
+                                      <div className="rollback-section">
+                                        {rb && rb !== "empty" ? (
+                                          <div className="rollback-result-card">
+                                            <div className="proposal-label">Rollback Result</div>
+                                            <div className="rollback-meta">
+                                              <span className="rollback-mode-badge">ROLLBACK</span>
+                                              <span
+                                                className="rollback-status-badge"
+                                                style={{
+                                                  color: rb.status === "completed" ? "var(--accent-green)" : "var(--accent-red)",
+                                                  borderColor: rb.status === "completed" ? "var(--accent-green)" : "var(--accent-red)",
+                                                }}
+                                              >
+                                                {rb.status}
+                                              </span>
+                                              <span className="rollback-ts">{formatAuditTimestamp(rb.created_at)}</span>
+                                            </div>
+                                            <div className="rollback-summary">{rb.result_data?.summary}</div>
+                                            <div className="rollback-file-list">
+                                              {rb.result_data?.file_results?.map((fr, i) => (
+                                                <div key={i} className="rollback-file-item">
+                                                  <span
+                                                    className="badge"
+                                                    style={{
+                                                      color: ROLLBACK_FILE_STATUS_COLORS[fr.status] || "var(--text-muted)",
+                                                      borderColor: ROLLBACK_FILE_STATUS_COLORS[fr.status] || "var(--text-muted)",
+                                                      fontSize: 9,
+                                                      minWidth: 58,
+                                                      textAlign: "center",
+                                                    }}
+                                                  >
+                                                    {fr.status}
+                                                  </span>
+                                                  <span className="rollback-file-path">{fr.path}</span>
+                                                  {fr.error && (
+                                                    <span className="rollback-file-error">{fr.error}</span>
+                                                  )}
+                                                </div>
+                                              ))}
+                                              {(!rb.result_data?.file_results || rb.result_data.file_results.length === 0) && (
+                                                <div className="dry-run-empty">No file results</div>
+                                              )}
+                                            </div>
+                                          </div>
+                                        ) : rb === "empty" ? (
+                                          <div className="rollback-empty">No rollback result yet</div>
+                                        ) : rbLoading ? (
+                                          <div className="dry-run-loading">Loading rollback result...</div>
+                                        ) : rollbackError && rollbackLoading === null ? (
+                                          <div className="dry-run-error-section">
+                                            <span className="snapshot-error" style={{ marginTop: 0 }}>
+                                              Failed to load rollback result
+                                            </span>
+                                            <button
+                                              className="btn btn-secondary btn-sm"
+                                              style={{ marginLeft: 8, fontSize: 10 }}
+                                              onClick={() => loadRollbackResult(er.id)}
+                                            >
+                                              Retry
+                                            </button>
+                                          </div>
+                                        ) : (
+                                          <div className="dry-run-trigger">
+                                            <button
+                                              className="btn btn-secondary btn-sm"
+                                              style={{ color: "#6ea8d9", borderColor: "#6ea8d9" }}
+                                              onClick={() => loadRollbackResult(er.id)}
+                                            >
+                                              View Rollback Result
+                                            </button>
+                                            <span className="exec-request-hint">
+                                              Shows rollback result (read-only).
                                             </span>
                                           </div>
                                         )}

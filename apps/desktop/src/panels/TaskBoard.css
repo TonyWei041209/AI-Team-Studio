@@ -717,3 +717,96 @@
   padding: 4px 0;
   font-style: italic;
 }
+
+/* ── Rollback Result Viewer (Phase 7D-1) ─────────────── */
+
+.rollback-section {
+  margin-top: 6px;
+}
+
+.rollback-result-card {
+  background: var(--bg-secondary);
+  border: 1px solid #6ea8d9;
+  border-radius: 6px;
+  padding: 8px 10px;
+}
+
+.rollback-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+  font-size: 11px;
+}
+
+.rollback-mode-badge {
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: #6ea8d9;
+  letter-spacing: 0.5px;
+}
+
+.rollback-status-badge {
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  padding: 1px 6px;
+  border: 1px solid;
+  border-radius: 3px;
+}
+
+.rollback-ts {
+  color: var(--text-muted);
+  font-size: 10px;
+  margin-left: auto;
+  font-family: var(--font-mono);
+}
+
+.rollback-summary {
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.rollback-file-list {
+  margin-top: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.rollback-file-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  padding: 2px 0;
+}
+
+.rollback-file-path {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-primary);
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rollback-file-error {
+  font-size: 10px;
+  color: var(--accent-red);
+  flex-shrink: 0;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rollback-empty {
+  font-size: 11px;
+  color: var(--text-muted);
+  padding: 4px 0;
+  font-style: italic;
+}
