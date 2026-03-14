@@ -312,6 +312,10 @@ export function TaskBoard({ projectId }: TaskBoardProps) {
   const [realRunLoading, setRealRunLoading] = useState<string | null>(null);
   const [realRunError, setRealRunError] = useState<string | null>(null);
 
+  // Execute trigger (Phase 7B-2)
+  const [executeLoading, setExecuteLoading] = useState<string | null>(null);
+  const [executeError, setExecuteError] = useState<Record<string, string | null>>({});
+
   const loadProposals = useCallback(async (taskId: string) => {
     setProposalLoading(true);
     try {
@@ -471,6 +475,48 @@ export function TaskBoard({ projectId }: TaskBoardProps) {
     }
   }, []);
 
+  // Trigger real execution (Phase 7B-2) — with confirm dialog
+  const triggerExecution = useCallback(async (requestId: string) => {
+    const confirmed = window.confirm(
+      "This will write real files to your project workspace. Continue?",
+    );
+    if (!confirmed) return;
+
+    setExecuteLoading(requestId);
+    setExecuteError((prev) => ({ ...prev, [requestId]: null }));
+    try {
+      const result = await api.post<RealRunResult>(
+        `/api/execution-requests/${requestId}/execute`,
+      );
+      // Auto-populate real-run result → viewer shows immediately, Execute button hides
+      setRealRunResults((prev) => ({ ...prev, [requestId]: result }));
+    } catch (err: unknown) {
+      // Extract blocked_reasons from ApiError detail (409 case)
+      let msg = "Execution failed";
+      if (err && typeof err === "object" && "detail" in err) {
+        const detail = (err as { detail: string }).detail;
+        // ApiError.detail may be JSON string of { message, blocked_reasons }
+        try {
+          const parsed = JSON.parse(detail);
+          if (parsed.blocked_reasons && Array.isArray(parsed.blocked_reasons)) {
+            msg = `Not eligible: ${parsed.blocked_reasons.join(", ")}`;
+          } else if (parsed.message) {
+            msg = parsed.message;
+          } else {
+            msg = detail;
+          }
+        } catch {
+          msg = detail;
+        }
+      } else if (err instanceof Error) {
+        msg = err.message;
+      }
+      setExecuteError((prev) => ({ ...prev, [requestId]: msg }));
+    } finally {
+      setExecuteLoading(null);
+    }
+  }, []);
+
   // Audit trail: toggle open/close (Phase 6E-E)
   const toggleAuditTrail = useCallback(
     async (taskId: string) => {
@@ -548,6 +594,7 @@ export function TaskBoard({ projectId }: TaskBoardProps) {
     setActionPlanError(null);
     setRealRunResults({});
     setRealRunError(null);
+    setExecuteError({});
   }, [projectId]);
 
   if (!projectId) {
@@ -1303,6 +1350,26 @@ export function TaskBoard({ projectId }: TaskBoardProps) {
                                         </div>
                                       );
                                     })()}
+                                    {/* Execute Button (Phase 7B-2) */}
+                                    {er.status === "confirmed" &&
+                                      !(realRunResults[er.id] && realRunResults[er.id] !== "empty") && (
+                                      <div className="execute-section">
+                                        <button
+                                          className="btn btn-sm execute-btn"
+                                          disabled={executeLoading === er.id}
+                                          onClick={() => triggerExecution(er.id)}
+                                        >
+                                          {executeLoading === er.id ? "Executing..." : "Execute"}
+                                        </button>
+                                        <span className="exec-request-hint">
+                                          Writes real files to your project workspace (file_create / file_modify only).
+                                        </span>
+                                        {executeError[er.id] && (
+                                          <div className="execute-error">{executeError[er.id]}</div>
+                                        )}
+                                      </div>
+                                    )}
+
                                     {/* Real-Run Execution Result Viewer (Phase 7B-1) */}
                                     {(() => {
                                       const rr = realRunResults[er.id];

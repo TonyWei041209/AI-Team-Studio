@@ -565,6 +565,41 @@
   font-family: var(--font-mono);
 }
 
+/* ── Execute Button (Phase 7B-2) ─────────────────────────── */
+
+.execute-section {
+  margin-top: 6px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.execute-btn {
+  color: #ff8c00 !important;
+  border-color: #ff8c00 !important;
+  font-weight: 600;
+}
+
+.execute-btn:hover:not(:disabled) {
+  background: rgba(255, 140, 0, 0.1);
+}
+
+.execute-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.execute-error {
+  width: 100%;
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--accent-red);
+  background: rgba(255, 80, 80, 0.08);
+  border-radius: 4px;
+  padding: 4px 8px;
+}
+
 /* ── Real-Run Execution Result (Phase 7B-1) ─────────────── */
 
 .real-run-section {
