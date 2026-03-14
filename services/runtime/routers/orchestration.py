@@ -335,21 +335,36 @@ def _build_task_audit_trail(task_id: str) -> list[dict]:
                     rd = {}
             else:
                 rd = result_data
-            file_count = len(rd.get("planned_file_actions", []))
-            cmd_count = len(rd.get("planned_command_actions", []))
-            warnings = rd.get("warnings", [])
             mode = d.get("mode", rd.get("mode", "dry_run"))
-            mode_label = "Real execution" if mode == "real_run" else "Dry-run"
-            if d["status"] == "completed":
-                summary = (
-                    f"{mode_label} completed: {file_count} file action(s), "
-                    f"{cmd_count} command action(s)"
+            detail: dict[str, object] = {"mode": mode}
+
+            if mode == "real_run":
+                # Real execution: summary from file_results
+                file_results = rd.get("file_results", [])
+                success_count = sum(
+                    1 for f in file_results if f.get("status") == "success"
                 )
+                fail_count = sum(
+                    1 for f in file_results if f.get("status") == "failed"
+                )
+                summary = (
+                    f"Real execution {d['status']}: "
+                    f"{success_count} written, {fail_count} failed"
+                )
+                detail["success_count"] = success_count
+                detail["fail_count"] = fail_count
+                detail["stopped_at"] = rd.get("stopped_at")
             else:
+                # Dry-run: summary from planned actions
+                file_count = len(rd.get("planned_file_actions", []))
+                cmd_count = len(rd.get("planned_command_actions", []))
+                warnings = rd.get("warnings", [])
                 summary = (
-                    f"{mode_label} failed: {file_count} file action(s), "
+                    f"Dry-run {d['status']}: {file_count} file action(s), "
                     f"{cmd_count} command action(s)"
                 )
+                detail["warnings_count"] = len(warnings)
+
             events.append({
                 "event_type": f"execution_result:{d['status']}",
                 "object_type": "execution_result",
@@ -362,10 +377,7 @@ def _build_task_audit_trail(task_id: str) -> list[dict]:
                     "execution_request_id": d["execution_request_id"],
                     "snapshot_id": d["snapshot_id"],
                 },
-                "detail": {
-                    "mode": mode,
-                    "warnings_count": len(warnings),
-                },
+                "detail": detail,
             })
 
         # Stable sort: timestamp ASC, then fixed event order
