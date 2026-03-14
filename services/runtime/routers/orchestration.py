@@ -13,6 +13,10 @@ GET  /api/execution-requests/{request_id}        Get single execution request
 PATCH /api/execution-requests/{request_id}       Confirm or reject execution request
 POST /api/execution-requests/{request_id}/dry-run  Dry-run execution (Phase 6F-A)
 GET  /api/execution-requests/{request_id}/dry-run   Read existing dry-run result (Phase 6F-B)
+GET  /api/execution-requests/{request_id}/real-run   Read existing real-run result (Phase 7B-1)
+GET  /api/execution-requests/{request_id}/action-plan  Action plan with policy decisions (Phase 6G-A)
+POST /api/execution-requests/{request_id}/execute    Real file execution (Phase 7A)
+POST /api/execution-results/{result_id}/rollback     Rollback real execution (Phase 7C-3)
 """
 
 import json
@@ -885,6 +889,112 @@ async def execute_scoped(request_id: str):
         raise HTTPException(
             status_code=409,
             detail=str(e),
+        )
+
+    result = _parse_result_data(dict(raw_result))
+    result["is_new"] = True
+    return result
+
+
+@router.post("/execution-results/{result_id}/rollback")
+async def rollback_result(result_id: str):
+    """Rollback a real_run execution result.
+
+    Pre-conditions checked by API layer:
+    1. Execution result exists → 404
+    2. Mode is 'real_run' → 409
+    3. Status is 'completed' or 'failed' → 409
+    4. Project workspace_root exists and is a directory → 422
+
+    Rollback semantics:
+    - file_modify: restore original content from backup
+    - file_create: delete the created file
+    - Best-effort: continues on individual file failure
+    - Idempotent: repeat calls return existing rollback result with is_new=false
+
+    Returns 200 with rollback result (status=completed or failed).
+    """
+    from agents.rollback_service import rollback_execution
+
+    conn = get_connection()
+    try:
+        # 1. Result exists?
+        row = conn.execute(
+            "SELECT * FROM execution_results WHERE id = ?",
+            (result_id,),
+        ).fetchone()
+        if not row:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Execution result not found: {result_id}",
+            )
+        er = dict(row)
+
+        # 2. Mode is real_run?
+        if er.get("mode") != "real_run":
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "message": "Only real_run results can be rolled back",
+                    "reason": f"Result mode is '{er.get('mode')}'",
+                },
+            )
+
+        # 3. Status is terminal?
+        if er["status"] not in ("completed", "failed"):
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "message": "Cannot rollback result with non-terminal status",
+                    "reason": f"Result status is '{er['status']}'",
+                },
+            )
+
+        # 4. Check for existing rollback (idempotent — before workspace check)
+        existing_row = conn.execute(
+            "SELECT * FROM execution_results WHERE execution_request_id = ? AND mode = 'rollback'",
+            (er["execution_request_id"],),
+        ).fetchone()
+        if existing_row:
+            result = _parse_result_data(dict(existing_row))
+            result["is_new"] = False
+            return result
+
+        # 5. Workspace exists?
+        task_row = conn.execute(
+            "SELECT project_id FROM tasks WHERE id = ?",
+            (er["task_id"],),
+        ).fetchone()
+        if not task_row:
+            raise HTTPException(
+                status_code=409,
+                detail="Task not found for execution result",
+            )
+        proj_row = conn.execute(
+            "SELECT local_repo_path FROM projects WHERE id = ?",
+            (dict(task_row)["project_id"],),
+        ).fetchone()
+        if not proj_row:
+            raise HTTPException(
+                status_code=409,
+                detail="Project not found for execution result",
+            )
+        workspace_root = dict(proj_row)["local_repo_path"]
+        if not workspace_root or not os.path.isdir(workspace_root):
+            raise HTTPException(
+                status_code=422,
+                detail=f"Project workspace_root is not a valid directory: {workspace_root}",
+            )
+    finally:
+        conn.close()
+
+    # Execute rollback
+    try:
+        raw_result = rollback_execution(result_id, workspace_root)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=409,
+            detail={"message": str(e)},
         )
 
     result = _parse_result_data(dict(raw_result))
