@@ -456,6 +456,94 @@ def _apply_v11(conn: sqlite3.Connection) -> None:
     conn.execute("INSERT INTO schema_version (version) VALUES (11)")
 
 
+def _apply_v12(conn: sqlite3.Connection) -> None:
+    """V12: Add 'rollback' to execution_results mode CHECK (Phase 7C-2).
+
+    Extends the mode column to accept 'rollback' in addition to
+    'dry_run' and 'real_run'.  Requires table recreation because
+    SQLite cannot ALTER CHECK constraints in-place.
+    """
+    conn.execute("PRAGMA foreign_keys = OFF")
+
+    # Must also recreate execution_file_backups because SQLite rewrites
+    # its FK target when the referenced table is renamed, leaving a
+    # dangling reference after the old table is dropped.
+    conn.execute(
+        "ALTER TABLE execution_file_backups RENAME TO _execution_file_backups_v11"
+    )
+    conn.execute("ALTER TABLE execution_results RENAME TO _execution_results_v11")
+
+    conn.execute("""
+        CREATE TABLE execution_results (
+            id TEXT PRIMARY KEY,
+            execution_request_id TEXT NOT NULL
+                REFERENCES execution_requests(id),
+            task_id TEXT NOT NULL REFERENCES tasks(id),
+            snapshot_id TEXT NOT NULL REFERENCES execution_snapshots(id),
+            snapshot_content_hash TEXT NOT NULL,
+            mode TEXT NOT NULL DEFAULT 'dry_run'
+                CHECK (mode IN ('dry_run', 'real_run', 'rollback')),
+            status TEXT NOT NULL DEFAULT 'pending'
+                CHECK (status IN ('pending', 'running', 'completed', 'failed')),
+            result_data TEXT NOT NULL DEFAULT '{}',
+            started_at TEXT,
+            completed_at TEXT,
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            UNIQUE (execution_request_id, mode)
+        )
+    """)
+
+    conn.execute("""
+        INSERT INTO execution_results
+            (id, execution_request_id, task_id, snapshot_id,
+             snapshot_content_hash, mode, status, result_data,
+             started_at, completed_at, created_at)
+        SELECT id, execution_request_id, task_id, snapshot_id,
+               snapshot_content_hash, mode, status, result_data,
+               started_at, completed_at, created_at
+        FROM _execution_results_v11
+    """)
+
+    conn.execute("""
+        CREATE TABLE execution_file_backups (
+            id TEXT PRIMARY KEY,
+            execution_result_id TEXT NOT NULL
+                REFERENCES execution_results(id),
+            execution_request_id TEXT NOT NULL
+                REFERENCES execution_requests(id),
+            task_id TEXT NOT NULL REFERENCES tasks(id),
+            path TEXT NOT NULL,
+            original_content TEXT NOT NULL,
+            original_hash TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            UNIQUE (execution_result_id, path)
+        )
+    """)
+
+    conn.execute("""
+        INSERT INTO execution_file_backups
+            (id, execution_result_id, execution_request_id,
+             task_id, path, original_content, original_hash, created_at)
+        SELECT id, execution_result_id, execution_request_id,
+               task_id, path, original_content, original_hash, created_at
+        FROM _execution_file_backups_v11
+    """)
+
+    conn.execute("DROP TABLE _execution_file_backups_v11")
+    conn.execute("DROP TABLE _execution_results_v11")
+    conn.execute("PRAGMA foreign_keys = ON")
+
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_exec_results_task "
+        "ON execution_results(task_id)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_exec_results_request "
+        "ON execution_results(execution_request_id)"
+    )
+    conn.execute("INSERT INTO schema_version (version) VALUES (12)")
+
+
 # Ordered list of migrations
 _MIGRATIONS = [
     (1, _apply_v1),
@@ -469,6 +557,7 @@ _MIGRATIONS = [
     (9, _apply_v9),
     (10, _apply_v10),
     (11, _apply_v11),
+    (12, _apply_v12),
 ]
 
 
