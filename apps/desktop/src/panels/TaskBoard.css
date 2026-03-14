@@ -810,3 +810,40 @@
   padding: 4px 0;
   font-style: italic;
 }
+
+/* ── Rollback Button (Phase 7D-2) ────────────────────── */
+
+.rollback-trigger-section {
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: 1px dashed var(--border-color);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.rollback-btn {
+  color: #6ea8d9 !important;
+  border-color: #6ea8d9 !important;
+  font-weight: 600;
+}
+
+.rollback-btn:hover:not(:disabled) {
+  background: rgba(110, 168, 217, 0.1);
+}
+
+.rollback-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.rollback-trigger-error {
+  width: 100%;
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--accent-red);
+  background: rgba(255, 80, 80, 0.08);
+  border-radius: 4px;
+  padding: 4px 8px;
+}

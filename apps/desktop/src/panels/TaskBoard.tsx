@@ -355,6 +355,10 @@ export function TaskBoard({ projectId }: TaskBoardProps) {
   const [rollbackLoading, setRollbackLoading] = useState<string | null>(null);
   const [rollbackError, setRollbackError] = useState<string | null>(null);
 
+  // Rollback trigger (Phase 7D-2)
+  const [rollbackTriggerLoading, setRollbackTriggerLoading] = useState<string | null>(null);
+  const [rollbackTriggerError, setRollbackTriggerError] = useState<Record<string, string | null>>({});
+
   const loadProposals = useCallback(async (taskId: string) => {
     setProposalLoading(true);
     try {
@@ -574,6 +578,46 @@ export function TaskBoard({ projectId }: TaskBoardProps) {
       setRollbackError("Failed to load rollback result");
     } finally {
       setRollbackLoading(null);
+    }
+  }, []);
+
+  // Trigger rollback (Phase 7D-2) — with confirm dialog
+  const triggerRollback = useCallback(async (requestId: string, resultId: string) => {
+    const confirmed = window.confirm(
+      "This will attempt to rollback executed file changes. Continue?",
+    );
+    if (!confirmed) return;
+
+    setRollbackTriggerLoading(requestId);
+    setRollbackTriggerError((prev) => ({ ...prev, [requestId]: null }));
+    try {
+      const result = await api.post<RollbackResult>(
+        `/api/execution-results/${resultId}/rollback`,
+      );
+      // Auto-populate rollback result → viewer shows immediately, button hides
+      setRollbackResults((prev) => ({ ...prev, [requestId]: result }));
+    } catch (err: unknown) {
+      let msg = "Rollback failed";
+      if (err && typeof err === "object" && "detail" in err) {
+        const detail = (err as { detail: string }).detail;
+        try {
+          const parsed = JSON.parse(detail);
+          if (parsed.message && parsed.reason) {
+            msg = `${parsed.message} (${parsed.reason})`;
+          } else if (parsed.message) {
+            msg = parsed.message;
+          } else {
+            msg = detail;
+          }
+        } catch {
+          msg = detail;
+        }
+      } else if (err instanceof Error) {
+        msg = err.message;
+      }
+      setRollbackTriggerError((prev) => ({ ...prev, [requestId]: msg }));
+    } finally {
+      setRollbackTriggerLoading(null);
     }
   }, []);
 
@@ -1495,6 +1539,25 @@ export function TaskBoard({ projectId }: TaskBoardProps) {
                                                 <div className="dry-run-empty">No file results</div>
                                               )}
                                             </div>
+                                            {/* Rollback Button (Phase 7D-2) */}
+                                            {(rr.status === "completed" || rr.status === "failed") &&
+                                              !(rollbackResults[er.id] && rollbackResults[er.id] !== "empty") && (
+                                              <div className="rollback-trigger-section">
+                                                <button
+                                                  className="btn btn-sm rollback-btn"
+                                                  disabled={rollbackTriggerLoading === er.id}
+                                                  onClick={() => triggerRollback(er.id, rr.id)}
+                                                >
+                                                  {rollbackTriggerLoading === er.id ? "Rolling back..." : "Rollback"}
+                                                </button>
+                                                <span className="exec-request-hint">
+                                                  Restores modified files and removes created files.
+                                                </span>
+                                                {rollbackTriggerError[er.id] && (
+                                                  <div className="rollback-trigger-error">{rollbackTriggerError[er.id]}</div>
+                                                )}
+                                              </div>
+                                            )}
                                           </div>
                                         ) : rr === "empty" ? (
                                           <div className="real-run-empty">No real execution result yet</div>
