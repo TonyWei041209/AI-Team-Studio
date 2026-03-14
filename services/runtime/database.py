@@ -427,6 +427,35 @@ def _apply_v10(conn: sqlite3.Connection) -> None:
     conn.execute("INSERT INTO schema_version (version) VALUES (10)")
 
 
+def _apply_v11(conn: sqlite3.Connection) -> None:
+    """V11: Execution file backups table (Phase 7C-1).
+
+    Stores original file content before a real_run modifies it,
+    enabling future rollback.  Only file_modify operations produce
+    backup records; file_create does not (rollback = delete the file).
+    """
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS execution_file_backups (
+            id TEXT PRIMARY KEY,
+            execution_result_id TEXT NOT NULL
+                REFERENCES execution_results(id),
+            execution_request_id TEXT NOT NULL
+                REFERENCES execution_requests(id),
+            task_id TEXT NOT NULL REFERENCES tasks(id),
+            path TEXT NOT NULL,
+            original_content TEXT NOT NULL,
+            original_hash TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            UNIQUE (execution_result_id, path)
+        )
+    """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_file_backups_result "
+        "ON execution_file_backups(execution_result_id)"
+    )
+    conn.execute("INSERT INTO schema_version (version) VALUES (11)")
+
+
 # Ordered list of migrations
 _MIGRATIONS = [
     (1, _apply_v1),
@@ -439,6 +468,7 @@ _MIGRATIONS = [
     (8, _apply_v8),
     (9, _apply_v9),
     (10, _apply_v10),
+    (11, _apply_v11),
 ]
 
 

@@ -181,8 +181,12 @@ def execute_scoped_files(
         if existing:
             return dict(existing)
 
-        # ── 5. Execute file actions ───────────────────────
+        # ── 5. Pre-generate result_id for backup association ──
+        result_id = str(_uuid.uuid4())
+
+        # ── 6. Execute file actions ───────────────────────
         file_results: list[dict] = []
+        pending_backups: list[tuple] = []  # collected in-memory, written after result INSERT
         stopped_at: int | None = None
         stop_reason: str | None = None
         success_count = 0
@@ -316,6 +320,40 @@ def execute_scoped_files(
             before_hash = _file_sha256(full_path) if operation == "modify" else None
             result_entry["before_hash"] = before_hash
 
+            # ── Backup original file before modify (Phase 7C-1) ──
+            if operation == "modify":
+                try:
+                    with open(full_path, "r", encoding="utf-8") as orig_f:
+                        original_content = orig_f.read()
+                except UnicodeDecodeError:
+                    result_entry["status"] = "failed"
+                    result_entry["error"] = "Original file is not valid UTF-8 (backup read failure)"
+                    file_results.append(result_entry)
+                    stopped_at = i
+                    stop_reason = f"Backup read failed for '{path}': file is not valid UTF-8"
+                    fail_count += 1
+                    break
+                except Exception as e:
+                    result_entry["status"] = "failed"
+                    result_entry["error"] = f"Backup read failed: {e}"
+                    file_results.append(result_entry)
+                    stopped_at = i
+                    stop_reason = f"Backup read failed for '{path}': {e}"
+                    fail_count += 1
+                    break
+
+                # Collect backup in memory; written to DB after result INSERT
+                pending_backups.append((
+                    str(_uuid.uuid4()),          # backup_id
+                    result_id,
+                    execution_request_id,
+                    req["task_id"],
+                    path,
+                    original_content,
+                    before_hash or "",
+                    datetime.now(timezone.utc).isoformat(),
+                ))
+
             try:
                 # Atomic write: temp file + os.replace()
                 fd, tmp_path = tempfile.mkstemp(
@@ -362,10 +400,9 @@ def execute_scoped_files(
                     "after_hash": None,
                 })
 
-        # ── 6. Record result ──────────────────────────────
+        # ── 7. Record result ──────────────────────────────
         overall_status = "completed" if fail_count == 0 else "failed"
         now = datetime.now(timezone.utc).isoformat()
-        result_id = str(_uuid.uuid4())
 
         result_data = {
             "mode": "real_run",
@@ -398,6 +435,17 @@ def execute_scoped_files(
                 now,
             ),
         )
+
+        # ── Write pending backups (Phase 7C-1) ────────────
+        for backup_row in pending_backups:
+            conn.execute(
+                """INSERT INTO execution_file_backups
+                   (id, execution_result_id, execution_request_id,
+                    task_id, path, original_content, original_hash,
+                    created_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                backup_row,
+            )
 
         # ── Audit log ─────────────────────────────────────
         log_id = str(_uuid.uuid4())
