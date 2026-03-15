@@ -264,14 +264,14 @@ check("file_delete → not eligible", r["eligible"] is False)
 check("file_delete → has_disallowed_action_types",
       "has_disallowed_action_types" in r["blocked_reasons"])
 
-# command_run
+# git_commit (still disallowed)
 ids_t6b = _build_full_chain(
     {"proposed_files": [],
-     "proposed_commands": ["npm install"]},
+     "proposed_commands": ["git commit -m 'test'"]},
 )
 r = check_execution_eligibility(ids_t6b["request_id"])
-check("command_run → not eligible", r["eligible"] is False)
-check("command_run → has_disallowed_action_types",
+check("git_commit → not eligible", r["eligible"] is False)
+check("git_commit → has_disallowed_action_types",
       "has_disallowed_action_types" in r["blocked_reasons"],
       f"got {r['blocked_reasons']}")
 
@@ -361,8 +361,8 @@ check("summary starts with Eligible", r["summary"].startswith("Eligible"))
 print("\n[T10] Multiple blocked reasons")
 ids_t10 = _build_full_chain(
     {"proposed_files": [
-        {"path": "src/app.py", "operation": "create"},
-    ], "proposed_commands": ["npm install"]},
+        {"path": "../../etc/passwd", "operation": "create"},
+    ], "proposed_commands": ["git commit -m 'x'"]},
     create_dry_run=False,
 )
 r = check_execution_eligibility(ids_t10["request_id"])

@@ -1,11 +1,14 @@
-"""Execution eligibility gate for Phase 7A Step 1.
+"""Execution eligibility gate.
 
 Pure read-only check that determines whether a confirmed execution request
 is eligible for real (scoped) execution.  No side effects, no DB writes,
 no file/shell/git operations.
 
-Phase 7A first version only allows: file_create, file_modify.
-All other action types block eligibility.
+Allowed action types:
+- file_create, file_modify (Phase 7A)
+- command_run (Phase 8A — restricted: whitelist + no shell metacharacters)
+
+All other types (file_delete, git_*, unsupported) block eligibility.
 
 Usage::
 
@@ -13,7 +16,7 @@ Usage::
 
     result = check_execution_eligibility(request_id)
     if result["eligible"]:
-        # proceed to executor (Step 2)
+        # proceed to executor
     else:
         print(result["blocked_reasons"])
 """
@@ -23,20 +26,78 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
+import shlex
 from typing import Any
 
 from agents.action_policy_service import ActionType, build_action_plan
 from database import get_connection
+from tools.shell_executor import COMMAND_WHITELIST
 
 
-# ── Phase 7A allowed action types ─────────────────────────
-# Only file_create and file_modify are allowed in the first version.
-# All other types (file_delete, command_run, git_*, unsupported) block eligibility.
+# ── Allowed action types ──────────────────────────────────
+# file_create / file_modify (Phase 7A) + command_run (Phase 8A restricted).
 
 ALLOWED_ACTION_TYPES: frozenset[str] = frozenset({
     ActionType.file_create.value,
     ActionType.file_modify.value,
+    ActionType.command_run.value,
 })
+
+
+# ── Command safety checks (Phase 8A) ─────────────────────
+
+# Shell metacharacters that indicate chaining, redirection, or piping.
+_FORBIDDEN_SHELL_SYNTAX_RE = re.compile(
+    r"&&|\|\||[;<>]|\|"
+)
+
+# Subshell / command substitution patterns.
+_SUBSHELL_RE = re.compile(
+    r"`[^`]*`|\$\(|\$\(\("
+)
+
+
+def _validate_command(cmd: str) -> list[str]:
+    """Validate a command_run target against Phase 8A restrictions.
+
+    Returns a list of blocked_reason codes (empty = valid).
+    """
+    reasons: list[str] = []
+
+    # 1. Forbidden shell syntax
+    if _FORBIDDEN_SHELL_SYNTAX_RE.search(cmd):
+        reasons.append("command_contains_forbidden_shell_syntax")
+
+    # 2. Subshell / command substitution
+    if _SUBSHELL_RE.search(cmd):
+        reasons.append("command_contains_subshell")
+
+    # 3. Whitelist check on base command
+    try:
+        parts = shlex.split(cmd)
+    except ValueError:
+        parts = cmd.split()
+    base_cmd = os.path.basename(parts[0]) if parts else ""
+    if base_cmd not in COMMAND_WHITELIST:
+        reasons.append("command_not_whitelisted")
+
+    return reasons
+
+
+def _validate_command_workdir(
+    working_dir: str | None, workspace_root: str
+) -> bool:
+    """Check that working_dir (if specified) resolves inside workspace_root."""
+    if not working_dir:
+        return True  # default to workspace_root — always ok
+    resolved = os.path.normpath(os.path.join(workspace_root, working_dir))
+    real_resolved = os.path.realpath(resolved)
+    real_workspace = os.path.realpath(workspace_root)
+    return (
+        real_resolved == real_workspace
+        or real_resolved.startswith(real_workspace + os.sep)
+    )
 
 
 # ── Content hash verification (self-contained) ───────────
@@ -122,7 +183,8 @@ def check_execution_eligibility(execution_request_id: str) -> dict:
     8. no needs_confirmation actions
     9. all action types in ALLOWED_ACTION_TYPES
     10. all file paths within workspace boundary
-    11. dry-run result exists and completed
+    11. command_run safety checks (whitelist, shell syntax, workdir)
+    12. dry-run result exists and completed
 
     Returns dict with:
         eligible: bool
@@ -220,22 +282,47 @@ def check_execution_eligibility(execution_request_id: str) -> dict:
             if blocked_action_types:
                 blocked_reasons.append("has_disallowed_action_types")
 
-            # 10. Workspace boundary check (only for file actions)
-            if workspace_root and "workspace_boundary_violation" not in blocked_reasons:
+            # 10. Workspace boundary check (file actions)
+            if workspace_root:
                 for a in actions:
                     a_type = a.get("type", "")
-                    if a_type in ALLOWED_ACTION_TYPES:
+                    if a_type in (
+                        ActionType.file_create.value,
+                        ActionType.file_modify.value,
+                    ):
                         target = a.get("target", "")
                         valid, _reason = _validate_file_path(
                             target, workspace_root
                         )
                         if not valid:
-                            blocked_reasons.append(
-                                "workspace_boundary_violation"
-                            )
-                            break  # One violation is enough
+                            if "workspace_boundary_violation" not in blocked_reasons:
+                                blocked_reasons.append(
+                                    "workspace_boundary_violation"
+                                )
+                            break
 
-        # ── 11. Check dry-run result ──────────────────────────
+            # 11. Command-specific checks (Phase 8A)
+            for a in actions:
+                if a.get("type") != ActionType.command_run.value:
+                    continue
+                target = a.get("target", "")
+                cmd_reasons = _validate_command(target)
+                for r in cmd_reasons:
+                    if r not in blocked_reasons:
+                        blocked_reasons.append(r)
+
+                # Check working_dir boundary
+                if workspace_root:
+                    working_dir = a.get("params", {}).get("working_dir")
+                    if working_dir and not _validate_command_workdir(
+                        working_dir, workspace_root
+                    ):
+                        if "command_workdir_outside_workspace" not in blocked_reasons:
+                            blocked_reasons.append(
+                                "command_workdir_outside_workspace"
+                            )
+
+        # ── 12. Check dry-run result ──────────────────────────
         dr_row = conn.execute(
             """SELECT status FROM execution_results
                WHERE execution_request_id = ? AND mode = 'dry_run'""",
