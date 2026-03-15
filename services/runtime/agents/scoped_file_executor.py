@@ -1,10 +1,10 @@
-"""Scoped file executor for Phase 7A Step 2B.
+"""Scoped file & command executor.
 
-Executes only file_create and file_modify actions from a confirmed,
-eligible execution request.  Writes real files to the project workspace.
+Executes file_create, file_modify, and command_run actions from a
+confirmed, eligible execution request.  Files first, then commands.
 
 Constraints:
-- Only file_create / file_modify (no delete, shell, git)
+- Only file_create / file_modify / command_run (no delete, git)
 - workspace_root must be explicitly provided
 - All paths validated against workspace boundary (including parent chain)
 - Symlink targets resolved and checked against workspace
@@ -400,17 +400,59 @@ def execute_scoped_files(
                     "after_hash": None,
                 })
 
+        # ── 6b. Execute commands (Phase 8A-2) ──────────────
+        proposed_commands = data.get("proposed_commands", [])
+        command_results: list[dict] = []
+        cmd_success = 0
+        cmd_fail = 0
+
+        if proposed_commands and fail_count == 0:
+            # Only run commands if all file operations succeeded
+            from agents.scoped_command_executor import execute_scoped_commands
+
+            command_results = execute_scoped_commands(
+                execution_request_id,
+                real_workspace,
+                proposed_commands,
+            )
+            cmd_success = sum(1 for r in command_results if r["status"] == "success")
+            cmd_fail = sum(1 for r in command_results if r["status"] != "success")
+        elif proposed_commands and fail_count > 0:
+            # File failure → skip all commands
+            for c in proposed_commands:
+                cmd_str = c if isinstance(c, str) else c.get("command", str(c))
+                command_results.append({
+                    "command": cmd_str.strip() if isinstance(cmd_str, str) else str(cmd_str),
+                    "working_dir": real_workspace,
+                    "exit_code": None,
+                    "stdout": "",
+                    "stderr": "",
+                    "duration_ms": 0,
+                    "status": "skipped",
+                    "truncated": False,
+                    "error": "Skipped due to file execution failure",
+                })
+
         # ── 7. Record result ──────────────────────────────
-        overall_status = "completed" if fail_count == 0 else "failed"
+        overall_status = "completed" if (fail_count == 0 and cmd_fail == 0) else "failed"
         now = datetime.now(timezone.utc).isoformat()
+
+        # Build summary
+        summary_parts = [f"{success_count} file(s) written", f"{fail_count} failed"]
+        if command_results:
+            summary_parts.append(f"{cmd_success} command(s) run")
+            if cmd_fail > 0:
+                summary_parts.append(f"{cmd_fail} command(s) failed")
+        summary = f"Real execution: {', '.join(summary_parts)}"
 
         result_data = {
             "mode": "real_run",
             "execution_request_id": execution_request_id,
             "snapshot_id": snap["id"],
             "snapshot_content_hash": snap["content_hash"],
-            "summary": f"Real execution: {success_count} file(s) written, {fail_count} failed",
+            "summary": summary,
             "file_results": file_results,
+            "command_results": command_results,
             "stopped_at": stopped_at,
             "stop_reason": stop_reason,
         }
@@ -459,7 +501,7 @@ def execute_scoped_files(
                 None,
                 "info" if overall_status == "completed" else "warn",
                 "scoped_file_executor",
-                f"Real execution {overall_status}: {success_count} written, {fail_count} failed",
+                f"Real execution {overall_status}: {success_count} written, {fail_count} failed, {cmd_success} commands run, {cmd_fail} commands failed",
                 json.dumps({
                     "event_type": f"execution_result:{overall_status}",
                     "execution_request_id": execution_request_id,
@@ -467,6 +509,8 @@ def execute_scoped_files(
                     "mode": "real_run",
                     "success_count": success_count,
                     "fail_count": fail_count,
+                    "cmd_success_count": cmd_success,
+                    "cmd_fail_count": cmd_fail,
                     "stopped_at": stopped_at,
                 }),
                 now,
