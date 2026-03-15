@@ -186,6 +186,8 @@ _EVENT_ORDER: dict[str, int] = {
     "execution_request:finalized": 4,
     "execution_result:completed": 5,
     "execution_result:failed": 5,
+    "execution_result:rollback_completed": 6,
+    "execution_result:rollback_failed": 6,
 }
 
 
@@ -343,7 +345,32 @@ def _build_task_audit_trail(task_id: str) -> list[dict]:
             mode = d.get("mode", rd.get("mode", "dry_run"))
             detail: dict[str, object] = {"mode": mode}
 
-            if mode == "real_run":
+            if mode == "rollback":
+                # Rollback: summary from file_results statuses
+                file_results = rd.get("file_results", [])
+                restored_count = sum(
+                    1 for f in file_results
+                    if f.get("status") in ("restored", "deleted")
+                )
+                failed_count = sum(
+                    1 for f in file_results
+                    if f.get("status") == "rollback_failed"
+                )
+                skipped_count = sum(
+                    1 for f in file_results
+                    if f.get("status") not in (
+                        "restored", "deleted", "rollback_failed",
+                    )
+                )
+                summary = (
+                    f"Rollback {d['status']}: "
+                    f"{restored_count} restored, {failed_count} failed"
+                )
+                detail["restored_count"] = restored_count
+                detail["failed_count"] = failed_count
+                detail["skipped_count"] = skipped_count
+                event_type = f"execution_result:rollback_{d['status']}"
+            elif mode == "real_run":
                 # Real execution: summary from file_results
                 file_results = rd.get("file_results", [])
                 success_count = sum(
@@ -359,6 +386,7 @@ def _build_task_audit_trail(task_id: str) -> list[dict]:
                 detail["success_count"] = success_count
                 detail["fail_count"] = fail_count
                 detail["stopped_at"] = rd.get("stopped_at")
+                event_type = f"execution_result:{d['status']}"
             else:
                 # Dry-run: summary from planned actions
                 file_count = len(rd.get("planned_file_actions", []))
@@ -369,9 +397,10 @@ def _build_task_audit_trail(task_id: str) -> list[dict]:
                     f"{cmd_count} command action(s)"
                 )
                 detail["warnings_count"] = len(warnings)
+                event_type = f"execution_result:{d['status']}"
 
             events.append({
-                "event_type": f"execution_result:{d['status']}",
+                "event_type": event_type,
                 "object_type": "execution_result",
                 "object_id": d["id"],
                 "status": d["status"],
