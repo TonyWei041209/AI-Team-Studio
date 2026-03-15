@@ -371,7 +371,7 @@ def _build_task_audit_trail(task_id: str) -> list[dict]:
                 detail["skipped_count"] = skipped_count
                 event_type = f"execution_result:rollback_{d['status']}"
             elif mode == "real_run":
-                # Real execution: summary from file_results
+                # Real execution: summary from file_results + command_results
                 file_results = rd.get("file_results", [])
                 success_count = sum(
                     1 for f in file_results if f.get("status") == "success"
@@ -379,12 +379,26 @@ def _build_task_audit_trail(task_id: str) -> list[dict]:
                 fail_count = sum(
                     1 for f in file_results if f.get("status") == "failed"
                 )
+                command_results = rd.get("command_results", [])
+                cmd_success = sum(
+                    1 for c in command_results if c.get("status") == "success"
+                )
+                cmd_fail = sum(
+                    1 for c in command_results
+                    if c.get("status") not in ("success", "pending", None)
+                )
                 summary = (
                     f"Real execution {d['status']}: "
                     f"{success_count} written, {fail_count} failed"
                 )
+                if command_results:
+                    summary += f", {cmd_success} command(s) run"
+                    if cmd_fail > 0:
+                        summary += f", {cmd_fail} command(s) failed"
                 detail["success_count"] = success_count
                 detail["fail_count"] = fail_count
+                detail["cmd_success"] = cmd_success
+                detail["cmd_fail"] = cmd_fail
                 detail["stopped_at"] = rd.get("stopped_at")
                 event_type = f"execution_result:{d['status']}"
             else:

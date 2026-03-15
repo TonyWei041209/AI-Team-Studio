@@ -1,6 +1,6 @@
 # Execution Pipeline
 
-Technical reference for the execution pipeline in AI Team Studio (Phase 7).
+Technical reference for the execution pipeline in AI Team Studio (Phase 7 + 8A).
 
 ---
 
@@ -42,14 +42,77 @@ execution_proposal → approval_request → execution_snapshot → execution_req
 | `file_create` | Write new file; fails if file already exists |
 | `file_modify` | Overwrite existing file; fails if file not found |
 
+| `command_run` | Execute whitelisted local command; shell=False | Phase 8A |
+
 **Blocked by eligibility gate (entire request rejected if any action has these types):**
 
 - `file_delete`
-- `command_run`
 - `git_commit`, `git_checkout`
 - `unsupported`
 
 The gate is all-or-nothing: if any single action is disallowed, the full execution_request is blocked before any file operation runs.
+
+---
+
+## 3a. Command Execution Restrictions (Phase 8A)
+
+`command_run` actions are subject to a three-layer defense model:
+
+### Layer 1: Eligibility gate (`execution_eligibility_service.py`)
+
+| Check | Blocked reason | Detail |
+|---|---|---|
+| Whitelist | `command_not_whitelisted` | Only `node`, `npm`, `npx`, `yarn`, `pnpm`, `python`, `python3`, `pip`, `pip3`, `cargo`, `rustc`, `go`, `make`, `cmake`, `tsc`, `eslint`, `prettier`, `jest`, `pytest`, `vitest`, `mocha`, `git` |
+| Shell metacharacters | `command_contains_forbidden_shell_syntax` | `&&`, `\|\|`, `;`, `>`, `>>`, `<`, `\|`, backticks |
+| Subshell / substitution | `command_contains_subshell` | `$()`, `$(())` |
+| Working dir boundary | `command_workdir_outside_workspace` | `working_dir` must resolve inside `workspace_root` |
+
+### Layer 2: Executor re-validation (`scoped_command_executor.py`, TOCTOU defense)
+
+Before each command runs, the executor re-checks all Layer 1 rules plus:
+
+| Check | Detail |
+|---|---|
+| Blocked subcommands | `npm install/publish`, `pip install/uninstall`, `cargo add/install/publish`, `git push/commit/reset/checkout/merge/rebase/stash`, `yarn add/install`, `pnpm add/install` |
+
+### Layer 3: Execution environment
+
+| Control | Detail |
+|---|---|
+| `shell=False` | All commands run via `subprocess.run(args, shell=False)` — no shell interpretation |
+| Env allowlist | Minimal set: `PATH`, `HOME`, `LANG`, `TMP`, `TEMP`, `VIRTUAL_ENV`, `NODE_PATH`, `PYTHONPATH`, plus Windows essentials. All other env vars stripped |
+| `stdin=DEVNULL` | No interactive input |
+| Timeout | 60 seconds per command (configurable) |
+| Output cap | stdout/stderr each capped at 64KB |
+| Fail-fast | First failure/timeout stops remaining commands |
+
+### Execution order
+
+Files execute first, then commands. If any file action fails, commands do not run.
+
+### Command results in `result_data`
+
+```json
+{
+  "file_results": [...],
+  "command_results": [
+    {
+      "command": "npm test",
+      "working_dir": "/path/to/workspace",
+      "exit_code": 0,
+      "stdout": "...",
+      "stderr": "...",
+      "duration_ms": 1234,
+      "status": "success",
+      "truncated": false
+    }
+  ]
+}
+```
+
+### Command rollback
+
+Commands are **not reversible**. The rollback system (Phase 7C) only covers file operations. If a real_run includes commands, rollback restores files but cannot undo command side effects.
 
 ---
 
