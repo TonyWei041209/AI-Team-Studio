@@ -955,6 +955,16 @@ export function TaskBoard({ projectId }: TaskBoardProps) {
                           orchestratePollRef.current = null;
                         }
                         setOrchestrateLoading(null);
+                        // Phase 9-3: Auto-expand task after orchestration
+                        try {
+                          const finalTask = await tasksApi.get(t.id);
+                          setExpandedTask(t.id);
+                          if (finalTask.status === "done") {
+                            loadProposals(t.id);
+                          }
+                        } catch {
+                          // Best-effort; don't block UI on fetch failure
+                        }
                       }
                     }}
                   >
