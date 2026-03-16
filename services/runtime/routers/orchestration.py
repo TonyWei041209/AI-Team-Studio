@@ -832,7 +832,7 @@ async def get_action_plan(request_id: str):
 
 @router.post("/execution-requests/{request_id}/execute")
 async def execute_scoped(request_id: str):
-    """Trigger real (scoped) file execution for a confirmed request.
+    """Trigger real (scoped) execution for a confirmed request.
 
     Pre-conditions checked by API layer:
     1. Execution request exists → 404
@@ -840,10 +840,13 @@ async def execute_scoped(request_id: str):
     3. Project workspace_root exists and is a directory → 422
     4. Eligibility gate passes → 409 + blocked_reasons
 
-    Execution semantics:
-    - Only file_create / file_modify (Phase 7A)
+    Execution semantics (Phase 7A + 8B-1):
+    - file_create / file_modify: atomic writes, fail-fast
+    - command_run: restricted executor (Phase 8A whitelist + env allowlist)
+    - Order: files first, then commands; file failure skips all commands
     - Fail-fast: first failure stops, no rollback
     - Idempotent: repeat calls return existing result with is_new=false
+    - result_data contains both file_results and command_results
 
     Returns 200 with execution result (status=completed or failed).
     """
