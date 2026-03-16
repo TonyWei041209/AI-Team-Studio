@@ -160,3 +160,35 @@
 - 不要跳过审批系统。
 - 不要让 Builder 兼任最终 Reviewer。
 - 不要在第一轮就实现所有高级特性。
+
+## 运行时安全边界（Runtime Safety Boundaries）
+
+以下规则在整个开发过程中始终有效。任何 phase 开始前必须重新读取本节并确认遵守。
+
+### 命令执行
+- `file_delete` 默认 **blocked**，不允许 agent 自动删除文件
+- `git` 写操作（commit / push / reset / checkout -b / merge / rebase）默认 **blocked**
+- `install` / `publish` / `network` 类命令默认 **blocked**
+- `shell=True` / shell 拼接风格默认 **blocked**
+- 命令白名单仅限本地 build / test / lint / inspect 工具
+- 命令不可回滚（rollback 仅覆盖文件操作）
+
+### 安全门控
+- **Approval gate** 必须保留：高风险 proposal 必须经过人工审批
+- **Confirm gate** 必须保留：execution request 的 confirmed 状态是不可逆终态，必须人工触发
+- **Dry-run-before-execute** 原则必须保留：真实执行前必须有 dry-run 模拟
+- **Execute 必须保持人工触发**，除非用户明确另行决定
+- **Rollback 必须保持人工触发**，除非用户明确另行决定
+
+### 能力边界
+- 不自动扩展 command / file / git / network 能力
+- 不新增高风险自动执行路径
+- 不删除或降级现有安全门控
+- 不自动串联 execute 或 rollback
+
+### 开发节奏
+- 本地优先 / 桌面优先 / 小步推进
+- 一次只推进一个最小 phase
+- 每个 phase 前必须重新读取本节安全边界
+- policy / eligibility / audit / tests first
+- Builder 不能给自己做最终验收
