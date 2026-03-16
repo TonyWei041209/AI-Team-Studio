@@ -718,6 +718,92 @@
   font-style: italic;
 }
 
+/* ── Command Result Viewer (Phase 8B-2) ──────────────── */
+
+.real-run-cmd-section {
+  margin-top: 8px;
+  border-top: 1px solid var(--border-color);
+  padding-top: 6px;
+}
+
+.real-run-cmd-header {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+  letter-spacing: 0.5px;
+}
+
+.real-run-cmd-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.real-run-cmd-item {
+  background: var(--bg-tertiary, rgba(0, 0, 0, 0.15));
+  border-radius: 4px;
+  padding: 4px 6px;
+}
+
+.real-run-cmd-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+}
+
+.real-run-cmd-text {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-primary);
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.real-run-cmd-exit {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.real-run-cmd-duration {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.real-run-cmd-error {
+  font-size: 10px;
+  color: var(--accent-red);
+  margin-top: 2px;
+  padding-left: 46px;
+}
+
+.real-run-cmd-output {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-secondary);
+  margin: 2px 0 0 0;
+  padding: 3px 6px;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 3px;
+  max-height: 120px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.real-run-cmd-stderr {
+  color: var(--accent-red);
+  opacity: 0.85;
+}
+
 /* ── Rollback Result Viewer (Phase 7D-1) ─────────────── */
 
 .rollback-section {

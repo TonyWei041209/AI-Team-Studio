@@ -177,10 +177,23 @@ interface RealRunFileResult {
   after_hash: string | null;
 }
 
+interface RealRunCommandResult {
+  command: string;
+  working_dir?: string;
+  status: string;
+  exit_code: number | null;
+  stdout: string;
+  stderr: string;
+  duration_ms: number;
+  truncated?: boolean;
+  error?: string;
+}
+
 interface RealRunResultData {
   mode: string;
   summary: string;
   file_results: RealRunFileResult[];
+  command_results?: RealRunCommandResult[];
   stopped_at: number | null;
   stop_reason: string | null;
 }
@@ -1539,6 +1552,59 @@ export function TaskBoard({ projectId }: TaskBoardProps) {
                                                 <div className="dry-run-empty">No file results</div>
                                               )}
                                             </div>
+                                            {/* Command Results (Phase 8B-2) */}
+                                            {rr.result_data?.command_results && rr.result_data.command_results.length > 0 && (
+                                              <div className="real-run-cmd-section">
+                                                <div className="real-run-cmd-header">Commands</div>
+                                                <div className="real-run-cmd-list">
+                                                  {rr.result_data.command_results.map((cr, i) => (
+                                                    <div key={i} className="real-run-cmd-item">
+                                                      <div className="real-run-cmd-row">
+                                                        <span
+                                                          className="badge"
+                                                          style={{
+                                                            color: REAL_RUN_FILE_STATUS_COLORS[cr.status] || "var(--text-muted)",
+                                                            borderColor: REAL_RUN_FILE_STATUS_COLORS[cr.status] || "var(--text-muted)",
+                                                            fontSize: 9,
+                                                            minWidth: 40,
+                                                            textAlign: "center",
+                                                          }}
+                                                        >
+                                                          {cr.status}
+                                                        </span>
+                                                        <span className="real-run-cmd-text">{cr.command}</span>
+                                                        {cr.exit_code !== null && cr.exit_code !== undefined && (
+                                                          <span
+                                                            className="real-run-cmd-exit"
+                                                            style={{ color: cr.exit_code === 0 ? "var(--accent-green)" : "var(--accent-red)" }}
+                                                          >
+                                                            exit {cr.exit_code}
+                                                          </span>
+                                                        )}
+                                                        {cr.duration_ms > 0 && (
+                                                          <span className="real-run-cmd-duration">
+                                                            {cr.duration_ms < 1000 ? `${cr.duration_ms}ms` : `${(cr.duration_ms / 1000).toFixed(1)}s`}
+                                                          </span>
+                                                        )}
+                                                      </div>
+                                                      {cr.error && (
+                                                        <div className="real-run-cmd-error">{cr.error}</div>
+                                                      )}
+                                                      {cr.stdout && (
+                                                        <pre className="real-run-cmd-output">
+                                                          {cr.stdout.length > 2000 ? cr.stdout.substring(0, 2000) + "\n... (truncated)" : cr.stdout}
+                                                        </pre>
+                                                      )}
+                                                      {cr.stderr && (
+                                                        <pre className="real-run-cmd-output real-run-cmd-stderr">
+                                                          {cr.stderr.length > 2000 ? cr.stderr.substring(0, 2000) + "\n... (truncated)" : cr.stderr}
+                                                        </pre>
+                                                      )}
+                                                    </div>
+                                                  ))}
+                                                </div>
+                                              </div>
+                                            )}
                                             {/* Rollback Button (Phase 7D-2) */}
                                             {(rr.status === "completed" || rr.status === "failed") &&
                                               !(rollbackResults[er.id] && rollbackResults[er.id] !== "empty") && (
