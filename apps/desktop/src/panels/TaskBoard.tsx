@@ -1,6 +1,7 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import type { TaskCreate, TaskStatus, TaskPriority } from "../types/api";
 import { useTasks } from "../hooks/useTasks";
+import { tasksApi } from "../api/tasks";
 import { api } from "../api/client";
 import "./TaskBoard.css";
 
@@ -311,12 +312,24 @@ const PRIORITY_COLORS: Record<TaskPriority, string> = {
   critical: "var(--accent-red)",
 };
 
+// ── Orchestration progress labels (Phase 9-2) ────────────────
+const ORCHESTRATION_PHASE_LABELS: Record<string, string> = {
+  pending: "Starting\u2026",
+  planning: "Planning\u2026",
+  in_progress: "Building\u2026",
+  reviewing: "Reviewing\u2026",
+  done: "Done",
+  failed: "Failed",
+};
+
 export function TaskBoard({ projectId }: TaskBoardProps) {
   const { tasks, loading, error, refresh, createTask, orchestrateTask } = useTasks(projectId);
   const [showForm, setShowForm] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [orchestrateLoading, setOrchestrateLoading] = useState<string | null>(null);
+  const [orchestratePhase, setOrchestratePhase] = useState<string>("Starting\u2026");
   const [orchestrateError, setOrchestrateError] = useState<Record<string, string>>({});
+  const orchestratePollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
   // Form fields
@@ -373,6 +386,16 @@ export function TaskBoard({ projectId }: TaskBoardProps) {
   // Rollback trigger (Phase 7D-2)
   const [rollbackTriggerLoading, setRollbackTriggerLoading] = useState<string | null>(null);
   const [rollbackTriggerError, setRollbackTriggerError] = useState<Record<string, string | null>>({});
+
+  // Cleanup orchestration poll on unmount (Phase 9-2)
+  useEffect(() => {
+    return () => {
+      if (orchestratePollRef.current) {
+        clearInterval(orchestratePollRef.current);
+        orchestratePollRef.current = null;
+      }
+    };
+  }, []);
 
   const loadProposals = useCallback(async (taskId: string) => {
     setProposalLoading(true);
@@ -900,11 +923,25 @@ export function TaskBoard({ projectId }: TaskBoardProps) {
                     disabled={orchestrateLoading === t.id}
                     onClick={async () => {
                       setOrchestrateLoading(t.id);
+                      setOrchestratePhase("Starting\u2026");
                       setOrchestrateError((prev) => {
                         const next = { ...prev };
                         delete next[t.id];
                         return next;
                       });
+                      // Start polling task status for progress (Phase 9-2)
+                      if (orchestratePollRef.current) {
+                        clearInterval(orchestratePollRef.current);
+                      }
+                      orchestratePollRef.current = setInterval(async () => {
+                        try {
+                          const task = await tasksApi.get(t.id);
+                          const label = ORCHESTRATION_PHASE_LABELS[task.status] ?? task.status;
+                          setOrchestratePhase(label);
+                        } catch {
+                          // Polling failure is non-fatal; keep showing last known phase
+                        }
+                      }, 1500);
                       try {
                         await orchestrateTask(t.id);
                       } catch (err) {
@@ -913,11 +950,17 @@ export function TaskBoard({ projectId }: TaskBoardProps) {
                           [t.id]: err instanceof Error ? err.message : "Orchestration failed",
                         }));
                       } finally {
+                        if (orchestratePollRef.current) {
+                          clearInterval(orchestratePollRef.current);
+                          orchestratePollRef.current = null;
+                        }
                         setOrchestrateLoading(null);
                       }
                     }}
                   >
-                    {orchestrateLoading === t.id ? "Starting..." : "▶ Start"}
+                    {orchestrateLoading === t.id
+                      ? orchestratePhase
+                      : "\u25b6 Start"}
                   </button>
                 )}
                 {t.status !== "pending" && (
