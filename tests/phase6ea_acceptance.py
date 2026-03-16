@@ -270,7 +270,11 @@ if code in (200, 201):
             _proposal_id = proposal.get("id", "")
             check("Proposal has task_id matching the task", proposal.get("task_id") == _task_id)
             check("Proposal role is 'builder'", proposal.get("role") == "builder")
-            check("Proposal status is 'pending'", proposal.get("status") == "pending")
+            # Phase 11-5: Low-risk proposals (requires_approval=False) are auto-approved
+            expected_status = "pending" if proposal.get("requires_approval") else "approved"
+            check(f"Proposal status is '{expected_status}'",
+                  proposal.get("status") == expected_status,
+                  f"got status={proposal.get('status')}, requires_approval={proposal.get('requires_approval')}")
             check("proposal_data_parsed is a dict",
                   isinstance(proposal.get("proposal_data_parsed"), dict))
             pdata = proposal.get("proposal_data_parsed", {})
@@ -565,10 +569,14 @@ if _task_id:
     code, proposals_data = GET(f"/tasks/{_task_id}/proposals")
     if code == 200:
         proposals = proposals_data.get("proposals", [])
-        all_pending = all(p.get("status") == "pending" for p in proposals)
-        check("All proposals have status='pending'",
-              all_pending or len(proposals) == 0,
-              f"statuses={[p.get('status') for p in proposals]}")
+        # Phase 11-5: Low-risk proposals are auto-approved; high-risk stay pending
+        valid_statuses = all(
+            p.get("status") == ("pending" if p.get("requires_approval") else "approved")
+            for p in proposals
+        )
+        check("All proposals have correct initial status (pending if approval required, approved otherwise)",
+              valid_statuses or len(proposals) == 0,
+              f"statuses={[(p.get('status'), p.get('requires_approval')) for p in proposals]}")
 
         for p in proposals:
             check(f"Proposal {p.get('id', '?')[:8]} has created_at set",

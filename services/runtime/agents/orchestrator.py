@@ -349,7 +349,8 @@ class Orchestrator:
                         risk_level,
                         1 if requires_approval else 0,
                         json.dumps(approval_reasons),
-                        "pending", now, now,
+                        "pending" if requires_approval else "approved",
+                        now, now,
                     ),
                 )
 
