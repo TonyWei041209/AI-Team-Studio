@@ -312,9 +312,11 @@ const PRIORITY_COLORS: Record<TaskPriority, string> = {
 };
 
 export function TaskBoard({ projectId }: TaskBoardProps) {
-  const { tasks, loading, error, refresh, createTask } = useTasks(projectId);
+  const { tasks, loading, error, refresh, createTask, orchestrateTask } = useTasks(projectId);
   const [showForm, setShowForm] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [orchestrateLoading, setOrchestrateLoading] = useState<string | null>(null);
+  const [orchestrateError, setOrchestrateError] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
 
   // Form fields
@@ -886,6 +888,38 @@ export function TaskBoard({ projectId }: TaskBoardProps) {
                     {t.assigned_agent_role}
                   </span>
                 )}
+                {t.status === "pending" && (
+                  <button
+                    className="btn btn-sm"
+                    style={{
+                      marginLeft: "auto",
+                      fontSize: 11,
+                      color: "#ff8c00",
+                      borderColor: "#ff8c00",
+                    }}
+                    disabled={orchestrateLoading === t.id}
+                    onClick={async () => {
+                      setOrchestrateLoading(t.id);
+                      setOrchestrateError((prev) => {
+                        const next = { ...prev };
+                        delete next[t.id];
+                        return next;
+                      });
+                      try {
+                        await orchestrateTask(t.id);
+                      } catch (err) {
+                        setOrchestrateError((prev) => ({
+                          ...prev,
+                          [t.id]: err instanceof Error ? err.message : "Orchestration failed",
+                        }));
+                      } finally {
+                        setOrchestrateLoading(null);
+                      }
+                    }}
+                  >
+                    {orchestrateLoading === t.id ? "Starting..." : "▶ Start"}
+                  </button>
+                )}
                 {t.status !== "pending" && (
                   <button
                     className="btn btn-secondary btn-sm"
@@ -907,6 +941,13 @@ export function TaskBoard({ projectId }: TaskBoardProps) {
                       : "Audit Trail"}
                 </button>
               </div>
+
+              {/* Orchestration error (Phase 9-1) */}
+              {orchestrateError[t.id] && (
+                <div style={{ fontSize: 11, color: "var(--accent-red)", padding: "2px 8px" }}>
+                  Orchestration failed: {orchestrateError[t.id]}
+                </div>
+              )}
 
               {/* Audit Trail (Phase 6E-E) */}
               {auditTrailTaskId === t.id && (

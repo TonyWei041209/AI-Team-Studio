@@ -9,4 +9,6 @@ export const tasksApi = {
     api.post<Task>(`/api/projects/${projectId}/tasks`, data),
   updateStatus: (taskId: string, status: string) =>
     api.patch<Task>(`/api/tasks/${taskId}/status`, { status }),
+  orchestrate: (taskId: string) =>
+    api.post<Record<string, unknown>>(`/api/tasks/${taskId}/orchestrate`, {}),
 };

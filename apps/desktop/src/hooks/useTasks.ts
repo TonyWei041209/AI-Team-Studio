@@ -39,5 +39,13 @@ export function useTasks(projectId: string | null) {
     [projectId],
   );
 
-  return { tasks, loading, error, refresh, createTask };
+  const orchestrateTask = useCallback(
+    async (taskId: string) => {
+      await tasksApi.orchestrate(taskId);
+      await refresh();
+    },
+    [refresh],
+  );
+
+  return { tasks, loading, error, refresh, createTask, orchestrateTask };
 }
