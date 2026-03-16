@@ -1,6 +1,6 @@
 # Execution Pipeline
 
-Technical reference for the execution pipeline in AI Team Studio (Phase 7 + 8A).
+Technical reference for the execution pipeline in AI Team Studio (Phase 7 + 8A + 8B).
 
 ---
 
@@ -28,7 +28,7 @@ execution_proposal → approval_request → execution_snapshot → execution_req
 | Mode | What it does | Idempotent | Status values |
 |---|---|---|---|
 | `dry_run` | Validates actions and paths, reports what would happen; no file writes | Returns existing result (`is_new=false`) on repeat | `pending`, `running`, `completed`, `failed` |
-| `real_run` | Writes files to workspace; records backups for modified files | Returns existing result (`is_new=false`) on repeat | `pending`, `running`, `completed`, `failed` |
+| `real_run` | Writes files to workspace, then executes commands; records backups for modified files | Returns existing result (`is_new=false`) on repeat | `pending`, `running`, `completed`, `failed` |
 | `rollback` | Reverts a real_run: restores modified files from backup, deletes created files | Returns existing rollback result (`is_new=false`) on repeat | `pending`, `running`, `completed`, `failed` |
 
 ---
@@ -54,9 +54,11 @@ The gate is all-or-nothing: if any single action is disallowed, the full executi
 
 ---
 
-## 3a. Command Execution Restrictions (Phase 8A)
+## 3a. Command Execution (Phase 8A + 8B)
 
-`command_run` actions are subject to a three-layer defense model:
+`command_run` actions are fully integrated end-to-end: eligibility gate → restricted executor → execute API → `result_data.command_results` → TaskBoard viewer.
+
+Commands are subject to a three-layer defense model:
 
 ### Layer 1: Eligibility gate (`execution_eligibility_service.py`)
 
@@ -113,6 +115,22 @@ Files execute first, then commands. If any file action fails, commands do not ru
 ### Command rollback
 
 Commands are **not reversible**. The rollback system (Phase 7C) only covers file operations. If a real_run includes commands, rollback restores files but cannot undo command side effects.
+
+### Frontend display (Phase 8B-2)
+
+The TaskBoard real-run result viewer displays `command_results` alongside `file_results`:
+
+| Field shown | Detail |
+|---|---|
+| command | Full command text (monospace, ellipsis on overflow) |
+| status | Color-coded badge: green (success), red (failed), muted (skipped) |
+| exit_code | Green for 0, red for non-zero |
+| stdout | Pre-formatted block, truncated at 2000 chars in UI, max-height 120px with scroll |
+| stderr | Pre-formatted block in red tint, same truncation |
+| duration_ms | Displayed as ms (<1s) or seconds (≥1s) |
+| error | Red text below command row (if present) |
+
+When `command_results` is absent or empty, the section is not rendered (backward compatible).
 
 ---
 
@@ -188,4 +206,33 @@ The audit trail endpoint (`GET /tasks/{task_id}/audit-trail`) aggregates all pip
 
 **Sorting:** events are sorted by `timestamp ASC`, with `_EVENT_ORDER` used as a tiebreaker. Within the same timestamp, the fixed order is: `dry_run` (order 5) before `real_run` (order 5, same slot), before `rollback` (order 6).
 
-**Summaries** are auto-generated from `result_data` at query time; no separate summary storage is required.
+**Summaries** are auto-generated from `result_data` at query time; no separate summary storage is required. Real-run summaries include command counts (`cmd_success`, `cmd_fail`) when commands were executed.
+
+---
+
+## 8. Regression Baseline
+
+| Phase | Suites | Checks | Runner |
+|---|---|---|---|
+| 6E | 4 | ~277 | `scripts/run-6e-regression-isolated.py` |
+| 6F | 3 | ~100 | `scripts/run-6f-regression-isolated.py` |
+| 6G | 2 | ~60 | `scripts/run-6g-regression-isolated.py` |
+| 7 | 8 | ~191 | `scripts/run-7-regression-isolated.py` |
+| 8A | 2 | ~54 | `scripts/run-8a-regression-isolated.py` |
+| 8B | 1 | ~38 | `scripts/run-8b-regression-isolated.py` |
+| **Total** | **20** | **~720** | `scripts/run-all-regression.py` |
+
+---
+
+## 9. Still Blocked (Intentional)
+
+The following remain blocked by design and are not scheduled:
+
+| Capability | Reason |
+|---|---|
+| `file_delete` | Destructive; no rollback strategy yet |
+| `git_commit`, `git_checkout` | Git write operations need full rollback strategy |
+| `npm install`, `pip install`, etc. | Package install / network operations not allowed |
+| `git push`, `git pull`, etc. | Network + repository mutation not allowed |
+| Shell interpretation (`shell=True`) | Permanently blocked by design |
+| Unconfirmed high-risk auto-execution | Requires human approval gate |
