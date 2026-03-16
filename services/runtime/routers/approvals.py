@@ -85,6 +85,13 @@ async def resolve_approval(approval_id: str, body: ApprovalResolve):
             "UPDATE approval_requests SET status = ?, reviewer_comment = ?, resolved_at = ? WHERE id = ?",
             (body.status.value, body.reviewer_comment, now, approval_id),
         )
+        # Phase 9-4: Cascade approval status to linked execution_proposal
+        if existing["proposal_id"]:
+            proposal_status = "approved" if body.status == ApprovalStatus.APPROVED else "rejected"
+            conn.execute(
+                "UPDATE execution_proposals SET status = ?, updated_at = ? WHERE id = ?",
+                (proposal_status, now, existing["proposal_id"]),
+            )
         conn.commit()
         row = conn.execute("SELECT * FROM approval_requests WHERE id = ?", (approval_id,)).fetchone()
         return dict(row)

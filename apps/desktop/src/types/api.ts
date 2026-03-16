@@ -98,6 +98,7 @@ export interface ApprovalRequest {
   status: ApprovalStatus;
   reviewer_comment: string;
   created_at: string;
+  proposal_id: string | null;
   resolved_at: string | null;
 }
 

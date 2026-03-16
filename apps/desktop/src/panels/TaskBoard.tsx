@@ -3,6 +3,8 @@ import type { TaskCreate, TaskStatus, TaskPriority } from "../types/api";
 import { useTasks } from "../hooks/useTasks";
 import { tasksApi } from "../api/tasks";
 import { api } from "../api/client";
+import { approvalsApi } from "../api/approvals";
+import type { ApprovalRequest as ApprovalRequestType, ApprovalResolve } from "../types/api";
 import "./TaskBoard.css";
 
 interface TaskBoardProps {
@@ -387,6 +389,11 @@ export function TaskBoard({ projectId }: TaskBoardProps) {
   const [rollbackTriggerLoading, setRollbackTriggerLoading] = useState<string | null>(null);
   const [rollbackTriggerError, setRollbackTriggerError] = useState<Record<string, string | null>>({});
 
+  // Inline approval actions (Phase 9-4)
+  const [taskApprovals, setTaskApprovals] = useState<ApprovalRequestType[]>([]);
+  const [approvalLoading, setApprovalLoading] = useState<string | null>(null);
+  const [approvalError, setApprovalError] = useState<string | null>(null);
+
   // Cleanup orchestration poll on unmount (Phase 9-2)
   useEffect(() => {
     return () => {
@@ -411,17 +418,53 @@ export function TaskBoard({ projectId }: TaskBoardProps) {
     }
   }, []);
 
+  // Phase 9-4: Load approvals for a task
+  const loadTaskApprovals = useCallback(async (taskId: string) => {
+    try {
+      const data = await approvalsApi.listForTask(taskId);
+      setTaskApprovals(data);
+    } catch {
+      setTaskApprovals([]);
+    }
+  }, []);
+
+  // Phase 9-4: Resolve an approval inline
+  const resolveApproval = useCallback(
+    async (approvalId: string, status: "approved" | "rejected") => {
+      setApprovalLoading(approvalId);
+      setApprovalError(null);
+      try {
+        await approvalsApi.resolve(approvalId, { status } as ApprovalResolve);
+        // Refresh both proposals and approvals after resolution
+        if (expandedTask) {
+          await Promise.all([
+            loadProposals(expandedTask),
+            loadTaskApprovals(expandedTask),
+          ]);
+        }
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : "Failed to resolve approval";
+        setApprovalError(msg);
+      } finally {
+        setApprovalLoading(null);
+      }
+    },
+    [expandedTask, loadProposals, loadTaskApprovals],
+  );
+
   const toggleProposals = useCallback(
     (taskId: string) => {
       if (expandedTask === taskId) {
         setExpandedTask(null);
         setProposals([]);
+        setTaskApprovals([]);
       } else {
         setExpandedTask(taskId);
         loadProposals(taskId);
+        loadTaskApprovals(taskId);
       }
     },
-    [expandedTask, loadProposals],
+    [expandedTask, loadProposals, loadTaskApprovals],
   );
 
   // Execution request: load existing for a snapshot (Phase 6E-C)
@@ -961,6 +1004,7 @@ export function TaskBoard({ projectId }: TaskBoardProps) {
                           setExpandedTask(t.id);
                           if (finalTask.status === "done") {
                             loadProposals(t.id);
+                            loadTaskApprovals(t.id);
                           }
                         } catch {
                           // Best-effort; don't block UI on fetch failure
@@ -1174,6 +1218,96 @@ export function TaskBoard({ projectId }: TaskBoardProps) {
                               </ul>
                             </div>
                           )}
+
+                          {/* Inline approval actions (Phase 9-4) */}
+                          {p.requires_approval && p.status === "pending" && (() => {
+                            const linked = taskApprovals.find(
+                              (a) => a.proposal_id === p.id && a.status === "pending"
+                            );
+                            if (!linked) return null;
+                            return (
+                              <div className="inline-approval-actions" style={{
+                                margin: "8px 0",
+                                padding: "8px 10px",
+                                background: "rgba(255, 200, 50, 0.08)",
+                                borderRadius: 6,
+                                border: "1px solid rgba(255, 200, 50, 0.2)",
+                              }}>
+                                <div style={{ fontSize: 11, color: "var(--accent-yellow)", marginBottom: 6, fontWeight: 600 }}>
+                                  Awaiting approval
+                                </div>
+                                <div style={{ display: "flex", gap: 8 }}>
+                                  <button
+                                    className="btn btn-sm"
+                                    style={{
+                                      background: "var(--accent-green)",
+                                      color: "#000",
+                                      fontWeight: 600,
+                                      fontSize: 11,
+                                      padding: "3px 12px",
+                                      border: "none",
+                                      borderRadius: 4,
+                                      cursor: "pointer",
+                                    }}
+                                    disabled={approvalLoading === linked.id}
+                                    onClick={() => resolveApproval(linked.id, "approved")}
+                                  >
+                                    {approvalLoading === linked.id ? "..." : "Approve"}
+                                  </button>
+                                  <button
+                                    className="btn btn-sm"
+                                    style={{
+                                      background: "var(--accent-red)",
+                                      color: "#fff",
+                                      fontWeight: 600,
+                                      fontSize: 11,
+                                      padding: "3px 12px",
+                                      border: "none",
+                                      borderRadius: 4,
+                                      cursor: "pointer",
+                                    }}
+                                    disabled={approvalLoading === linked.id}
+                                    onClick={() => resolveApproval(linked.id, "rejected")}
+                                  >
+                                    {approvalLoading === linked.id ? "..." : "Reject"}
+                                  </button>
+                                </div>
+                                {approvalError && approvalLoading === null && (
+                                  <div style={{ color: "var(--accent-red)", fontSize: 11, marginTop: 4 }}>
+                                    {approvalError}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })()}
+
+                          {/* Show resolved approval status (Phase 9-4) */}
+                          {p.requires_approval && p.status !== "pending" && (() => {
+                            const linked = taskApprovals.find(
+                              (a) => a.proposal_id === p.id && a.status !== "pending"
+                            );
+                            if (!linked) return null;
+                            const isApproved = linked.status === "approved" || linked.status === "consumed";
+                            return (
+                              <div style={{
+                                margin: "6px 0",
+                                fontSize: 11,
+                                color: isApproved ? "var(--accent-green)" : "var(--accent-red)",
+                              }}>
+                                {isApproved ? "Approved" : "Rejected"}
+                                {linked.reviewer_comment && (
+                                  <span style={{ color: "var(--text-muted)", marginLeft: 8 }}>
+                                    — {linked.reviewer_comment}
+                                  </span>
+                                )}
+                                {linked.resolved_at && (
+                                  <span style={{ color: "var(--text-muted)", marginLeft: 6, fontSize: 10 }}>
+                                    {formatAuditTimestamp(linked.resolved_at)}
+                                  </span>
+                                )}
+                              </div>
+                            );
+                          })()}
 
                           {/* Snapshot actions (Phase 6E-B) */}
                           {p.status === "approved" && (
