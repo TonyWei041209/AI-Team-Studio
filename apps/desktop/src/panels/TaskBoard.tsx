@@ -429,8 +429,9 @@ export function TaskBoard({ projectId }: TaskBoardProps) {
   }, []);
 
   // Phase 9-4: Resolve an approval inline
+  // Phase 10-1: When approved, auto-freeze snapshot + create execution request
   const resolveApproval = useCallback(
-    async (approvalId: string, status: "approved" | "rejected") => {
+    async (approvalId: string, status: "approved" | "rejected", proposalId?: string) => {
       setApprovalLoading(approvalId);
       setApprovalError(null);
       try {
@@ -441,6 +442,39 @@ export function TaskBoard({ projectId }: TaskBoardProps) {
             loadProposals(expandedTask),
             loadTaskApprovals(expandedTask),
           ]);
+        }
+        // Phase 10-1: Auto-freeze + create execution request on approval
+        // Inline API calls to avoid declaration-order dependency on later useCallbacks
+        if (status === "approved" && proposalId) {
+          try {
+            setSnapshotLoading(proposalId);
+            setSnapshotError(null);
+            const snap = await api.post<ExecutionSnapshotResponse>(
+              `/api/proposals/${proposalId}/freeze`,
+            );
+            setSnapshots((prev) => ({ ...prev, [proposalId]: snap }));
+            // Auto-create execution request
+            try {
+              setExecReqLoading(snap.id);
+              setExecReqError(null);
+              const req = await api.post<ExecutionRequestResponse>(
+                `/api/snapshots/${snap.id}/request-execution`,
+              );
+              setExecRequests((prev) => ({ ...prev, [snap.id]: req }));
+            } catch (reqErr) {
+              setExecReqError(
+                reqErr instanceof Error ? reqErr.message : "Failed to auto-create execution request",
+              );
+            } finally {
+              setExecReqLoading(null);
+            }
+          } catch (freezeErr) {
+            setSnapshotError(
+              freezeErr instanceof Error ? freezeErr.message : "Failed to auto-freeze snapshot",
+            );
+          } finally {
+            setSnapshotLoading(null);
+          }
         }
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : "Failed to resolve approval";
@@ -737,7 +771,8 @@ export function TaskBoard({ projectId }: TaskBoardProps) {
   );
 
   // When a snapshot is loaded, also check for existing execution request
-  const freezeAndViewWithReqCheck = useCallback(async (proposalId: string) => {
+  // Returns the snapshot on success, or null on failure (Phase 10-1: enables chaining)
+  const freezeAndViewWithReqCheck = useCallback(async (proposalId: string): Promise<ExecutionSnapshotResponse | null> => {
     setSnapshotLoading(proposalId);
     setSnapshotError(null);
     try {
@@ -747,10 +782,12 @@ export function TaskBoard({ projectId }: TaskBoardProps) {
       setSnapshots((prev) => ({ ...prev, [proposalId]: snap }));
       // Also load execution request if one exists
       await loadExecRequest(snap.id);
+      return snap;
     } catch (err) {
       setSnapshotError(
         err instanceof Error ? err.message : "Failed to freeze snapshot",
       );
+      return null;
     } finally {
       setSnapshotLoading(null);
     }
@@ -1250,7 +1287,7 @@ export function TaskBoard({ projectId }: TaskBoardProps) {
                                       cursor: "pointer",
                                     }}
                                     disabled={approvalLoading === linked.id}
-                                    onClick={() => resolveApproval(linked.id, "approved")}
+                                    onClick={() => resolveApproval(linked.id, "approved", p.id)}
                                   >
                                     {approvalLoading === linked.id ? "..." : "Approve"}
                                   </button>
@@ -1267,7 +1304,7 @@ export function TaskBoard({ projectId }: TaskBoardProps) {
                                       cursor: "pointer",
                                     }}
                                     disabled={approvalLoading === linked.id}
-                                    onClick={() => resolveApproval(linked.id, "rejected")}
+                                    onClick={() => resolveApproval(linked.id, "rejected", p.id)}
                                   >
                                     {approvalLoading === linked.id ? "..." : "Reject"}
                                   </button>
