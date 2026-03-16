@@ -1493,6 +1493,61 @@ export function TaskBoard({ projectId }: TaskBoardProps) {
                                           >
                                             Reject Request
                                           </button>
+                                          {/* Phase 10-2: Confirm & Dry-Run combo — confirm is irreversible */}
+                                          <button
+                                            className="btn btn-sm"
+                                            style={{
+                                              background: "var(--accent-blue, #4a9eff)",
+                                              color: "#fff",
+                                              fontWeight: 600,
+                                              fontSize: 11,
+                                              padding: "3px 10px",
+                                              border: "none",
+                                              borderRadius: 4,
+                                              cursor: "pointer",
+                                            }}
+                                            disabled={execReqLoading === s.id || dryRunLoading === er.id}
+                                            onClick={async () => {
+                                              // Step 1: Confirm (irreversible)
+                                              setExecReqLoading(s.id);
+                                              setExecReqError(null);
+                                              try {
+                                                const updated = await api.patch<ExecutionRequestResponse>(
+                                                  `/api/execution-requests/${er.id}`,
+                                                  { status: "confirmed" },
+                                                );
+                                                setExecRequests((prev) => ({ ...prev, [s.id]: updated }));
+                                              } catch (confirmErr) {
+                                                setExecReqError(
+                                                  confirmErr instanceof Error ? confirmErr.message : "Failed to confirm request",
+                                                );
+                                                setExecReqLoading(null);
+                                                return; // Don't proceed to dry-run
+                                              }
+                                              setExecReqLoading(null);
+                                              // Step 2: Dry-run (read-only simulation)
+                                              setDryRunLoading(er.id);
+                                              setDryRunError(null);
+                                              try {
+                                                const result = await api.post<DryRunResult>(
+                                                  `/api/execution-requests/${er.id}/dry-run`,
+                                                );
+                                                setDryRunResults((prev) => ({ ...prev, [er.id]: result }));
+                                              } catch (drErr) {
+                                                setDryRunError(
+                                                  drErr instanceof Error ? drErr.message : "Failed to run dry-run",
+                                                );
+                                              } finally {
+                                                setDryRunLoading(null);
+                                              }
+                                            }}
+                                          >
+                                            {execReqLoading === s.id
+                                              ? "Confirming..."
+                                              : dryRunLoading === er.id
+                                                ? "Running dry-run..."
+                                                : "Confirm & Dry-Run (irreversible)"}
+                                          </button>
                                         </div>
                                       )}
                                     </div>
