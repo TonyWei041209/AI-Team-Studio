@@ -8,6 +8,7 @@ Settings responses mask API keys for display safety.
 
 import json
 import logging
+import os
 
 from fastapi import APIRouter, HTTPException
 
@@ -67,11 +68,55 @@ def _apply_settings_to_registry(settings: dict[str, dict]) -> None:
         registry.configure(name, api_key=cfg.get("api_key", ""), **extra)
 
 
+_ENV_KEY_MAP = {
+    "anthropic": "ANTHROPIC_API_KEY",
+    "openai": "OPENAI_API_KEY",
+    "gemini": "GEMINI_API_KEY",
+    "deepseek": "DEEPSEEK_API_KEY",
+    "kimi": "KIMI_API_KEY",
+    "minimax": "MINIMAX_API_KEY",
+}
+
+
+def _seed_from_env() -> None:
+    """On first run, seed provider_settings from environment variables.
+
+    Only inserts rows that don't already exist in the DB.
+    This provides a zero-config path: set env vars, start app, done.
+    """
+    conn = get_connection()
+    try:
+        seeded = []
+        for provider_name, env_var in _ENV_KEY_MAP.items():
+            key = os.environ.get(env_var, "").strip()
+            if not key:
+                continue
+            existing = conn.execute(
+                "SELECT 1 FROM provider_settings WHERE provider_name = ?",
+                (provider_name,),
+            ).fetchone()
+            if existing:
+                continue
+            conn.execute(
+                "INSERT INTO provider_settings (provider_name, api_key, base_url, enabled) "
+                "VALUES (?, ?, '', 1)",
+                (provider_name, key),
+            )
+            seeded.append(provider_name)
+        if seeded:
+            conn.commit()
+            logger.info("[settings] Seeded provider keys from env: %s", ", ".join(seeded))
+    finally:
+        conn.close()
+
+
 def load_and_apply_settings() -> None:
     """Load settings from DB and apply to the registry.
 
     Called during app startup (lifespan).
+    Seeds from environment variables on first run if DB is empty.
     """
+    _seed_from_env()
     settings = _load_all_settings()
     _apply_settings_to_registry(settings)
     configured = [n for n, c in settings.items() if c.get("api_key")]
