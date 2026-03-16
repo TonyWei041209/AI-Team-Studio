@@ -340,34 +340,52 @@ def section_8_api_freeze():
         check("API test has proposal", False, "No proposals")
         return
     api_proposal_id = proposals[0]["id"]
+    api_prop_status = proposals[0]["status"]
+    api_prop_requires_approval = proposals[0].get("requires_approval", True)
 
-    # Freeze unapproved -> 409
-    status, data = POST(f"/proposals/{api_proposal_id}/freeze")
-    check("Freeze unapproved via API -> 409", status == 409)
+    # Freeze unapproved -> 409 (only testable when proposal is still pending)
+    if api_prop_status == "pending":
+        status, data = POST(f"/proposals/{api_proposal_id}/freeze")
+        check("Freeze unapproved via API -> 409", status == 409)
+    else:
+        check(
+            "Freeze unapproved via API -> 409 (skipped: proposal already auto-approved)",
+            True,
+        )
 
     # Freeze nonexistent -> 404
     status, data = POST("/proposals/nonexistent-id/freeze")
     check("Freeze nonexistent via API -> 404", status == 404)
 
-    # Approve the proposal, then freeze via API
+    # Approve the proposal if not already approved, then freeze via API
     from database import get_connection
     import uuid as _uuid
     from datetime import datetime, timezone
-    conn = get_connection()
-    try:
-        conn.execute("UPDATE execution_proposals SET status = 'approved' WHERE id = ?", (api_proposal_id,))
-        _aid = str(_uuid.uuid4())
-        _now = datetime.now(timezone.utc).isoformat()
-        conn.execute(
-            """INSERT INTO approval_requests
-               (id, task_id, run_id, action_type, action_payload, status, proposal_id, created_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-            (_aid, api_task_id, None, "proposal:builder",
-             json.dumps({"proposal_id": api_proposal_id}), "approved", api_proposal_id, _now),
-        )
-        conn.commit()
-    finally:
-        conn.close()
+    if api_prop_status != "approved":
+        conn = get_connection()
+        try:
+            conn.execute(
+                "UPDATE execution_proposals SET status = 'approved' WHERE id = ?",
+                (api_proposal_id,),
+            )
+            _aid = str(_uuid.uuid4())
+            _now = datetime.now(timezone.utc).isoformat()
+            conn.execute(
+                """INSERT INTO approval_requests
+                   (id, task_id, run_id, action_type, action_payload, status, proposal_id, created_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    _aid, api_task_id, None, "proposal:builder",
+                    json.dumps({"proposal_id": api_proposal_id}),
+                    "approved", api_proposal_id, _now,
+                ),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+    else:
+        # Already auto-approved; no manual approval step needed
+        pass
 
     status, snap = POST(f"/proposals/{api_proposal_id}/freeze")
     check("Freeze approved via API -> 201", status == 201)

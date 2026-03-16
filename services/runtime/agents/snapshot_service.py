@@ -71,27 +71,45 @@ def freeze_snapshot(proposal_id: str) -> dict:
                 f"Proposal not approved (status={prop_dict['status']})"
             )
 
-        # Find matching approval
+        task_id = prop_dict["task_id"]
+
+        # Find matching approval (not required for auto-approved low-risk proposals)
         approval = conn.execute(
             "SELECT * FROM approval_requests WHERE proposal_id = ? AND status = 'approved'",
             (proposal_id,),
         ).fetchone()
-        if not approval:
+        approval_id_value = None
+        if approval:
+            appr_cols = [d[0] for d in conn.execute(
+                "SELECT * FROM approval_requests LIMIT 0"
+            ).description]
+            appr_dict = dict(zip(appr_cols, approval))
+            approval_id_value = appr_dict["id"]
+        elif prop_dict.get("requires_approval"):
+            # High-risk proposal must have an approval record
             raise ValueError(
                 f"No approved approval_request for proposal {proposal_id}"
             )
-
-        appr_cols = [d[0] for d in conn.execute(
-            "SELECT * FROM approval_requests LIMIT 0"
-        ).description]
-        appr_dict = dict(zip(appr_cols, approval))
+        else:
+            # Low-risk auto-approved proposal — create synthetic approval record
+            approval_id_value = str(uuid.uuid4())
+            conn.execute(
+                """INSERT INTO approval_requests
+                   (id, task_id, run_id, action_type, action_payload,
+                    status, proposal_id, created_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    approval_id_value, task_id, prop_dict.get("run_id"),
+                    "auto_approve", json.dumps({"proposal_id": proposal_id, "auto": True}),
+                    "approved", proposal_id, datetime.now(timezone.utc).isoformat(),
+                ),
+            )
 
         # Freeze
         snapshot_id = str(uuid.uuid4())
         snapshot_data = prop_dict["proposal_data"]
         content_hash = _content_hash(snapshot_data)
         risk_level = prop_dict["risk_level"]
-        task_id = prop_dict["task_id"]
         now = datetime.now(timezone.utc).isoformat()
 
         conn.execute(
@@ -100,7 +118,7 @@ def freeze_snapshot(proposal_id: str) -> dict:
                 content_hash, risk_level, status, created_at)
                VALUES (?, ?, ?, ?, ?, ?, ?, 'frozen', ?)""",
             (
-                snapshot_id, proposal_id, appr_dict["id"], task_id,
+                snapshot_id, proposal_id, approval_id_value, task_id,
                 snapshot_data, content_hash, risk_level, now,
             ),
         )
@@ -131,7 +149,7 @@ def freeze_snapshot(proposal_id: str) -> dict:
         return {
             "id": snapshot_id,
             "proposal_id": proposal_id,
-            "approval_id": appr_dict["id"],
+            "approval_id": approval_id_value,
             "task_id": task_id,
             "snapshot_data": snapshot_data,
             "content_hash": content_hash,
