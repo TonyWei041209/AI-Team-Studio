@@ -544,6 +544,37 @@ def _apply_v12(conn: sqlite3.Connection) -> None:
     conn.execute("INSERT INTO schema_version (version) VALUES (12)")
 
 
+def _apply_v13(conn: sqlite3.Connection) -> None:
+    """V13: Token usage logging table (Phase 12-1).
+
+    Records per-role token consumption for each agent execution step,
+    enabling usage analysis and future budget enforcement.
+    """
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS token_usage_log (
+            id TEXT PRIMARY KEY,
+            task_id TEXT NOT NULL REFERENCES tasks(id),
+            run_id TEXT REFERENCES agent_runs(id),
+            role TEXT NOT NULL,
+            provider TEXT NOT NULL DEFAULT '',
+            model TEXT NOT NULL DEFAULT '',
+            prompt_tokens INTEGER NOT NULL DEFAULT 0,
+            completion_tokens INTEGER NOT NULL DEFAULT 0,
+            total_tokens INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        )
+    """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_token_usage_task "
+        "ON token_usage_log(task_id)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_token_usage_run "
+        "ON token_usage_log(run_id)"
+    )
+    conn.execute("INSERT INTO schema_version (version) VALUES (13)")
+
+
 # Ordered list of migrations
 _MIGRATIONS = [
     (1, _apply_v1),
@@ -558,6 +589,7 @@ _MIGRATIONS = [
     (10, _apply_v10),
     (11, _apply_v11),
     (12, _apply_v12),
+    (13, _apply_v13),
 ]
 
 

@@ -1081,3 +1081,37 @@ async def rollback_result(result_id: str):
     result = _parse_result_data(dict(raw_result))
     result["is_new"] = True
     return result
+
+
+@router.get("/tasks/{task_id}/token-usage")
+async def get_task_token_usage(task_id: str):
+    """Return token usage records and totals for a task (Phase 12-1)."""
+    conn = get_connection()
+    try:
+        rows = conn.execute(
+            "SELECT * FROM token_usage_log WHERE task_id = ? ORDER BY created_at",
+            (task_id,),
+        ).fetchall()
+        if not rows:
+            return {
+                "task_id": task_id,
+                "records": [],
+                "total_prompt_tokens": 0,
+                "total_completion_tokens": 0,
+                "total_tokens": 0,
+            }
+        cols = [d[0] for d in conn.execute(
+            "SELECT * FROM token_usage_log LIMIT 0"
+        ).description]
+        records = [dict(zip(cols, row)) for row in rows]
+        total_prompt = sum(r["prompt_tokens"] for r in records)
+        total_completion = sum(r["completion_tokens"] for r in records)
+        return {
+            "task_id": task_id,
+            "records": records,
+            "total_prompt_tokens": total_prompt,
+            "total_completion_tokens": total_completion,
+            "total_tokens": total_prompt + total_completion,
+        }
+    finally:
+        conn.close()

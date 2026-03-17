@@ -295,6 +295,9 @@ class Orchestrator:
             self._log(task_id, run_id, "error", defn.role.value,
                       f"{defn.display_name} failed: {result.error_message}")
 
+        # 6. Record token usage (Phase 12-1)
+        self._record_token_usage(task_id, run_id, defn.role.value, result)
+
         return {
             "run_id": run_id,
             "role": defn.role.value,
@@ -553,6 +556,40 @@ class Orchestrator:
             else:
                 summary[k] = v
         return json.dumps(summary)
+
+    def _record_token_usage(
+        self, task_id: str, run_id: str, role: str, result: ExecutionResult,
+    ) -> None:
+        """Persist token usage from an execution step (Phase 12-1)."""
+        usage = result.token_usage
+        if usage is None:
+            # Mock executor or no usage data — skip silently
+            return
+        conn = get_connection()
+        try:
+            conn.execute(
+                """INSERT INTO token_usage_log
+                   (id, task_id, run_id, role, provider, model,
+                    prompt_tokens, completion_tokens, total_tokens, created_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    str(uuid.uuid4()),
+                    task_id,
+                    run_id,
+                    role,
+                    usage.get("provider", ""),
+                    usage.get("model", ""),
+                    usage.get("prompt_tokens", 0),
+                    usage.get("completion_tokens", 0),
+                    usage.get("total_tokens", 0),
+                    datetime.now(timezone.utc).isoformat(),
+                ),
+            )
+            conn.commit()
+        except Exception:
+            pass  # Never fail orchestration due to usage logging
+        finally:
+            conn.close()
 
     @staticmethod
     def _log(

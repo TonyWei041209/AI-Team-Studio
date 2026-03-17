@@ -34,10 +34,12 @@ class ExecutionResult:
         output: dict,
         error_message: str | None = None,
         decision: str | ReviewDecision | None = None,
+        token_usage: dict | None = None,
     ):
         self.success = success
         self.output = output
         self.error_message = error_message
+        self.token_usage = token_usage
         # Normalise to ReviewDecision enum when provided
         if isinstance(decision, str):
             self.decision = ReviewDecision(decision).value

@@ -515,8 +515,8 @@ class ModelAgentExecutor:
             )
         return defn, provider, model_name
 
-    async def _call_model(self, defn, provider, model_name: str, user_msg: str) -> str:
-        """Build a CompletionRequest, call the provider, return raw content."""
+    async def _call_model(self, defn, provider, model_name: str, user_msg: str) -> tuple[str, dict]:
+        """Build a CompletionRequest, call the provider, return (content, usage_dict)."""
         request = CompletionRequest(
             model=model_name,
             messages=[Message(role=MessageRole.user, content=user_msg)],
@@ -525,7 +525,14 @@ class ModelAgentExecutor:
             temperature=0.3,
         )
         response = await provider.complete(request)
-        return response.content
+        usage_dict = {
+            "provider": response.provider,
+            "model": response.model,
+            "prompt_tokens": response.usage.prompt_tokens,
+            "completion_tokens": response.usage.completion_tokens,
+            "total_tokens": response.usage.total_tokens,
+        }
+        return response.content, usage_dict
 
     def _parse_and_validate(
         self,
@@ -566,7 +573,7 @@ class ModelAgentExecutor:
         """Call a real LLM to produce a structured Planner output."""
         defn, provider, model_name = self._resolve_provider(AgentRole.PLANNER)
         user_msg = self._build_planner_user_message(task_context)
-        raw_content = await self._call_model(defn, provider, model_name, user_msg)
+        raw_content, usage = await self._call_model(defn, provider, model_name, user_msg)
 
         result = self._parse_and_validate(raw_content, "Planner", PlannerOutputSchema)
         if isinstance(result, ExecutionResult):
@@ -576,7 +583,7 @@ class ModelAgentExecutor:
         result.setdefault("risks", [])
         result.setdefault("dependencies", [])
 
-        return ExecutionResult(success=True, output=result)
+        return ExecutionResult(success=True, output=result, token_usage=usage)
 
     @staticmethod
     def _build_planner_user_message(ctx: dict) -> str:
@@ -602,7 +609,7 @@ class ModelAgentExecutor:
         """
         defn, provider, model_name = self._resolve_provider(AgentRole.BUILDER)
         user_msg = self._build_builder_user_message(task_context)
-        raw_content = await self._call_model(defn, provider, model_name, user_msg)
+        raw_content, usage = await self._call_model(defn, provider, model_name, user_msg)
 
         result = self._parse_and_validate(raw_content, "Builder", BuilderOutputSchema)
         if isinstance(result, ExecutionResult):
@@ -614,7 +621,7 @@ class ModelAgentExecutor:
         # Normalize Phase 6E-A execution proposal fields
         _normalize_builder_proposal(result)
 
-        return ExecutionResult(success=True, output=result)
+        return ExecutionResult(success=True, output=result, token_usage=usage)
 
     @staticmethod
     def _build_builder_user_message(ctx: dict) -> str:
@@ -643,7 +650,7 @@ class ModelAgentExecutor:
         """Call a real LLM to produce a structured Reviewer output."""
         defn, provider, model_name = self._resolve_provider(AgentRole.REVIEWER)
         user_msg = self._build_reviewer_user_message(task_context)
-        raw_content = await self._call_model(defn, provider, model_name, user_msg)
+        raw_content, usage = await self._call_model(defn, provider, model_name, user_msg)
 
         result = self._parse_and_validate(raw_content, "Reviewer", ReviewerOutputSchema)
         if isinstance(result, ExecutionResult):
@@ -663,6 +670,7 @@ class ModelAgentExecutor:
             success=True,
             output=result,
             decision=decision,
+            token_usage=usage,
         )
 
     @staticmethod
