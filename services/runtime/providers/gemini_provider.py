@@ -17,24 +17,27 @@ from .base import (
 
 _GEMINI_MODELS = [
     ModelInfo(
-        id="gemini-2.0-flash",
-        display_name="Gemini 2.0 Flash",
+        id="gemini-2.5-flash",
+        display_name="Gemini 2.5 Flash",
         provider="gemini",
         max_tokens=8192,
     ),
     ModelInfo(
-        id="gemini-2.5-pro-preview-05-06",
-        display_name="Gemini 2.5 Pro Preview",
+        id="gemini-2.5-pro",
+        display_name="Gemini 2.5 Pro",
         provider="gemini",
         max_tokens=8192,
     ),
     ModelInfo(
-        id="gemini-2.5-flash-preview-04-17",
-        display_name="Gemini 2.5 Flash Preview",
+        id="gemini-3.1-pro-preview",
+        display_name="Gemini 3.1 Pro Preview",
         provider="gemini",
         max_tokens=8192,
     ),
 ]
+
+# Healthcheck model — use a lightweight, widely-available model
+_HEALTHCHECK_MODEL = "gemini-2.5-flash"
 
 
 class GeminiProvider(BaseProvider):
@@ -122,7 +125,7 @@ class GeminiProvider(BaseProvider):
         try:
             client = genai.Client(api_key=self.api_key)
             await client.aio.models.generate_content(
-                model="gemini-2.0-flash",
+                model=_HEALTHCHECK_MODEL,
                 contents="ping",
                 config={"max_output_tokens": 1},
             )

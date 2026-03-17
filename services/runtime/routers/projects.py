@@ -82,7 +82,13 @@ async def delete_project(project_id: str):
         existing = conn.execute("SELECT id FROM projects WHERE id = ?", (project_id,)).fetchone()
         if not existing:
             raise HTTPException(status_code=404, detail="Project not found")
-        conn.execute("DELETE FROM projects WHERE id = ?", (project_id,))
-        conn.commit()
+        try:
+            conn.execute("DELETE FROM projects WHERE id = ?", (project_id,))
+            conn.commit()
+        except Exception:
+            raise HTTPException(
+                status_code=409,
+                detail="Cannot delete project with existing tasks. Delete tasks first.",
+            )
     finally:
         conn.close()

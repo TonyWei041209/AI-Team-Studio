@@ -53,7 +53,7 @@ def _apply_v2(conn: sqlite3.Connection) -> None:
             local_repo_path TEXT NOT NULL,
             default_branch TEXT NOT NULL DEFAULT 'main',
             description TEXT NOT NULL DEFAULT '',
-            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             updated_at TEXT NOT NULL DEFAULT (datetime('now'))
         )
     """)
@@ -67,7 +67,7 @@ def _apply_v2(conn: sqlite3.Connection) -> None:
             status TEXT NOT NULL DEFAULT 'pending',
             priority TEXT NOT NULL DEFAULT 'medium',
             assigned_agent_role TEXT,
-            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             updated_at TEXT NOT NULL DEFAULT (datetime('now'))
         )
     """)
@@ -84,7 +84,7 @@ def _apply_v2(conn: sqlite3.Connection) -> None:
             output_summary TEXT NOT NULL DEFAULT '',
             started_at TEXT,
             ended_at TEXT,
-            created_at TEXT NOT NULL DEFAULT (datetime('now'))
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
         )
     """)
 
@@ -97,7 +97,7 @@ def _apply_v2(conn: sqlite3.Connection) -> None:
             action_payload TEXT NOT NULL DEFAULT '{}',
             status TEXT NOT NULL DEFAULT 'pending',
             reviewer_comment TEXT NOT NULL DEFAULT '',
-            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             resolved_at TEXT
         )
     """)
@@ -111,7 +111,7 @@ def _apply_v2(conn: sqlite3.Connection) -> None:
             source TEXT NOT NULL DEFAULT 'system',
             message TEXT NOT NULL,
             payload TEXT NOT NULL DEFAULT '{}',
-            created_at TEXT NOT NULL DEFAULT (datetime('now'))
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
         )
     """)
 
@@ -144,7 +144,7 @@ def _apply_v3(conn: sqlite3.Connection) -> None:
             action_payload TEXT NOT NULL DEFAULT '{}',
             status TEXT NOT NULL DEFAULT 'pending',
             reviewer_comment TEXT NOT NULL DEFAULT '',
-            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             resolved_at TEXT
         )
     """)
@@ -178,7 +178,7 @@ def _apply_v4(conn: sqlite3.Connection) -> None:
             base_url TEXT NOT NULL DEFAULT '',
             enabled INTEGER NOT NULL DEFAULT 0,
             config_json TEXT NOT NULL DEFAULT '{}',
-            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             updated_at TEXT NOT NULL DEFAULT (datetime('now'))
         )
     """)
@@ -198,7 +198,7 @@ def _apply_v5(conn: sqlite3.Connection) -> None:
             provider TEXT NOT NULL DEFAULT 'mock',
             model TEXT NOT NULL DEFAULT '',
             enabled INTEGER NOT NULL DEFAULT 0,
-            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             updated_at TEXT NOT NULL DEFAULT (datetime('now'))
         )
     """)
@@ -236,7 +236,7 @@ def _apply_v6(conn: sqlite3.Connection) -> None:
             requires_approval INTEGER NOT NULL DEFAULT 1,
             approval_reasons TEXT NOT NULL DEFAULT '[]',
             status TEXT NOT NULL DEFAULT 'pending',
-            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             updated_at TEXT NOT NULL DEFAULT (datetime('now'))
         )
     """)
@@ -281,7 +281,7 @@ def _apply_v7(conn: sqlite3.Connection) -> None:
             content_hash TEXT NOT NULL,
             risk_level TEXT NOT NULL,
             status TEXT NOT NULL DEFAULT 'frozen',
-            created_at TEXT NOT NULL DEFAULT (datetime('now'))
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
         )
     """)
     conn.execute(
@@ -314,8 +314,8 @@ def _apply_v8(conn: sqlite3.Connection) -> None:
             risk_level TEXT NOT NULL,
             status TEXT NOT NULL DEFAULT 'requested'
                 CHECK (status IN ('requested', 'confirmed', 'rejected')),
-            created_at TEXT NOT NULL DEFAULT (datetime('now')),
-            updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
         )
     """)
     conn.execute(
@@ -353,7 +353,7 @@ def _apply_v9(conn: sqlite3.Connection) -> None:
             result_data TEXT NOT NULL DEFAULT '{}',
             started_at TEXT,
             completed_at TEXT,
-            created_at TEXT NOT NULL DEFAULT (datetime('now'))
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
         )
     """)
     conn.execute(
@@ -396,7 +396,7 @@ def _apply_v10(conn: sqlite3.Connection) -> None:
             result_data TEXT NOT NULL DEFAULT '{}',
             started_at TEXT,
             completed_at TEXT,
-            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             UNIQUE (execution_request_id, mode)
         )
     """)
@@ -445,7 +445,7 @@ def _apply_v11(conn: sqlite3.Connection) -> None:
             path TEXT NOT NULL,
             original_content TEXT NOT NULL,
             original_hash TEXT NOT NULL,
-            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             UNIQUE (execution_result_id, path)
         )
     """)
@@ -488,7 +488,7 @@ def _apply_v12(conn: sqlite3.Connection) -> None:
             result_data TEXT NOT NULL DEFAULT '{}',
             started_at TEXT,
             completed_at TEXT,
-            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             UNIQUE (execution_request_id, mode)
         )
     """)
@@ -515,7 +515,7 @@ def _apply_v12(conn: sqlite3.Connection) -> None:
             path TEXT NOT NULL,
             original_content TEXT NOT NULL,
             original_hash TEXT NOT NULL,
-            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             UNIQUE (execution_result_id, path)
         )
     """)
@@ -561,7 +561,7 @@ def _apply_v13(conn: sqlite3.Connection) -> None:
             prompt_tokens INTEGER NOT NULL DEFAULT 0,
             completion_tokens INTEGER NOT NULL DEFAULT 0,
             total_tokens INTEGER NOT NULL DEFAULT 0,
-            created_at TEXT NOT NULL DEFAULT (datetime('now'))
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
         )
     """)
     conn.execute(
