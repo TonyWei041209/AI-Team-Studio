@@ -595,7 +595,7 @@ class ModelAgentExecutor:
         ]
         prev = ctx.get("previous_outputs")
         if prev:
-            parts.append(f"Previous agent outputs: {json.dumps(prev, indent=2)}")
+            parts.append(f"Previous agent outputs: {json.dumps(prev, ensure_ascii=False, separators=(',',':'))}")
         return "\n".join(parts)
 
     # ── Builder execution (plan-only, Phase 6D) ─────────────
@@ -633,13 +633,13 @@ class ModelAgentExecutor:
         ]
         prev = ctx.get("previous_outputs", {})
         if prev.get("planner"):
-            parts.append(f"\nPlanner output:\n{json.dumps(prev['planner'], indent=2)}")
+            parts.append(f"\nPlanner output:\n{json.dumps(prev['planner'], ensure_ascii=False, separators=(',',':'))}")
 
         # Include rejection history if this is a retry
         rejection_history = ctx.get("rejection_history")
         if rejection_history:
             parts.append(
-                f"\nPrevious rejection(s):\n{json.dumps(rejection_history, indent=2)}"
+                f"\nPrevious rejection(s):\n{json.dumps(rejection_history, ensure_ascii=False, separators=(',',':'))}"
             )
 
         return "\n".join(parts)
@@ -683,17 +683,17 @@ class ModelAgentExecutor:
         ]
         prev = ctx.get("previous_outputs", {})
         if prev.get("planner"):
-            parts.append(f"\nPlanner output:\n{json.dumps(prev['planner'], indent=2)}")
+            parts.append(f"\nPlanner output:\n{json.dumps(prev['planner'], ensure_ascii=False, separators=(',',':'))}")
         if prev.get("builder"):
-            parts.append(f"\nBuilder output:\n{json.dumps(prev['builder'], indent=2)}")
+            parts.append(f"\nBuilder output:\n{json.dumps(prev['builder'], ensure_ascii=False, separators=(',',':'))}")
         if prev.get("qa"):
-            parts.append(f"\nQA output:\n{json.dumps(prev['qa'], indent=2)}")
+            parts.append(f"\nQA output:\n{json.dumps(prev['qa'], ensure_ascii=False, separators=(',',':'))}")
 
         # Include rejection history if this is a retry
         rejection_history = ctx.get("rejection_history")
         if rejection_history:
             parts.append(
-                f"\nPrevious rejection(s):\n{json.dumps(rejection_history, indent=2)}"
+                f"\nPrevious rejection(s):\n{json.dumps(rejection_history, ensure_ascii=False, separators=(',',':'))}"
             )
 
         return "\n".join(parts)
