@@ -1,9 +1,9 @@
 @echo off
 chcp 65001 >nul 2>&1
-title AI Team Studio
+title AI Team Studio Desktop
 
 echo ============================================================
-echo   AI Team Studio - Web Mode
+echo   AI Team Studio - Desktop App
 echo ============================================================
 echo.
 
@@ -15,6 +15,7 @@ set "DESKTOP_DIR=%ROOT%apps\desktop"
 :: ── Pre-flight checks ──────────────────────────────────────────
 where python >nul 2>&1 || goto no_python
 where node >nul 2>&1 || goto no_node
+where cargo >nul 2>&1 || goto no_cargo
 goto checks_ok
 
 :no_python
@@ -24,6 +25,12 @@ exit /b 1
 
 :no_node
 echo   [ERROR] node not found in PATH.
+pause
+exit /b 1
+
+:no_cargo
+echo   [ERROR] cargo / Rust not found in PATH.
+echo           Install from https://rustup.rs
 pause
 exit /b 1
 
@@ -52,20 +59,17 @@ exit /b 1
 echo         Backend ready.
 echo.
 
-:: ── Start Frontend ─────────────────────────────────────────────
-echo   [2/2] Starting frontend...
+:: ── Start Tauri Desktop App ────────────────────────────────────
+echo   [2/2] Starting desktop app...
+echo         First launch compiles Rust, may take a few minutes.
+echo         Subsequent launches will be fast.
+echo.
 cd /d "%DESKTOP_DIR%"
-start "AI-Team-Studio-Frontend" /min cmd /c "npx vite --open"
+call npm run tauri:dev
 
+:: ── Cleanup on close ───────────────────────────────────────────
 echo.
-echo ============================================================
-echo   AI Team Studio is running!
-echo.
-echo   Backend:  http://127.0.0.1:9800
-echo   Frontend: http://localhost:5173
-echo.
-echo   Close this window to keep running in background,
-echo   or press Ctrl+C then close to stop all.
-echo ============================================================
-echo.
+echo   Shutting down backend...
+taskkill /fi "WINDOWTITLE eq AI-Team-Studio-Backend" /f >nul 2>&1
+echo   AI Team Studio closed.
 pause
