@@ -180,6 +180,8 @@ class Orchestrator:
                     if "rejection_history" not in task_context:
                         task_context["rejection_history"] = []
                     task_context["rejection_history"].append(step.get("output", {}))
+                    # Compress older rejections to save tokens (Phase 12-3)
+                    self._compress_rejection_history(task_context["rejection_history"])
                     task_context["rejection_feedback"] = step.get("output", {})
                     idx = 1  # Builder index
                     continue
@@ -590,6 +592,28 @@ class Orchestrator:
             pass  # Never fail orchestration due to usage logging
         finally:
             conn.close()
+
+    @staticmethod
+    def _compress_rejection_history(history: list[dict]) -> None:
+        """Compress older rejections to one-line summaries (Phase 12-3).
+
+        Keeps the most recent rejection (last element) in full.
+        All earlier entries are replaced with a compact summary containing
+        only the rejection number, decision, and a truncated review summary.
+        Mutates *history* in-place.
+        """
+        if len(history) <= 1:
+            return
+        for i in range(len(history) - 1):
+            entry = history[i]
+            summary_text = entry.get("review_summary", entry.get("reason", ""))
+            if len(summary_text) > 120:
+                summary_text = summary_text[:117] + "..."
+            history[i] = {
+                "rejection_number": i + 1,
+                "decision": entry.get("decision", "request_changes"),
+                "summary": summary_text,
+            }
 
     @staticmethod
     def _log(
