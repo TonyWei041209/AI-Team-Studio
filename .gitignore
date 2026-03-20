@@ -16,6 +16,7 @@ data/*.sqlite
 data/*.sqlite3
 data/*.sqlite-wal
 data/*.sqlite-shm
+data/.fuse_hidden*
 
 # IDE
 .vscode/
