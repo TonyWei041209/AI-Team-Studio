@@ -1,0 +1,277 @@
+/* ── Pipeline Stepper (Phase 16-1/2) ─────────────────── */
+
+.pipeline-stepper {
+  margin-top: 8px;
+  padding: 10px 12px;
+  background-color: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+}
+
+.pipeline-stepper-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.pipeline-stepper-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.pipeline-stepper-progress {
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+}
+
+.pipeline-stepper-header-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pipeline-stepper-task-status {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+/* Live polling badge */
+.pipeline-stepper-live-badge {
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--accent-green);
+  background-color: rgba(76, 175, 80, 0.12);
+  border: 1px solid rgba(76, 175, 80, 0.3);
+  border-radius: 4px;
+  padding: 0 5px;
+  line-height: 16px;
+  animation: live-pulse 2s ease-in-out infinite;
+}
+
+@keyframes live-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+/* Failed task header emphasis */
+.pipeline-stepper-failed .pipeline-stepper-title {
+  color: var(--accent-red);
+}
+
+.pipeline-stepper-track {
+  display: flex;
+  align-items: center;
+  gap: 0;
+}
+
+.pipeline-step-wrapper {
+  display: flex;
+  align-items: center;
+  flex: 1;
+}
+
+.pipeline-connector {
+  width: 16px;
+  height: 2px;
+  background-color: var(--border-color);
+  flex-shrink: 0;
+}
+
+.pipeline-connector.connector-done {
+  background-color: var(--accent-green);
+}
+
+.pipeline-connector.connector-disabled {
+  background-color: var(--border-color);
+  opacity: 0.4;
+}
+
+.pipeline-step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  flex: 1;
+  min-width: 0;
+}
+
+/* Wrapper holds the icon + retry badge together */
+.pipeline-step-icon-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.pipeline-step-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 700;
+  border: 2px solid var(--border-color);
+  background-color: var(--bg-secondary);
+  color: var(--text-muted);
+  transition: all 0.2s;
+}
+
+/* Status-specific icon styling */
+.pipeline-step-completed .pipeline-step-icon {
+  border-color: var(--accent-green);
+  background-color: var(--accent-green);
+  color: white;
+}
+
+.pipeline-step-active .pipeline-step-icon {
+  border-color: var(--accent-blue);
+  background-color: rgba(88, 166, 255, 0.15);
+  color: var(--accent-blue);
+  animation: pulse-glow 1.5s ease-in-out infinite;
+}
+
+/* Currently active role: stronger pulse, slightly larger icon */
+.pipeline-step-current .pipeline-step-icon {
+  width: 32px;
+  height: 32px;
+  font-size: 14px;
+  border-width: 2px;
+  animation: pulse-glow-strong 1.2s ease-in-out infinite;
+}
+
+.pipeline-step-failed .pipeline-step-icon {
+  border-color: var(--accent-red);
+  background-color: rgba(248, 81, 73, 0.15);
+  color: var(--accent-red);
+}
+
+.pipeline-step-disabled .pipeline-step-icon {
+  border-color: var(--border-color);
+  background-color: var(--bg-tertiary);
+  color: var(--text-muted);
+  opacity: 0.4;
+}
+
+.pipeline-step-waiting .pipeline-step-icon {
+  border-color: var(--border-color);
+  background-color: var(--bg-secondary);
+  color: var(--text-muted);
+}
+
+.pipeline-step-label {
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--text-primary);
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 80px;
+}
+
+.pipeline-step-disabled .pipeline-step-label {
+  color: var(--text-muted);
+  opacity: 0.5;
+}
+
+.pipeline-step-status-tag {
+  font-size: 9px;
+  padding: 1px 6px;
+  border-radius: 8px;
+  font-weight: 500;
+  text-transform: lowercase;
+}
+
+/* Retry badge: shown above/beside the icon */
+.pipeline-retry-badge {
+  position: absolute;
+  top: -6px;
+  right: -22px;
+  font-size: 8px;
+  font-weight: 600;
+  font-family: var(--font-mono);
+  background-color: rgba(248, 81, 73, 0.18);
+  color: var(--accent-red);
+  border: 1px solid rgba(248, 81, 73, 0.35);
+  border-radius: 6px;
+  padding: 0px 4px;
+  white-space: nowrap;
+  line-height: 14px;
+  pointer-events: none;
+}
+
+/* Elapsed time label */
+.pipeline-step-elapsed {
+  font-size: 9px;
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+  opacity: 0.85;
+  margin-top: -1px;
+}
+
+.pipeline-step-active .pipeline-step-elapsed,
+.pipeline-step-current .pipeline-step-elapsed {
+  color: var(--accent-blue);
+  opacity: 1;
+}
+
+.status-completed {
+  background-color: rgba(76, 175, 80, 0.15);
+  color: var(--accent-green);
+}
+
+.status-active {
+  background-color: rgba(88, 166, 255, 0.15);
+  color: var(--accent-blue);
+}
+
+.status-failed {
+  background-color: rgba(248, 81, 73, 0.15);
+  color: var(--accent-red);
+}
+
+.status-disabled {
+  background-color: rgba(128, 128, 128, 0.1);
+  color: var(--text-muted);
+  opacity: 0.6;
+}
+
+.status-waiting {
+  background-color: rgba(128, 128, 128, 0.08);
+  color: var(--text-muted);
+}
+
+.status-skipped {
+  background-color: rgba(128, 128, 128, 0.08);
+  color: var(--text-muted);
+  opacity: 0.6;
+}
+
+@keyframes pulse-glow {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(88, 166, 255, 0.3);
+  }
+  50% {
+    box-shadow: 0 0 0 4px rgba(88, 166, 255, 0.1);
+  }
+}
+
+@keyframes pulse-glow-strong {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(88, 166, 255, 0.5);
+  }
+  50% {
+    box-shadow: 0 0 0 7px rgba(88, 166, 255, 0.12);
+  }
+}

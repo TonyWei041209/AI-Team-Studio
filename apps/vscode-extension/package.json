@@ -1,0 +1,109 @@
+{
+  "name": "ai-team-studio",
+  "displayName": "AI Team Studio",
+  "description": "VS Code companion for AI Team Studio — view projects, tasks, and orchestration status from your editor.",
+  "version": "0.1.0",
+  "publisher": "ai-team-studio",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "configuration": {
+      "title": "AI Team Studio",
+      "properties": {
+        "aiTeamStudio.runtimeUrl": {
+          "type": "string",
+          "default": "http://127.0.0.1:9800",
+          "description": "Base URL of the AI Team Studio local runtime server."
+        },
+        "aiTeamStudio.refreshInterval": {
+          "type": "number",
+          "default": 15000,
+          "description": "Auto-refresh interval in milliseconds (0 to disable)."
+        }
+      }
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "ai-team-studio",
+          "title": "AI Team Studio",
+          "icon": "resources/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "ai-team-studio": [
+        {
+          "id": "ats.status",
+          "name": "Status"
+        },
+        {
+          "id": "ats.projects",
+          "name": "Projects"
+        },
+        {
+          "id": "ats.tasks",
+          "name": "Tasks"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "ats.refresh",
+        "title": "AI Team Studio: Refresh",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "ats.selectProject",
+        "title": "AI Team Studio: Select Project"
+      },
+      {
+        "command": "ats.orchestrateTask",
+        "title": "AI Team Studio: Start Orchestration"
+      },
+      {
+        "command": "ats.openInDesktop",
+        "title": "AI Team Studio: Open in Desktop App"
+      },
+      {
+        "command": "ats.checkConnection",
+        "title": "AI Team Studio: Check Runtime Connection"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "ats.refresh",
+          "when": "view =~ /^ats\\./",
+          "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "ats.orchestrateTask",
+          "when": "viewItem == task-pending",
+          "group": "inline"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "lint": "eslint src --ext ts"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.85.0",
+    "@types/node": "^20.0.0",
+    "typescript": "^5.3.0"
+  }
+}

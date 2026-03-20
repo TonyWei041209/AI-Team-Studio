@@ -100,3 +100,20 @@ async def update_task_status(task_id: str, body: TaskStatusUpdate):
         return dict(row)
     finally:
         conn.close()
+
+
+@router.get("/tasks/{task_id}/runs")
+async def list_task_runs(task_id: str):
+    """Return agent runs for a task (read-only, for pipeline visualization)."""
+    conn = get_connection()
+    try:
+        row = conn.execute("SELECT id FROM tasks WHERE id = ?", (task_id,)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Task not found")
+        runs = conn.execute(
+            "SELECT id, role, status, started_at, ended_at, created_at FROM agent_runs WHERE task_id = ? ORDER BY created_at ASC",
+            (task_id,),
+        ).fetchall()
+        return [dict(r) for r in runs]
+    finally:
+        conn.close()

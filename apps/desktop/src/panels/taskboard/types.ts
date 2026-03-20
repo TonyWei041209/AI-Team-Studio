@@ -2,6 +2,16 @@ import type { TaskStatus, TaskPriority } from "../../types/api";
 
 export type { TaskStatus, TaskPriority };
 
+// ── Agent Run Summary (Phase 16-1) ────────────────────────
+export interface AgentRunSummary {
+  id: string;
+  role: string;
+  status: string; // "pending" | "running" | "completed" | "failed"
+  started_at: string | null;
+  ended_at: string | null;
+  created_at: string;
+}
+
 // ── Proposal types (Phase 6E-A) ────────────────────────────
 
 export interface ProposedFile {

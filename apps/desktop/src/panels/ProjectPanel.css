@@ -228,3 +228,122 @@
   color: var(--text-muted);
   font-family: var(--font-mono);
 }
+
+/* ── Team Configuration ─────────────────────────────── */
+
+.team-config {
+  margin-top: 16px;
+  padding: 16px;
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+}
+
+.team-config-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+
+.team-config-hint {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-bottom: 12px;
+}
+
+.participant-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.participant-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background-color: var(--bg-tertiary);
+  border-radius: 6px;
+  border: 1px solid var(--border-color);
+}
+
+.participant-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.participant-role-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.participant-mandatory-badge {
+  font-size: 10px;
+  padding: 1px 6px;
+  background-color: rgba(88, 166, 255, 0.15);
+  color: var(--accent-blue);
+  border-radius: 8px;
+  text-transform: uppercase;
+  font-weight: 600;
+}
+
+.participant-toggle {
+  position: relative;
+  width: 36px;
+  height: 20px;
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.participant-toggle.enabled {
+  background-color: var(--accent-green);
+  border-color: var(--accent-green);
+}
+
+.participant-toggle.disabled-toggle {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.participant-toggle-knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  background-color: white;
+  border-radius: 50%;
+  transition: transform 0.2s;
+}
+
+.participant-toggle.enabled .participant-toggle-knob {
+  transform: translateX(16px);
+}
+
+.team-config-status {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.team-config-status.error {
+  color: var(--accent-red);
+}
+
+/* ── Godot Badge (Phase 5.8) ── */
+.project-godot-badge {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: rgba(66, 133, 244, 0.15);
+  color: #4285f4;
+}

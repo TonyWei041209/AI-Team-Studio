@@ -343,3 +343,86 @@ class ExecutionSnapshot(BaseModel):
 class ExecutionSnapshotResponse(BaseModel):
     """Response for snapshot endpoints."""
     snapshot: ExecutionSnapshot
+
+
+# ── Skill Scope ───────────────────────────────────────
+
+class SkillScopeType(str, Enum):
+    GLOBAL = "global"
+    AGENT = "agent"
+
+
+# ── Skill ─────────────────────────────────────────────
+
+class SkillCreate(BaseModel):
+    name: str
+    description: str = ""
+    content: str = ""
+    scope_type: SkillScopeType = SkillScopeType.GLOBAL
+    agent_role: Optional[str] = None
+    is_enabled: bool = True
+
+
+class SkillUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    content: Optional[str] = None
+    scope_type: Optional[SkillScopeType] = None
+    agent_role: Optional[str] = None
+    is_enabled: Optional[bool] = None
+
+
+class Skill(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    name: str
+    description: str
+    content: str
+    scope_type: str
+    agent_role: Optional[str] = None
+    is_enabled: bool
+    created_at: str
+    updated_at: str
+
+
+# ── Role Registry (Phase 15-1) ───────────────────────
+
+
+class RoleCreate(BaseModel):
+    name: str
+    display_name: str
+    description: str = ""
+    department: str = "engineering"
+    is_enabled: bool = True
+
+
+class RoleUpdate(BaseModel):
+    display_name: Optional[str] = None
+    description: Optional[str] = None
+    department: Optional[str] = None
+    is_enabled: Optional[bool] = None
+
+
+class Role(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    name: str
+    display_name: str
+    description: str
+    department: str
+    is_system: bool
+    is_enabled: bool
+    created_at: str
+    updated_at: str
+
+
+# ── Project Participants (Phase 15-3) ──────────────────
+
+class ProjectParticipant(BaseModel):
+    role_name: str
+    is_enabled: bool
+
+class ProjectParticipantsUpdate(BaseModel):
+    participants: list[ProjectParticipant]

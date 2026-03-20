@@ -22,4 +22,36 @@ export const settingsApi = {
 
   updateRoleModels: (role_models: RoleModelSettingUpdate[]) =>
     api.patch<RoleModelSettingsResponse>("/api/settings/role-models", { role_models }),
+
+  getReadiness: () =>
+    api.get<ReadinessSummary>("/api/settings/readiness"),
 };
+
+// Readiness types (Phase 19-4)
+export interface ReadinessProviderStatus {
+  name: string;
+  configured: boolean;
+}
+
+export interface ReadinessRoleStatus {
+  role: string;
+  provider: string;
+  model: string;
+  enabled: boolean;
+  is_real: boolean;
+}
+
+export interface ReadinessSummary {
+  overall_ready: boolean;
+  providers: {
+    total: number;
+    configured: number;
+    details: ReadinessProviderStatus[];
+  };
+  roles: {
+    total: number;
+    real_model_count: number;
+    details: ReadinessRoleStatus[];
+  };
+  missing_steps: string[];
+}

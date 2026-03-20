@@ -933,3 +933,340 @@
   border-radius: 4px;
   padding: 4px 8px;
 }
+
+/* ── Task Templates (Phase 20-1) ── */
+.task-templates {
+  margin-bottom: 12px;
+}
+
+.task-templates-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 6px;
+}
+
+.task-templates-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.task-template-chip {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 12px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  font-size: 11px;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.task-template-chip:hover {
+  border-color: var(--accent-blue);
+  color: var(--text-primary);
+}
+
+.task-template-chip-active {
+  border-color: var(--accent-green, #3fb950);
+  color: var(--accent-green, #3fb950);
+  background: rgba(63, 185, 80, 0.1);
+}
+
+.task-templates-label-godot {
+  margin-top: 8px;
+  color: #4285f4;
+}
+
+.task-template-chip-godot {
+  border-color: rgba(66, 133, 244, 0.3);
+}
+
+.task-template-chip-godot:hover {
+  border-color: #4285f4;
+  color: #4285f4;
+}
+
+.task-template-chip-icon {
+  font-size: 12px;
+}
+
+/* ── Orchestration Error Guide (Phase 20-1) ── */
+.orch-error-guide {
+  margin: 4px 8px 8px;
+  border-radius: 6px;
+  border: 1px solid rgba(248, 81, 73, 0.3);
+  background: rgba(248, 81, 73, 0.05);
+  overflow: hidden;
+}
+
+.orch-error-raw {
+  padding: 6px 10px;
+  font-size: 11px;
+  color: var(--accent-red);
+  font-family: var(--font-mono);
+}
+
+.orch-error-guidance {
+  display: flex;
+  gap: 8px;
+  padding: 8px 10px;
+  border-top: 1px solid rgba(248, 81, 73, 0.15);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.orch-error-guidance-icon {
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.orch-error-guidance-content {
+  flex: 1;
+}
+
+.orch-error-guidance-text {
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+.orch-error-guidance-action {
+  margin-top: 6px;
+}
+
+.orch-error-settings-btn {
+  font-size: 11px;
+  color: var(--accent-blue);
+  border-color: var(--accent-blue);
+}
+
+.orch-error-hint {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+/* ── Task State Summary Badge (Phase 20-1, enhanced readability) ── */
+.task-state-summary {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 3px 10px;
+  border-radius: 4px;
+  border: 1px solid;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+/* ── Current Status Strip (readability enhancement) ── */
+.task-current-status-strip {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  margin: 8px 0 4px;
+  background: rgba(88, 166, 255, 0.06);
+  border: 1px solid rgba(88, 166, 255, 0.15);
+  border-radius: 6px;
+  min-height: 32px;
+}
+
+.task-current-status-strip .task-state-summary {
+  font-size: 12px;
+  padding: 4px 12px;
+  flex-shrink: 0;
+}
+
+.task-current-status-strip .next-step-hint {
+  padding: 0;
+  margin: 0;
+  font-size: 12px;
+  flex: 1;
+}
+
+.task-current-status-strip .next-step-hint-text {
+  font-style: normal;
+  font-weight: 500;
+}
+
+/* ── Next Step Hint (Phase 20-3, enhanced readability) ── */
+.next-step-hint {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  font-size: 12px;
+  color: var(--text-secondary, #b0b0b0);
+}
+
+.next-step-hint-arrow {
+  color: var(--accent-blue);
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.next-step-hint-text {
+  font-style: normal;
+}
+
+/* ── Pipeline Error Hint (Phase 20-3) ── */
+.pipeline-error-hint {
+  margin-top: 6px;
+  border-radius: 4px;
+  border: 1px solid rgba(248, 81, 73, 0.2);
+  background: rgba(248, 81, 73, 0.04);
+  overflow: hidden;
+}
+
+.pipeline-error-hint-raw {
+  padding: 4px 8px;
+  font-size: 11px;
+  color: var(--accent-red);
+  font-family: var(--font-mono);
+}
+
+.pipeline-error-hint-guidance {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border-top: 1px solid rgba(248, 81, 73, 0.1);
+  font-size: 11px;
+}
+
+.pipeline-error-hint-icon {
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+.pipeline-error-hint-text {
+  color: var(--text-secondary);
+  flex: 1;
+}
+
+/* ── Proposal latest marker ── */
+.proposal-latest-marker {
+  display: inline-block;
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: var(--accent-blue);
+  color: #fff;
+  margin-left: 8px;
+  vertical-align: middle;
+}
+
+.proposal-history-marker {
+  display: inline-block;
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-muted);
+  margin-left: 8px;
+  vertical-align: middle;
+}
+
+/* Dim historical proposals slightly */
+.proposal-card-historical {
+  opacity: 0.7;
+}
+.proposal-card-historical:hover {
+  opacity: 1;
+}
+
+/* ── Action button hierarchy ── */
+.task-actions-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.task-action-primary {
+  font-size: 11px;
+  color: var(--accent-blue);
+  border-color: var(--accent-blue);
+  background: rgba(88, 166, 255, 0.08);
+  font-weight: 600;
+}
+.task-action-primary:hover {
+  background: rgba(88, 166, 255, 0.15);
+}
+
+.task-action-secondary {
+  font-size: 11px;
+  color: var(--text-muted);
+  border-color: var(--border-color);
+}
+
+/* Section dividers */
+.task-section-divider {
+  border: none;
+  border-top: 1px solid var(--border-color);
+  margin: 8px 0;
+  opacity: 0.5;
+}
+
+.task-section-label {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-muted);
+  margin: 8px 0 4px;
+  opacity: 0.7;
+}
+
+.pipeline-error-hint-btn {
+  font-size: 10px;
+  flex-shrink: 0;
+}
+
+/* ── Empty State Guidance (Phase 20-4) ── */
+.task-empty-guidance {
+  text-align: center;
+  padding: 32px 16px;
+}
+
+.task-empty-icon {
+  font-size: 28px;
+  color: var(--text-muted);
+  opacity: 0.4;
+  margin-bottom: 8px;
+}
+
+.task-empty-text {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-bottom: 4px;
+}
+
+.task-empty-hint {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-bottom: 12px;
+}
+
+/* ── No Proposals State (Phase 20-4) ── */
+.task-no-proposals {
+  padding: 4px 0;
+}
+
+.task-no-proposals-hint {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-style: italic;
+  margin-top: 2px;
+}

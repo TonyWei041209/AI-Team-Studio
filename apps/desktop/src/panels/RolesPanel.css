@@ -1,0 +1,154 @@
+/* ── Roles Panel ─────────────────────────────────────── */
+
+.roles-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+  max-width: 720px;
+}
+
+/* ── Filter bar ──────────────────────────────────────── */
+
+.roles-filter-bar {
+  display: flex;
+  gap: 6px;
+}
+
+/* ── Role form ───────────────────────────────────────── */
+
+.role-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+}
+
+.role-form-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+
+.form-hint {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+/* ── Role list ───────────────────────────────────────── */
+
+.role-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.role-card {
+  padding: 14px 16px;
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  transition: border-color 0.15s;
+}
+
+.role-card:hover {
+  border-color: var(--accent-blue);
+}
+
+.role-card.role-disabled {
+  opacity: 0.6;
+}
+
+.role-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.role-card-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.role-display-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.role-name-tag {
+  font-size: 11px;
+  padding: 2px 6px;
+  background-color: var(--bg-tertiary);
+  border-radius: 3px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+
+.role-type-badge {
+  font-size: 10px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.role-type-badge.badge-system {
+  background-color: rgba(56, 139, 253, 0.15);
+  color: var(--accent-blue);
+}
+
+.role-type-badge.badge-custom {
+  background-color: rgba(46, 160, 67, 0.15);
+  color: var(--accent-green);
+}
+
+.role-dept-badge {
+  font-size: 10px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background-color: rgba(210, 153, 34, 0.15);
+  color: var(--accent-yellow);
+  font-family: var(--font-mono);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.role-disabled-badge {
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 10px;
+  background-color: rgba(139, 148, 158, 0.15);
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.role-card-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.role-description {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}

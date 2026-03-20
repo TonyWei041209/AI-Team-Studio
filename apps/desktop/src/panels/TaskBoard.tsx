@@ -1,10 +1,13 @@
 import { useState, useEffect, useCallback, useRef } from "react";
+import { useTranslation } from "react-i18next";
 import type { TaskCreate } from "../types/api";
 import { useTasks } from "../hooks/useTasks";
 import { tasksApi } from "../api/tasks";
+import { projectsApi } from "../api/projects";
 import { api } from "../api/client";
 import { approvalsApi } from "../api/approvals";
 import type { ApprovalRequest as ApprovalRequestType, ApprovalResolve } from "../types/api";
+import { ConfirmModal } from "../components/ConfirmModal";
 import "./TaskBoard.css";
 
 import type {
@@ -20,17 +23,22 @@ import type {
 import {
   STATUS_COLORS,
   PRIORITY_COLORS,
-  ORCHESTRATION_PHASE_LABELS,
 } from "./taskboard/types";
 import { TaskCreateForm } from "./taskboard/TaskCreateForm";
 import { AuditTrailSection } from "./taskboard/AuditTrailSection";
 import { ProposalCard } from "./taskboard/ProposalCard";
+import { PipelineStepper } from "./taskboard/PipelineStepper";
+import { OrchestrationErrorGuide } from "./taskboard/OrchestrationErrorGuide";
+import { TaskStateSummary, derivePhase } from "./taskboard/TaskStateSummary";
+import { NextStepHint } from "./taskboard/NextStepHint";
 
 interface TaskBoardProps {
   projectId: string | null;
+  onNavigateToSettings?: () => void;
 }
 
-export function TaskBoard({ projectId }: TaskBoardProps) {
+export function TaskBoard({ projectId, onNavigateToSettings }: TaskBoardProps) {
+  const { t } = useTranslation();
   const { tasks, loading, error, refresh, createTask, orchestrateTask } = useTasks(projectId);
   const [showForm, setShowForm] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
@@ -99,6 +107,46 @@ export function TaskBoard({ projectId }: TaskBoardProps) {
   const [taskApprovals, setTaskApprovals] = useState<ApprovalRequestType[]>([]);
   const [approvalLoading, setApprovalLoading] = useState<string | null>(null);
   const [approvalError, setApprovalError] = useState<string | null>(null);
+
+  // Godot detection (Phase 5.8)
+  const [isGodotProject, setIsGodotProject] = useState(false);
+  useEffect(() => {
+    if (!projectId) { setIsGodotProject(false); return; }
+    projectsApi.getGodotInfo(projectId).then((info) => {
+      setIsGodotProject(info.is_godot);
+    }).catch(() => setIsGodotProject(false));
+  }, [projectId]);
+
+  // Confirm modal state (Phase 13-4 — replaces window.confirm)
+  const [confirmModal, setConfirmModal] = useState<{
+    type: "execute" | "rollback";
+    requestId: string;
+    resultId?: string;
+  } | null>(null);
+
+  // Enum display label helpers (Phase 13-4)
+  const STATUS_LABELS: Record<string, string> = {
+    pending: t("enum.statusPending"),
+    planning: t("enum.statusPlanning"),
+    in_progress: t("enum.statusInProgress"),
+    reviewing: t("enum.statusReviewing"),
+    done: t("enum.statusDone"),
+    failed: t("enum.statusFailed"),
+  };
+  const PRIORITY_LABELS: Record<string, string> = {
+    low: t("enum.priorityLow"),
+    medium: t("enum.priorityMedium"),
+    high: t("enum.priorityHigh"),
+    critical: t("enum.priorityCritical"),
+  };
+  const ORCH_LABELS: Record<string, string> = {
+    pending: t("enum.orchStarting"),
+    planning: t("enum.orchPlanning"),
+    in_progress: t("enum.orchBuilding"),
+    reviewing: t("enum.orchReviewing"),
+    done: t("enum.orchDone"),
+    failed: t("enum.orchFailed"),
+  };
 
   // Cleanup orchestration poll on unmount (Phase 9-2)
   useEffect(() => {
@@ -378,12 +426,12 @@ export function TaskBoard({ projectId }: TaskBoardProps) {
     }
   }, []);
 
-  // Trigger real execution (Phase 7B-2) — with confirm dialog
-  const triggerExecution = useCallback(async (requestId: string) => {
-    const confirmed = window.confirm(
-      "This will write real files to your project workspace. Continue?",
-    );
-    if (!confirmed) return;
+  // Trigger real execution (Phase 7B-2) — with confirm modal
+  const requestExecConfirm = useCallback((requestId: string) => {
+    setConfirmModal({ type: "execute", requestId });
+  }, []);
+
+  const doExecute = useCallback(async (requestId: string) => {
 
     setExecuteLoading(requestId);
     setExecuteError((prev) => ({ ...prev, [requestId]: null }));
@@ -441,13 +489,12 @@ export function TaskBoard({ projectId }: TaskBoardProps) {
     }
   }, []);
 
-  // Trigger rollback (Phase 7D-2) — with confirm dialog
-  const triggerRollback = useCallback(async (requestId: string, resultId: string) => {
-    const confirmed = window.confirm(
-      "This will attempt to rollback executed file changes. Continue?",
-    );
-    if (!confirmed) return;
+  // Trigger rollback (Phase 7D-2) — with confirm modal
+  const requestRollbackConfirm = useCallback((requestId: string, resultId: string) => {
+    setConfirmModal({ type: "rollback", requestId, resultId });
+  }, []);
 
+  const doRollback = useCallback(async (requestId: string, resultId: string) => {
     setRollbackTriggerLoading(requestId);
     setRollbackTriggerError((prev) => ({ ...prev, [requestId]: null }));
     try {
@@ -568,7 +615,7 @@ export function TaskBoard({ projectId }: TaskBoardProps) {
     return (
       <div className="task-board">
         <div className="panel-empty">
-          Select a project first to view tasks.
+          {t("tasks.selectProject")}
         </div>
       </div>
     );
@@ -611,12 +658,12 @@ export function TaskBoard({ projectId }: TaskBoardProps) {
   return (
     <div className="task-board">
       <div className="panel-header">
-        <h2 className="panel-title">Tasks</h2>
+        <h2 className="panel-title">{t("tasks.title")}</h2>
         <div className="panel-actions">
           <button
             className="btn btn-secondary"
             onClick={refresh}
-            title="Refresh"
+            title={t("tasks.refresh")}
           >
             &#8635;
           </button>
@@ -625,7 +672,7 @@ export function TaskBoard({ projectId }: TaskBoardProps) {
             data-testid="task-create-btn"
             onClick={() => setShowForm(!showForm)}
           >
-            {showForm ? "Cancel" : "+ New Task"}
+            {showForm ? t("tasks.cancel") : t("tasks.newTask")}
           </button>
         </div>
       </div>
@@ -638,6 +685,7 @@ export function TaskBoard({ projectId }: TaskBoardProps) {
           priority={priority}
           formError={formError}
           submitting={submitting}
+          isGodotProject={isGodotProject}
           onTitleChange={setTitle}
           onDescriptionChange={setDescription}
           onPriorityChange={setPriority}
@@ -650,58 +698,94 @@ export function TaskBoard({ projectId }: TaskBoardProps) {
         <div className="panel-error">
           <span>&#9888; {error}</span>
           <button className="btn btn-secondary btn-sm" onClick={refresh}>
-            Retry
+            {t("tasks.retry")}
           </button>
         </div>
       )}
 
       {/* Loading */}
-      {loading && <div className="panel-loading">Loading tasks...</div>}
+      {loading && <div className="panel-loading">{t("tasks.loading")}</div>}
 
-      {/* Empty */}
+      {/* Empty state with guidance (Phase 20-4) */}
       {!loading && !error && tasks.length === 0 && (
-        <div className="panel-empty">
-          No tasks for this project. Create one to begin.
+        <div className="task-empty-guidance">
+          <div className="task-empty-icon">▶</div>
+          <div className="task-empty-text">{t("tasks.empty")}</div>
+          <div className="task-empty-hint">{t("tasks.emptyHint")}</div>
+          {!showForm && (
+            <button className="btn btn-primary btn-sm" onClick={() => setShowForm(true)}>
+              {t("tasks.newTask")}
+            </button>
+          )}
         </div>
       )}
 
       {/* Task list */}
       {!loading && tasks.length > 0 && (
         <div className="task-list" data-testid="task-list">
-          {tasks.map((t) => (
-            <div key={t.id} className="task-item" data-testid="task-item">
+          {tasks.map((task) => (
+            <div key={task.id} className="task-item" data-testid="task-item">
               <div className="task-item-header">
-                <span className="task-title">{t.title}</span>
-                <span className="task-date">{formatDate(t.updated_at)}</span>
+                <span className="task-title">{task.title}</span>
+                <span className="task-date">{formatDate(task.updated_at)}</span>
               </div>
-              {t.description && (
-                <div className="task-desc">{t.description}</div>
+              {task.description && (
+                <div className="task-desc">{task.description}</div>
               )}
               <div className="task-badges">
+                {(() => {
+                  // Derive pipeline state for this task (richer when expanded)
+                  const isExpanded = expandedTask === task.id;
+                  const firstProposal = isExpanded && proposals.length > 0 ? proposals[0] : undefined;
+                  const snap = firstProposal ? snapshots[firstProposal.id] : undefined;
+                  const execReq = snap ? execRequests[snap.id] : undefined;
+                  const dryRun = execReq ? dryRunResults[execReq.id] : undefined;
+                  const realRun = execReq ? realRunResults[execReq.id] : undefined;
+                  const rollback = execReq ? rollbackResults[execReq.id] : undefined;
+                  const pendingApproval = isExpanded && taskApprovals.some((a) => a.status === "pending");
+                  const approvedProposal = isExpanded && taskApprovals.some((a) => a.status === "approved");
+                  const hasExecError = isExpanded && Object.values(executeError).some((e) => e != null);
+
+                  return (
+                    <TaskStateSummary
+                      taskStatus={task.status}
+                      hasProposals={isExpanded && proposals.length > 0}
+                      hasPendingApproval={pendingApproval}
+                      hasApprovedProposal={approvedProposal}
+                      hasSnapshot={!!snap}
+                      hasConfirmedRequest={!!execReq && execReq.status === "confirmed"}
+                      hasDryRunResult={!!dryRun}
+                      hasRealRunResult={!!realRun && realRun !== "empty"}
+                      hasExecutionError={hasExecError}
+                      hasRollbackResult={!!rollback && rollback !== "empty"}
+                      isOrchestrating={orchestrateLoading === task.id}
+                    />
+                  );
+                })()}
                 <span
                   className="badge badge-status"
                   style={{
-                    color: STATUS_COLORS[t.status],
-                    borderColor: STATUS_COLORS[t.status],
+                    color: STATUS_COLORS[task.status],
+                    borderColor: STATUS_COLORS[task.status],
                   }}
                 >
-                  {t.status.replace("_", " ")}
+                  {STATUS_LABELS[task.status] ?? task.status.replace("_", " ")}
                 </span>
                 <span
                   className="badge badge-priority"
                   style={{
-                    color: PRIORITY_COLORS[t.priority],
-                    borderColor: PRIORITY_COLORS[t.priority],
+                    color: PRIORITY_COLORS[task.priority],
+                    borderColor: PRIORITY_COLORS[task.priority],
                   }}
                 >
-                  {t.priority}
+                  {PRIORITY_LABELS[task.priority] ?? task.priority}
                 </span>
-                {t.assigned_agent_role && (
+                {task.assigned_agent_role && (
                   <span className="badge badge-role">
-                    {t.assigned_agent_role}
+                    {task.assigned_agent_role}
                   </span>
                 )}
-                {t.status === "pending" && (
+                {task.status === "pending" && (
                   <button
                     className="btn btn-sm"
                     style={{
@@ -710,13 +794,13 @@ export function TaskBoard({ projectId }: TaskBoardProps) {
                       color: "#ff8c00",
                       borderColor: "#ff8c00",
                     }}
-                    disabled={orchestrateLoading === t.id}
+                    disabled={orchestrateLoading === task.id}
                     onClick={async () => {
-                      setOrchestrateLoading(t.id);
+                      setOrchestrateLoading(task.id);
                       setOrchestratePhase("Starting\u2026");
                       setOrchestrateError((prev) => {
                         const next = { ...prev };
-                        delete next[t.id];
+                        delete next[task.id];
                         return next;
                       });
                       // Start polling task status for progress (Phase 9-2)
@@ -725,19 +809,19 @@ export function TaskBoard({ projectId }: TaskBoardProps) {
                       }
                       orchestratePollRef.current = setInterval(async () => {
                         try {
-                          const task = await tasksApi.get(t.id);
-                          const label = ORCHESTRATION_PHASE_LABELS[task.status] ?? task.status;
+                          const polledTask = await tasksApi.get(task.id);
+                          const label = ORCH_LABELS[polledTask.status] ?? polledTask.status;
                           setOrchestratePhase(label);
                         } catch {
                           // Polling failure is non-fatal; keep showing last known phase
                         }
                       }, 1500);
                       try {
-                        await orchestrateTask(t.id);
+                        await orchestrateTask(task.id);
                       } catch (err) {
                         setOrchestrateError((prev) => ({
                           ...prev,
-                          [t.id]: err instanceof Error ? err.message : "Orchestration failed",
+                          [task.id]: err instanceof Error ? err.message : "Orchestration failed",
                         }));
                       } finally {
                         if (orchestratePollRef.current) {
@@ -747,11 +831,11 @@ export function TaskBoard({ projectId }: TaskBoardProps) {
                         setOrchestrateLoading(null);
                         // Phase 9-3: Auto-expand task after orchestration
                         try {
-                          const finalTask = await tasksApi.get(t.id);
-                          setExpandedTask(t.id);
+                          const finalTask = await tasksApi.get(task.id);
+                          setExpandedTask(task.id);
                           if (finalTask.status === "done") {
-                            loadProposals(t.id);
-                            loadTaskApprovals(t.id);
+                            loadProposals(task.id);
+                            loadTaskApprovals(task.id);
                           }
                         } catch {
                           // Best-effort; don't block UI on fetch failure
@@ -759,42 +843,93 @@ export function TaskBoard({ projectId }: TaskBoardProps) {
                       }
                     }}
                   >
-                    {orchestrateLoading === t.id
+                    {orchestrateLoading === task.id
                       ? orchestratePhase
-                      : "\u25b6 Start"}
+                      : "\u25b6 " + t("tasks.start")}
                   </button>
                 )}
-                {t.status !== "pending" && (
+                {task.status !== "pending" && (
                   <button
-                    className="btn btn-secondary btn-sm"
-                    style={{ marginLeft: "auto", fontSize: 11 }}
-                    onClick={() => toggleProposals(t.id)}
+                    className="btn btn-sm task-action-primary"
+                    style={{ marginLeft: "auto" }}
+                    onClick={() => toggleProposals(task.id)}
                   >
-                    {expandedTask === t.id ? "Hide Proposals" : "Proposals"}
+                    {expandedTask === task.id ? t("tasks.hideProposals") : t("tasks.proposals")}
                   </button>
                 )}
                 <button
-                  className="btn btn-secondary btn-sm"
-                  style={{ fontSize: 11 }}
-                  onClick={() => toggleAuditTrail(t.id)}
+                  className="btn btn-sm task-action-secondary"
+                  onClick={() => toggleAuditTrail(task.id)}
                 >
-                  {auditTrailTaskId === t.id
-                    ? "Hide Audit Trail"
-                    : auditTrailCount !== null && auditTrailTaskId === t.id
-                      ? `Audit Trail (${auditTrailCount} events)`
-                      : "Audit Trail"}
+                  {auditTrailTaskId === task.id
+                    ? t("tasks.hideAuditTrail")
+                    : t("tasks.auditTrail")}
                 </button>
               </div>
 
-              {/* Orchestration error (Phase 9-1) */}
-              {orchestrateError[t.id] && (
-                <div style={{ fontSize: 11, color: "var(--accent-red)", padding: "2px 8px" }}>
-                  Orchestration failed: {orchestrateError[t.id]}
-                </div>
+              {/* Current Status Strip — expanded task gets a prominent status bar (readability enhancement) */}
+              {expandedTask === task.id && (() => {
+                const firstP = proposals.length > 0 ? proposals[0] : undefined;
+                const snap = firstP ? snapshots[firstP.id] : undefined;
+                const eReq = snap ? execRequests[snap.id] : undefined;
+                const dRun = eReq ? dryRunResults[eReq.id] : undefined;
+                const rRun = eReq ? realRunResults[eReq.id] : undefined;
+                const rbk = eReq ? rollbackResults[eReq.id] : undefined;
+                const phase = derivePhase({
+                  taskStatus: task.status,
+                  hasProposals: proposals.length > 0,
+                  hasPendingApproval: taskApprovals.some((a) => a.status === "pending"),
+                  hasApprovedProposal: taskApprovals.some((a) => a.status === "approved"),
+                  hasSnapshot: !!snap,
+                  hasConfirmedRequest: !!eReq && eReq.status === "confirmed",
+                  hasDryRunResult: !!dRun,
+                  hasRealRunResult: !!rRun && rRun !== "empty",
+                  hasExecutionError: Object.values(executeError).some((e) => e != null),
+                  hasRollbackResult: !!rbk && rbk !== "empty",
+                  isOrchestrating: orchestrateLoading === task.id,
+                });
+                return (
+                  <div className="task-current-status-strip">
+                    <TaskStateSummary
+                      taskStatus={task.status}
+                      hasProposals={proposals.length > 0}
+                      hasPendingApproval={taskApprovals.some((a) => a.status === "pending")}
+                      hasApprovedProposal={taskApprovals.some((a) => a.status === "approved")}
+                      hasSnapshot={!!snap}
+                      hasConfirmedRequest={!!eReq && eReq.status === "confirmed"}
+                      hasDryRunResult={!!dRun}
+                      hasRealRunResult={!!rRun && rRun !== "empty"}
+                      hasExecutionError={Object.values(executeError).some((e) => e != null)}
+                      hasRollbackResult={!!rbk && rbk !== "empty"}
+                      isOrchestrating={orchestrateLoading === task.id}
+                    />
+                    <NextStepHint phase={phase} />
+                  </div>
+                );
+              })()}
+
+              {/* Pipeline Stepper (Phase 16-1) */}
+              {task.status !== "pending" && projectId && (
+                <>
+                  <div className="task-section-label">{t("tasks.sectionOrchestration")}</div>
+                  <PipelineStepper
+                    taskId={task.id}
+                    taskStatus={task.status}
+                    projectId={projectId}
+                  />
+                </>
+              )}
+
+              {/* Orchestration error with guidance (Phase 20-1) */}
+              {orchestrateError[task.id] && (
+                <OrchestrationErrorGuide
+                  error={orchestrateError[task.id]}
+                  onGoToSettings={onNavigateToSettings}
+                />
               )}
 
               {/* Audit Trail (Phase 6E-E) */}
-              {auditTrailTaskId === t.id && (
+              {auditTrailTaskId === task.id && (
                 <AuditTrailSection
                   events={auditTrailEvents}
                   count={auditTrailCount}
@@ -804,74 +939,98 @@ export function TaskBoard({ projectId }: TaskBoardProps) {
               )}
 
               {/* Execution Proposals (Phase 6E-A) */}
-              {expandedTask === t.id && (
+              {expandedTask === task.id && proposals.length > 0 && (
+                <div className="task-section-label">{t("tasks.sectionProposals")}</div>
+              )}
+              {expandedTask === task.id && (
                 <div className="proposal-section">
                   {proposalLoading && (
                     <div style={{ fontSize: 12, color: "var(--text-muted)" }}>
-                      Loading proposals...
+                      {t("tasks.loadingProposals")}
                     </div>
                   )}
                   {!proposalLoading && proposals.length === 0 && (
-                    <div style={{ fontSize: 12, color: "var(--text-muted)" }}>
-                      No proposals for this task.
+                    <div className="task-no-proposals">
+                      <div style={{ fontSize: 12, color: "var(--text-muted)" }}>
+                        {t("tasks.noProposals")}
+                      </div>
+                      {task.status === "pending" && (
+                        <div className="task-no-proposals-hint">{t("tasks.noProposalsHintPending")}</div>
+                      )}
+                      {(task.status === "planning" || task.status === "in_progress" || task.status === "reviewing") && (
+                        <div className="task-no-proposals-hint">{t("tasks.noProposalsHintRunning")}</div>
+                      )}
+                      {task.status === "failed" && (
+                        <div className="task-no-proposals-hint">{t("tasks.noProposalsHintFailed")}</div>
+                      )}
                     </div>
                   )}
                   {!proposalLoading &&
-                    proposals.map((p) => {
+                    proposals.map((p, proposalIdx) => {
                       const snap = snapshots[p.id];
                       const execReq = snap ? execRequests[snap.id] : undefined;
                       const dryRun = execReq ? dryRunResults[execReq.id] : undefined;
                       const actionPlan = execReq ? actionPlans[execReq.id] : undefined;
                       const realRun = execReq ? realRunResults[execReq.id] : undefined;
                       const rollback = execReq ? rollbackResults[execReq.id] : undefined;
+                      const isLatest = proposalIdx === 0 && proposals.length > 1;
+                      const isHistory = proposalIdx > 0;
                       return (
-                        <ProposalCard
-                          key={p.id}
-                          proposal={p}
-                          taskApprovals={taskApprovals}
-                          approvalLoading={approvalLoading}
-                          approvalError={approvalError}
-                          onResolveApproval={resolveApproval}
-                          snapshot={snap}
-                          snapshotLoading={snapshotLoading === p.id}
-                          snapshotError={snapshotError}
-                          onFreezeAndView={freezeAndViewWithReqCheck}
-                          onHideSnapshot={(proposalId) => setSnapshots((prev) => {
-                            const next = { ...prev };
-                            delete next[proposalId];
-                            return next;
-                          })}
-                          execRequest={execReq}
-                          execReqLoading={snap ? execReqLoading === snap.id : false}
-                          execReqError={execReqError}
-                          onRequestExecution={requestExecution}
-                          onUpdateExecRequestStatus={updateExecRequestStatus}
-                          onConfirmAndDryRun={confirmAndDryRun}
-                          dryRunResult={dryRun}
-                          dryRunLoading={execReq ? dryRunLoading === execReq.id : false}
-                          dryRunError={dryRunError}
-                          onTriggerDryRun={triggerDryRun}
-                          onLoadDryRunResult={loadDryRunResult}
-                          actionPlan={actionPlan}
-                          actionPlanLoading={execReq ? actionPlanLoading === execReq.id : false}
-                          actionPlanError={actionPlanError}
-                          onLoadActionPlan={loadActionPlan}
-                          realRunResult={realRun}
-                          realRunLoading={execReq ? realRunLoading === execReq.id : false}
-                          realRunError={realRunError}
-                          executeLoading={execReq ? executeLoading === execReq.id : false}
-                          executeError={execReq ? (executeError[execReq.id] ?? null) : null}
-                          onTriggerExecution={triggerExecution}
-                          onLoadRealRunResult={loadRealRunResult}
-                          rollbackResult={rollback}
-                          rollbackLoading={execReq ? rollbackLoading === execReq.id : false}
-                          rollbackError={rollbackError}
-                          rollbackTriggerLoading={execReq ? rollbackTriggerLoading === execReq.id : false}
-                          rollbackTriggerError={execReq ? (rollbackTriggerError[execReq.id] ?? null) : null}
-                          onTriggerRollback={triggerRollback}
-                          onLoadRollbackResult={loadRollbackResult}
-                          formatDate={formatDate}
-                        />
+                        <div key={p.id} className={isHistory ? "proposal-card-historical" : ""}>
+                          {proposals.length > 1 && (
+                            <span className={isLatest ? "proposal-latest-marker" : "proposal-history-marker"}>
+                              {isLatest
+                                ? t("tasks.latestProposal")
+                                : t("tasks.historyProposal", { n: proposals.length - proposalIdx })}
+                            </span>
+                          )}
+                          <ProposalCard
+                            proposal={p}
+                            taskApprovals={taskApprovals}
+                            approvalLoading={approvalLoading}
+                            approvalError={approvalError}
+                            onResolveApproval={resolveApproval}
+                            snapshot={snap}
+                            snapshotLoading={snapshotLoading === p.id}
+                            snapshotError={snapshotError}
+                            onFreezeAndView={freezeAndViewWithReqCheck}
+                            onHideSnapshot={(proposalId) => setSnapshots((prev) => {
+                              const next = { ...prev };
+                              delete next[proposalId];
+                              return next;
+                            })}
+                            execRequest={execReq}
+                            execReqLoading={snap ? execReqLoading === snap.id : false}
+                            execReqError={execReqError}
+                            onRequestExecution={requestExecution}
+                            onUpdateExecRequestStatus={updateExecRequestStatus}
+                            onConfirmAndDryRun={confirmAndDryRun}
+                            dryRunResult={dryRun}
+                            dryRunLoading={execReq ? dryRunLoading === execReq.id : false}
+                            dryRunError={dryRunError}
+                            onTriggerDryRun={triggerDryRun}
+                            onLoadDryRunResult={loadDryRunResult}
+                            actionPlan={actionPlan}
+                            actionPlanLoading={execReq ? actionPlanLoading === execReq.id : false}
+                            actionPlanError={actionPlanError}
+                            onLoadActionPlan={loadActionPlan}
+                            realRunResult={realRun}
+                            realRunLoading={execReq ? realRunLoading === execReq.id : false}
+                            realRunError={realRunError}
+                            executeLoading={execReq ? executeLoading === execReq.id : false}
+                            executeError={execReq ? (executeError[execReq.id] ?? null) : null}
+                            onTriggerExecution={requestExecConfirm}
+                            onLoadRealRunResult={loadRealRunResult}
+                            rollbackResult={rollback}
+                            rollbackLoading={execReq ? rollbackLoading === execReq.id : false}
+                            rollbackError={rollbackError}
+                            rollbackTriggerLoading={execReq ? rollbackTriggerLoading === execReq.id : false}
+                            rollbackTriggerError={execReq ? (rollbackTriggerError[execReq.id] ?? null) : null}
+                            onTriggerRollback={requestRollbackConfirm}
+                            onLoadRollbackResult={loadRollbackResult}
+                            formatDate={formatDate}
+                          />
+                        </div>
                       );
                     })}
                 </div>
@@ -880,6 +1039,33 @@ export function TaskBoard({ projectId }: TaskBoardProps) {
           ))}
         </div>
       )}
+
+      {/* Confirm Modal (Phase 13-4) */}
+      <ConfirmModal
+        open={confirmModal !== null}
+        message={
+          confirmModal?.type === "execute"
+            ? t("confirm.executeTitle")
+            : t("confirm.rollbackTitle")
+        }
+        confirmLabel={
+          confirmModal?.type === "execute"
+            ? t("confirm.executeConfirm")
+            : t("confirm.rollbackConfirm")
+        }
+        cancelLabel={t("confirm.cancel")}
+        danger={confirmModal?.type === "rollback"}
+        onCancel={() => setConfirmModal(null)}
+        onConfirm={() => {
+          if (!confirmModal) return;
+          setConfirmModal(null);
+          if (confirmModal.type === "execute") {
+            doExecute(confirmModal.requestId);
+          } else if (confirmModal.resultId) {
+            doRollback(confirmModal.requestId, confirmModal.resultId);
+          }
+        }}
+      />
     </div>
   );
 }

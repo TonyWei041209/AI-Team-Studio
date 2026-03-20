@@ -45,6 +45,33 @@
 .title-bar-right {
   display: flex;
   align-items: center;
+  gap: 8px;
+}
+
+.title-bar-search-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 4px 12px;
+  color: var(--text-muted);
+  font-size: 12px;
+  cursor: pointer;
+  transition: border-color 0.2s;
+}
+.title-bar-search-btn:hover {
+  border-color: var(--text-muted);
+  color: var(--text-primary);
+}
+.title-bar-kbd {
+  font-size: 9px;
+  font-family: var(--font-mono);
+  background: rgba(255,255,255,0.06);
+  border: 1px solid var(--border-color);
+  border-radius: 3px;
+  padding: 1px 4px;
 }
 
 /* Status Indicator */
@@ -260,6 +287,18 @@
   color: var(--text-muted);
 }
 
+/* Connected status */
+.provider-status.connected {
+  color: var(--accent-green, #3fb950);
+  background-color: rgba(63, 185, 80, 0.1);
+}
+
+/* Failed status */
+.provider-status.failed {
+  color: var(--accent-red, #f85149);
+  background-color: rgba(248, 81, 73, 0.1);
+}
+
 .provider-field {
   margin-bottom: 10px;
 }
@@ -364,4 +403,204 @@
 .provider-test-result.error {
   background: rgba(248, 81, 73, 0.1);
   color: #f85149;
+}
+
+/* Save success inline indicator */
+.provider-save-success {
+  color: var(--accent-green, #3fb950);
+  font-size: 12px;
+  font-weight: 600;
+  animation: fade-in-out 2s ease-in-out;
+}
+
+@keyframes fade-in-out {
+  0% { opacity: 0; }
+  15% { opacity: 1; }
+  85% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+/* Test timestamp */
+.provider-test-time {
+  font-size: 10px;
+  color: var(--text-muted);
+  margin-left: 8px;
+  font-family: var(--font-mono);
+}
+
+/* ── Settings Overview Bar (Phase 19-1) ── */
+.settings-overview {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 24px;
+  padding: 16px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+}
+
+.settings-overview-card {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.settings-overview-value {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+}
+
+.settings-overview-value.ready {
+  color: var(--accent-green, #3fb950);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.settings-overview-value.not-ready {
+  color: var(--accent-yellow, #d29922);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.settings-overview-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.settings-overview-dots {
+  display: flex;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.settings-overview-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.settings-overview-dot.configured,
+.settings-overview-dot.real {
+  background-color: var(--accent-green, #3fb950);
+}
+
+.settings-overview-dot.not-configured,
+.settings-overview-dot.mock {
+  background-color: var(--text-muted, #666);
+  opacity: 0.4;
+}
+
+/* ── Role-Model Card Enhancements (Phase 19-3) ── */
+
+.role-card-real {
+  border-color: var(--accent-green, #3fb950);
+  border-width: 1px;
+}
+
+.role-badges {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.role-mode-badge {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 2px 8px;
+  border-radius: 3px;
+}
+
+.role-mode-badge.real {
+  background-color: rgba(63, 185, 80, 0.15);
+  color: var(--accent-green, #3fb950);
+}
+
+.role-mode-badge.mock {
+  background-color: rgba(139, 148, 158, 0.15);
+  color: var(--text-muted, #8b949e);
+}
+
+.role-info-banner {
+  padding: 6px 10px;
+  margin-bottom: 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.role-info-warning {
+  background: rgba(255, 200, 50, 0.08);
+  color: #cca;
+}
+
+.role-info-error {
+  background: rgba(248, 81, 73, 0.08);
+  color: var(--accent-red, #f85149);
+}
+
+/* ── Confirm Modal ────────────────────────────────── */
+
+.confirm-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.6);
+}
+
+.confirm-modal-box {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 20px 24px;
+  max-width: 420px;
+  width: 90%;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+}
+
+.confirm-modal-message {
+  font-size: 13px;
+  color: var(--text-primary);
+  line-height: 1.5;
+  margin-bottom: 16px;
+}
+
+.confirm-modal-buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.confirm-modal-cancel {
+  font-size: 12px;
+  padding: 5px 14px;
+}
+
+.confirm-modal-confirm {
+  font-size: 12px;
+  padding: 5px 14px;
+  font-weight: 600;
+}
+
+.confirm-modal-danger {
+  background: var(--accent-red);
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.confirm-modal-danger:hover {
+  opacity: 0.85;
 }

@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import { useApprovals } from "../hooks/useApprovals";
 import "./ApprovalsPanel.css";
 
@@ -7,6 +8,7 @@ interface ApprovalsPanelProps {
 }
 
 export function ApprovalsPanel({ onCountChange }: ApprovalsPanelProps) {
+  const { t } = useTranslation();
   const { approvals, loading, error, refresh, resolve, lastUpdated } = useApprovals();
   const [activeAction, setActiveAction] = useState<{
     id: string;
@@ -72,7 +74,7 @@ export function ApprovalsPanel({ onCountChange }: ApprovalsPanelProps) {
     <div className="approvals-panel">
       <div className="panel-header">
         <h2 className="panel-title">
-          Pending Approvals
+          {t("approvals.title")}
           {approvals.length > 0 && (
             <span className="count-inline">{approvals.length}</span>
           )}
@@ -86,7 +88,7 @@ export function ApprovalsPanel({ onCountChange }: ApprovalsPanelProps) {
           <button
             className="btn btn-secondary"
             onClick={refresh}
-            title="Refresh"
+            title={t("approvals.refresh")}
           >
             &#8635;
           </button>
@@ -98,17 +100,17 @@ export function ApprovalsPanel({ onCountChange }: ApprovalsPanelProps) {
         <div className="panel-error">
           <span>&#9888; {error}</span>
           <button className="btn btn-secondary btn-sm" onClick={refresh}>
-            Retry
+            {t("approvals.retry")}
           </button>
         </div>
       )}
 
       {/* Loading */}
-      {loading && <div className="panel-loading">Loading approvals...</div>}
+      {loading && <div className="panel-loading">{t("approvals.loading")}</div>}
 
       {/* Empty */}
       {!loading && !error && approvals.length === 0 && (
-        <div className="panel-empty" data-testid="approvals-empty">No pending approvals. All clear.</div>
+        <div className="panel-empty" data-testid="approvals-empty">{t("approvals.empty")}</div>
       )}
 
       {/* Approval list */}
@@ -132,7 +134,7 @@ export function ApprovalsPanel({ onCountChange }: ApprovalsPanelProps) {
                   <div className="approval-payload">
                     {payload.tool_name != null && (
                       <div className="payload-row">
-                        <span className="payload-key">Tool:</span>
+                        <span className="payload-key">{t("approvals.tool")}</span>
                         <span className="payload-value">
                           {String(payload.tool_name)}
                         </span>
@@ -140,7 +142,7 @@ export function ApprovalsPanel({ onCountChange }: ApprovalsPanelProps) {
                     )}
                     {payload.risk_level != null && (
                       <div className="payload-row">
-                        <span className="payload-key">Risk:</span>
+                        <span className="payload-key">{t("approvals.risk")}</span>
                         <span
                           className="payload-value"
                           style={{
@@ -156,7 +158,7 @@ export function ApprovalsPanel({ onCountChange }: ApprovalsPanelProps) {
                     )}
                     {payload.reason != null && (
                       <div className="payload-row">
-                        <span className="payload-key">Reason:</span>
+                        <span className="payload-key">{t("approvals.reason")}</span>
                         <span className="payload-value">
                           {String(payload.reason)}
                         </span>
@@ -164,7 +166,7 @@ export function ApprovalsPanel({ onCountChange }: ApprovalsPanelProps) {
                     )}
                     {payload.params != null && (
                       <div className="payload-row">
-                        <span className="payload-key">Params:</span>
+                        <span className="payload-key">{t("approvals.params")}</span>
                         <code className="payload-code">
                           {JSON.stringify(payload.params, null, 0).slice(0, 200)}
                         </code>
@@ -175,7 +177,7 @@ export function ApprovalsPanel({ onCountChange }: ApprovalsPanelProps) {
 
                 {a.task_id && (
                   <div className="approval-meta">
-                    <span className="meta-label">Task:</span>
+                    <span className="meta-label">{t("approvals.task")}</span>
                     <span className="meta-value">{a.task_id.slice(0, 8)}</span>
                   </div>
                 )}
@@ -187,14 +189,14 @@ export function ApprovalsPanel({ onCountChange }: ApprovalsPanelProps) {
                     data-testid="approval-approve-btn"
                     onClick={() => handleAction(a.id, "approved")}
                   >
-                    &#10003; Approve
+                    {"✓ " + t("approvals.approve")}
                   </button>
                   <button
                     className={`btn btn-danger btn-sm ${isActive && activeAction.type === "rejected" ? "active" : ""}`}
                     data-testid="approval-reject-btn"
                     onClick={() => handleAction(a.id, "rejected")}
                   >
-                    &#10007; Reject
+                    {"✗ " + t("approvals.reject")}
                   </button>
                 </div>
 
@@ -206,7 +208,7 @@ export function ApprovalsPanel({ onCountChange }: ApprovalsPanelProps) {
                       data-testid="approval-comment-input"
                       value={comment}
                       onChange={(e) => setComment(e.target.value)}
-                      placeholder={`Comment for ${activeAction.type === "approved" ? "approval" : "rejection"} (optional)`}
+                      placeholder={activeAction.type === "approved" ? t("approvals.commentPlaceholderApproval") : t("approvals.commentPlaceholderRejection")}
                       rows={2}
                     />
                     {resolveError && (
@@ -219,8 +221,8 @@ export function ApprovalsPanel({ onCountChange }: ApprovalsPanelProps) {
                       disabled={submitting}
                     >
                       {submitting
-                        ? "Submitting..."
-                        : `Confirm ${activeAction.type === "approved" ? "Approve" : "Reject"}`}
+                        ? t("approvals.submitting")
+                        : activeAction.type === "approved" ? t("approvals.confirmApprove") : t("approvals.confirmReject")}
                     </button>
                   </div>
                 )}

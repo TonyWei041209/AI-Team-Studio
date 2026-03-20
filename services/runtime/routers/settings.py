@@ -343,3 +343,92 @@ async def update_role_model_settings(body: RoleModelSettingsPatch):
         conn.close()
 
     return await get_role_model_settings()
+
+
+# ──────────────────────────────────────────────────────────────
+#  Readiness summary  (Phase 19-4)
+# ──────────────────────────────────────────────────────────────
+
+
+_ALL_PROVIDERS = ["anthropic", "openai", "gemini", "deepseek", "kimi", "minimax"]
+_ALL_ROLES = ["planner", "builder", "qa", "reviewer"]
+
+
+@router.get("/readiness")
+async def get_readiness_summary():
+    """Read-only readiness summary.
+
+    Returns which providers have API keys, which roles use real models,
+    and a list of actionable missing steps.
+    """
+    conn = get_connection()
+    try:
+        # Provider status
+        provider_rows = conn.execute(
+            "SELECT provider_name, api_key FROM provider_settings"
+        ).fetchall()
+        provider_keys = {
+            r["provider_name"]: bool(r["api_key"]) for r in provider_rows
+        }
+        providers_status = []
+        for name in _ALL_PROVIDERS:
+            providers_status.append({
+                "name": name,
+                "configured": provider_keys.get(name, False),
+            })
+
+        configured_count = sum(1 for p in providers_status if p["configured"])
+
+        # Role-model status
+        role_rows = conn.execute(
+            "SELECT role, provider, model, enabled FROM role_model_settings"
+        ).fetchall()
+        role_map = {r["role"]: dict(r) for r in role_rows}
+
+        roles_status = []
+        real_model_count = 0
+        for role in _ALL_ROLES:
+            rm = role_map.get(role, {})
+            provider = rm.get("provider", "mock")
+            model = rm.get("model", "")
+            enabled = bool(rm.get("enabled", 0))
+            is_real = enabled and provider != "mock" and bool(model)
+            if is_real:
+                real_model_count += 1
+            roles_status.append({
+                "role": role,
+                "provider": provider,
+                "model": model,
+                "enabled": enabled,
+                "is_real": is_real,
+            })
+
+        # Missing steps
+        missing_steps = []
+        if configured_count == 0:
+            missing_steps.append("configure_at_least_one_provider")
+        if real_model_count == 0:
+            missing_steps.append("enable_at_least_one_real_model")
+        # Check if any enabled role points to unconfigured provider
+        for rs in roles_status:
+            if rs["is_real"] and not provider_keys.get(rs["provider"], False):
+                missing_steps.append(f"configure_provider_{rs['provider']}")
+
+        overall_ready = configured_count > 0 and real_model_count > 0 and len(missing_steps) == 0
+
+        return {
+            "overall_ready": overall_ready,
+            "providers": {
+                "total": len(_ALL_PROVIDERS),
+                "configured": configured_count,
+                "details": providers_status,
+            },
+            "roles": {
+                "total": len(_ALL_ROLES),
+                "real_model_count": real_model_count,
+                "details": roles_status,
+            },
+            "missing_steps": missing_steps,
+        }
+    finally:
+        conn.close()

@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import type { ApprovalRequest as ApprovalRequestType } from "../../types/api";
 import type {
   ExecutionProposal,
@@ -14,6 +15,7 @@ import {
   formatAuditTimestamp,
 } from "./types";
 import { ExecutionPipelineViewer } from "./ExecutionPipelineViewer";
+import { ExecutionChainStepper } from "./ExecutionChainStepper";
 
 interface ProposalCardProps {
   proposal: ExecutionProposal;
@@ -103,13 +105,17 @@ export function ProposalCard({
   onLoadRollbackResult,
   formatDate,
 }: ProposalCardProps) {
+  const { t } = useTranslation();
   const pd = p.proposal_data_parsed;
+
+  // Extract linkedApproval so it can be used both in JSX and in ExecutionChainStepper props
+  const linkedApproval = taskApprovals.find((a) => a.proposal_id === p.id);
 
   return (
     <div key={p.id} className="proposal-card">
       <div className="proposal-header">
         <span className="proposal-summary">
-          {pd.change_summary || "Execution Proposal"}
+          {pd.change_summary || t("proposal.executionProposal")}
         </span>
         <span
           className="badge"
@@ -130,7 +136,7 @@ export function ProposalCard({
               fontSize: 10,
             }}
           >
-            approval required
+            {t("proposal.approvalRequired")}
           </span>
         )}
         <span
@@ -145,10 +151,28 @@ export function ProposalCard({
         </span>
       </div>
 
+      {/* Execution chain stepper (Phase 16-3) */}
+      <ExecutionChainStepper
+        proposalStatus={p.status}
+        requiresApproval={p.requires_approval}
+        hasApproval={linkedApproval !== undefined}
+        approvalStatus={linkedApproval?.status}
+        hasSnapshot={!!snapshot}
+        snapshotStatus={snapshot?.status}
+        hasExecRequest={!!execRequest}
+        execRequestStatus={execRequest?.status}
+        hasDryRun={!!dryRunResult}
+        dryRunStatus={typeof dryRunResult === "object" ? dryRunResult.status : undefined}
+        hasRealRun={!!realRunResult && realRunResult !== "empty"}
+        realRunStatus={realRunResult && realRunResult !== "empty" ? realRunResult.status : undefined}
+        hasRollback={!!rollbackResult && rollbackResult !== "empty"}
+        rollbackStatus={rollbackResult && rollbackResult !== "empty" ? rollbackResult.status : undefined}
+      />
+
       {/* Proposed files */}
       {pd.proposed_files && pd.proposed_files.length > 0 && (
         <div className="proposal-files">
-          <div className="proposal-label">Proposed Files</div>
+          <div className="proposal-label">{t("proposal.proposedFiles")}</div>
           {pd.proposed_files.map((f, i) => (
             <div key={i} className="proposal-file-item">
               <span
@@ -173,7 +197,7 @@ export function ProposalCard({
       {/* Proposed commands */}
       {pd.proposed_commands && pd.proposed_commands.length > 0 && (
         <div className="proposal-commands">
-          <div className="proposal-label">Proposed Commands</div>
+          <div className="proposal-label">{t("proposal.proposedCommands")}</div>
           {pd.proposed_commands.map((c, i) => (
             <div key={i} className="proposal-cmd-item">
               <code style={{ fontSize: 11 }}>{c.command}</code>
@@ -198,7 +222,7 @@ export function ProposalCard({
       {/* Approval reasons */}
       {p.approval_reasons_parsed.length > 0 && (
         <div className="proposal-reasons">
-          <div className="proposal-label">Approval Reasons</div>
+          <div className="proposal-label">{t("proposal.approvalReasons")}</div>
           <ul style={{ margin: 0, paddingLeft: 16, fontSize: 11 }}>
             {p.approval_reasons_parsed.map((r, i) => (
               <li key={i}>{r}</li>
@@ -222,7 +246,7 @@ export function ProposalCard({
             border: "1px solid rgba(255, 200, 50, 0.2)",
           }}>
             <div style={{ fontSize: 11, color: "var(--accent-yellow)", marginBottom: 6, fontWeight: 600 }}>
-              Awaiting approval
+              {t("proposal.awaitingApproval")}
             </div>
             <div style={{ display: "flex", gap: 8 }}>
               <button
@@ -240,7 +264,7 @@ export function ProposalCard({
                 disabled={approvalLoading === linked.id}
                 onClick={() => onResolveApproval(linked.id, "approved", p.id)}
               >
-                {approvalLoading === linked.id ? "..." : "Approve"}
+                {approvalLoading === linked.id ? "..." : t("approvals.approve")}
               </button>
               <button
                 className="btn btn-sm"
@@ -257,7 +281,7 @@ export function ProposalCard({
                 disabled={approvalLoading === linked.id}
                 onClick={() => onResolveApproval(linked.id, "rejected", p.id)}
               >
-                {approvalLoading === linked.id ? "..." : "Reject"}
+                {approvalLoading === linked.id ? "..." : t("approvals.reject")}
               </button>
             </div>
             {approvalError && approvalLoading === null && (
@@ -282,7 +306,7 @@ export function ProposalCard({
             fontSize: 11,
             color: isApproved ? "var(--accent-green)" : "var(--accent-red)",
           }}>
-            {isApproved ? "Approved" : "Rejected"}
+            {isApproved ? t("proposal.approved") : t("proposal.rejected")}
             {linked.reviewer_comment && (
               <span style={{ color: "var(--text-muted)", marginLeft: 8 }}>
                 — {linked.reviewer_comment}
@@ -305,7 +329,7 @@ export function ProposalCard({
               className="btn btn-secondary btn-sm"
               onClick={() => onHideSnapshot(p.id)}
             >
-              Hide Snapshot
+              {t("proposal.hideSnapshot")}
             </button>
           ) : (
             <button
@@ -314,8 +338,8 @@ export function ProposalCard({
               onClick={() => onFreezeAndView(p.id)}
             >
               {snapshotLoading
-                ? "Loading..."
-                : "Freeze & View Snapshot"}
+                ? t("proposal.loadingSnapshot")
+                : t("proposal.freezeAndView")}
             </button>
           )}
         </div>

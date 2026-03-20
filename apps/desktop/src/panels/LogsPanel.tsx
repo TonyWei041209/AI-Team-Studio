@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import type { LogLevel } from "../types/api";
 import { useLogs } from "../hooks/useLogs";
 import "./LogsPanel.css";
@@ -10,16 +11,17 @@ const LEVEL_COLORS: Record<LogLevel, string> = {
   error: "var(--accent-red)",
 };
 
-const LEVEL_OPTIONS: Array<{ value: string; label: string }> = [
-  { value: "", label: "All Levels" },
-  { value: "debug", label: "Debug" },
-  { value: "info", label: "Info" },
-  { value: "warn", label: "Warn" },
-  { value: "error", label: "Error" },
-];
-
 export function LogsPanel() {
+  const { t } = useTranslation();
   const [selectedLevel, setSelectedLevel] = useState("");
+
+  const levelOptions = [
+    { value: "", labelKey: "logs.allLevels" },
+    { value: "debug", labelKey: "logs.debug" },
+    { value: "info", labelKey: "logs.info" },
+    { value: "warn", labelKey: "logs.warn" },
+    { value: "error", labelKey: "logs.error" },
+  ];
   const { logs, loading, error, refresh, lastUpdated } = useLogs(
     selectedLevel || undefined,
   );
@@ -57,7 +59,7 @@ export function LogsPanel() {
   return (
     <div className="logs-panel">
       <div className="panel-header">
-        <h2 className="panel-title">Logs</h2>
+        <h2 className="panel-title">{t("logs.title")}</h2>
         <div className="panel-actions">
           <select
             className="form-input logs-level-filter"
@@ -65,9 +67,9 @@ export function LogsPanel() {
             value={selectedLevel}
             onChange={(e) => setSelectedLevel(e.target.value)}
           >
-            {LEVEL_OPTIONS.map((opt) => (
+            {levelOptions.map((opt) => (
               <option key={opt.value} value={opt.value}>
-                {opt.label}
+                {t(opt.labelKey)}
               </option>
             ))}
           </select>
@@ -79,7 +81,7 @@ export function LogsPanel() {
           <button
             className="btn btn-secondary"
             onClick={refresh}
-            title="Refresh"
+            title={t("logs.refresh")}
           >
             &#8635;
           </button>
@@ -91,24 +93,24 @@ export function LogsPanel() {
         <div className="panel-error">
           <span>&#9888; {error}</span>
           <button className="btn btn-secondary btn-sm" onClick={refresh}>
-            Retry
+            {t("logs.retry")}
           </button>
         </div>
       )}
 
       {/* Loading */}
-      {loading && <div className="panel-loading">Loading logs...</div>}
+      {loading && <div className="panel-loading">{t("logs.loading")}</div>}
 
       {/* Empty */}
       {!loading && !error && logs.length === 0 && (
-        <div className="panel-empty">No log entries found.</div>
+        <div className="panel-empty">{t("logs.empty")}</div>
       )}
 
       {/* Log entries — terminal style */}
       {!loading && logs.length > 0 && (
         <div className="log-terminal">
           <div className="log-terminal-header">
-            <span className="log-count" data-testid="log-count">{logs.length} entries</span>
+            <span className="log-count" data-testid="log-count">{t("logs.entries", { count: logs.length })}</span>
           </div>
           <div className="log-entries" data-testid="log-entries">
             {[...logs].reverse().map((log) => (

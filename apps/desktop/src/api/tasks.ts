@@ -11,4 +11,6 @@ export const tasksApi = {
     api.patch<Task>(`/api/tasks/${taskId}/status`, { status }),
   orchestrate: (taskId: string) =>
     api.post<Record<string, unknown>>(`/api/tasks/${taskId}/orchestrate`, {}),
+  getRuns: (taskId: string) =>
+    api.get<Array<{ id: string; role: string; status: string; started_at: string | null; ended_at: string | null; created_at: string }>>(`/api/tasks/${taskId}/runs`),
 };

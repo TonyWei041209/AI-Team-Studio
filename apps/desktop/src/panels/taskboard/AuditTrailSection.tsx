@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import type { AuditEvent } from "./types";
 import { OBJECT_TYPE_COLORS, AUDIT_STATUS_COLORS, formatAuditTimestamp } from "./types";
 
@@ -14,18 +15,19 @@ export function AuditTrailSection({
   loading,
   error,
 }: AuditTrailSectionProps) {
+  const { t } = useTranslation();
   return (
     <div className="audit-trail-section">
       <div className="audit-trail-header">
         <span className="proposal-label" style={{ margin: 0 }}>
           {count !== null
-            ? `Audit Trail (${count} events)`
-            : "Audit Trail"}
+            ? t("audit.titleWithCount", { count })
+            : t("audit.title")}
         </span>
       </div>
       {loading && (
         <div style={{ fontSize: 12, color: "var(--text-muted)" }}>
-          Loading audit trail...
+          {t("audit.loading")}
         </div>
       )}
       {error && (
@@ -33,7 +35,7 @@ export function AuditTrailSection({
       )}
       {!loading && !error && events.length === 0 && (
         <div style={{ fontSize: 12, color: "var(--text-muted)" }}>
-          No audit events yet
+          {t("audit.empty")}
         </div>
       )}
       {!loading && events.length > 0 && (

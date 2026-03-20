@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import type { ConnectionState } from "../types/api";
 
 interface StatusIndicatorProps {
@@ -5,23 +6,26 @@ interface StatusIndicatorProps {
 }
 
 export function StatusIndicator({ state }: StatusIndicatorProps) {
+  const { t } = useTranslation();
+
   const color =
     state === "connected"
       ? "var(--accent-green)"
       : state === "checking"
         ? "var(--accent-yellow)"
         : "var(--accent-red)";
-  const label =
+
+  const labelKey =
     state === "connected"
-      ? "Connected"
+      ? "status.connected"
       : state === "checking"
-        ? "Connecting..."
-        : "Disconnected";
+        ? "status.connecting"
+        : "status.disconnected";
 
   return (
     <div className="status-indicator">
       <span className="status-dot" style={{ backgroundColor: color }} />
-      <span className="status-text">{label}</span>
+      <span className="status-text">{t(labelKey)}</span>
     </div>
   );
 }

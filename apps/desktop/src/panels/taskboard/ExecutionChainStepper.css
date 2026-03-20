@@ -1,0 +1,114 @@
+/* ── Execution Chain Stepper (Phase 16-3) ────────────────
+   Compact horizontal execution chain shown inside ProposalCard.
+   Uses 8px dots instead of 28px icons to stay narrow.
+   ─────────────────────────────────────────────────────── */
+
+.exec-chain {
+  display: flex;
+  align-items: flex-start;
+  padding: 6px 0 4px;
+  overflow-x: auto;
+  scrollbar-width: none; /* Firefox */
+}
+.exec-chain::-webkit-scrollbar {
+  display: none; /* Chrome/Safari */
+}
+
+/* One step = dot + label stacked */
+.exec-chain-step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  flex-shrink: 0;
+  min-width: 36px;
+}
+
+/* Connecting line between steps */
+.exec-chain-connector {
+  width: 14px;
+  height: 2px;
+  background-color: var(--border-color);
+  flex-shrink: 0;
+  margin-top: 3px; /* align vertically with dot centre */
+  align-self: flex-start;
+}
+
+.exec-chain-connector.done {
+  background-color: var(--accent-green);
+}
+
+/* The dot */
+.exec-chain-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  border: 1.5px solid var(--border-color);
+  background-color: var(--bg-secondary);
+  transition: all 0.15s;
+  flex-shrink: 0;
+}
+
+/* Status variants */
+.exec-chain-step-completed .exec-chain-dot {
+  border-color: var(--accent-green);
+  background-color: var(--accent-green);
+}
+
+.exec-chain-step-active .exec-chain-dot {
+  border-color: var(--accent-blue);
+  background-color: rgba(88, 166, 255, 0.2);
+  animation: exec-chain-pulse 1.6s ease-in-out infinite;
+}
+
+.exec-chain-step-failed .exec-chain-dot {
+  border-color: var(--accent-red);
+  background-color: rgba(248, 81, 73, 0.2);
+}
+
+.exec-chain-step-waiting .exec-chain-dot {
+  border-color: var(--border-color);
+  background-color: var(--bg-secondary);
+}
+
+.exec-chain-step-skipped .exec-chain-dot {
+  border-color: var(--border-color);
+  background-color: transparent;
+  opacity: 0.4;
+}
+
+/* Labels */
+.exec-chain-label {
+  font-size: 9px;
+  font-weight: 500;
+  color: var(--text-muted);
+  white-space: nowrap;
+  text-align: center;
+  line-height: 1;
+}
+
+.exec-chain-step-completed .exec-chain-label {
+  color: var(--accent-green);
+}
+
+.exec-chain-step-active .exec-chain-label {
+  color: var(--accent-blue);
+}
+
+.exec-chain-step-failed .exec-chain-label {
+  color: var(--accent-red);
+}
+
+.exec-chain-step-skipped .exec-chain-label {
+  opacity: 0.4;
+  text-decoration: line-through;
+}
+
+@keyframes exec-chain-pulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(88, 166, 255, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 0 3px rgba(88, 166, 255, 0.1);
+  }
+}

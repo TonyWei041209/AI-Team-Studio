@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import type {
   ExecutionSnapshotResponse,
   ExecutionRequestResponse,
@@ -90,33 +91,34 @@ export function ExecutionPipelineViewer({
   onLoadRollbackResult,
   formatDate,
 }: ExecutionPipelineViewerProps) {
+  const { t } = useTranslation();
   const s = snapshot;
   const sd = s.snapshot_data_parsed;
 
   return (
     <div className="snapshot-viewer">
-      <div className="proposal-label">Execution Snapshot</div>
+      <div className="proposal-label">{t("execution.snapshot")}</div>
       <div className="snapshot-meta">
         <span className="snapshot-meta-item">
-          <strong>Status:</strong>{" "}
+          <strong>{t("execution.snapshotStatus")}</strong>{" "}
           <span className="snapshot-frozen-badge">
             {s.status}
           </span>
         </span>
         <span className="snapshot-meta-item">
-          <strong>Risk:</strong>{" "}
+          <strong>{t("execution.snapshotRisk")}</strong>{" "}
           <span style={{ color: RISK_COLORS[s.risk_level] || "#888" }}>
             {s.risk_level}
           </span>
         </span>
         <span className="snapshot-meta-item">
-          <strong>Hash:</strong>{" "}
+          <strong>{t("execution.snapshotHash")}</strong>{" "}
           <code className="snapshot-hash">
             {s.content_hash.slice(0, 12)}...
           </code>
         </span>
         <span className="snapshot-meta-item">
-          <strong>Frozen:</strong>{" "}
+          <strong>{t("execution.snapshotFrozen")}</strong>{" "}
           {formatDate(s.created_at)}
         </span>
       </div>
@@ -127,7 +129,7 @@ export function ExecutionPipelineViewer({
       )}
       {sd?.proposed_files && sd.proposed_files.length > 0 && (
         <div className="proposal-files">
-          <div className="proposal-label">Frozen Files</div>
+          <div className="proposal-label">{t("execution.frozenFiles")}</div>
           {sd.proposed_files.map((f, i) => (
             <div key={i} className="proposal-file-item">
               <span
@@ -158,39 +160,39 @@ export function ExecutionPipelineViewer({
           const cardBorderColor = isTerminal ? statusColor : "var(--accent-yellow)";
           return (<>
           <div className="exec-request-card" style={{ borderColor: cardBorderColor }}>
-            <div className="proposal-label">Execution Request</div>
+            <div className="proposal-label">{t("execution.executionRequest")}</div>
             <div className="exec-request-meta">
               <span className="exec-request-meta-item">
-                <strong>ID:</strong>{" "}
+                <strong>{t("execution.requestId")}</strong>{" "}
                 <code className="snapshot-hash">
                   {er.id.slice(0, 8)}...
                 </code>
               </span>
               <span className="exec-request-meta-item">
-                <strong>Status:</strong>{" "}
+                <strong>{t("execution.requestStatus")}</strong>{" "}
                 <span className="exec-request-status" style={{ color: statusColor }}>
                   {er.status}
                 </span>
               </span>
               <span className="exec-request-meta-item">
-                <strong>Risk:</strong>{" "}
+                <strong>{t("execution.requestRisk")}</strong>{" "}
                 <span style={{ color: RISK_COLORS[er.risk_level] || "#888" }}>
                   {er.risk_level}
                 </span>
               </span>
               <span className="exec-request-meta-item">
-                <strong>Created:</strong>{" "}
+                <strong>{t("execution.requestCreated")}</strong>{" "}
                 {formatDate(er.created_at)}
               </span>
               <span className="exec-request-meta-item">
-                <strong>Hash:</strong>{" "}
+                <strong>{t("execution.requestHash")}</strong>{" "}
                 <code className="snapshot-hash">
                   {er.snapshot_content_hash.slice(0, 12)}...
                 </code>
               </span>
             </div>
             <div className="exec-request-notice">
-              This records an execution intent only. No file, shell, or git operations are performed.
+              {t("execution.requestNotice")}
             </div>
             {!isTerminal && (
               <div className="exec-request-buttons">
@@ -199,14 +201,14 @@ export function ExecutionPipelineViewer({
                   disabled={execReqLoading}
                   onClick={() => onUpdateExecRequestStatus(s.id, er.id, "confirmed")}
                 >
-                  {execReqLoading ? "Updating..." : "Confirm Request"}
+                  {execReqLoading ? t("execution.updating") : t("execution.confirmRequest")}
                 </button>
                 <button
                   className="btn btn-sm exec-request-btn-reject"
                   disabled={execReqLoading}
                   onClick={() => onUpdateExecRequestStatus(s.id, er.id, "rejected")}
                 >
-                  Reject Request
+                  {t("execution.rejectRequest")}
                 </button>
                 {/* Phase 10-2: Confirm & Dry-Run combo — confirm is irreversible */}
                 <button
@@ -225,10 +227,10 @@ export function ExecutionPipelineViewer({
                   onClick={() => onConfirmAndDryRun(s.id, er.id)}
                 >
                   {execReqLoading
-                    ? "Confirming..."
+                    ? t("execution.confirming")
                     : dryRunLoading
-                      ? "Running dry-run..."
-                      : "Confirm & Dry-Run (irreversible)"}
+                      ? t("execution.runningDryRun")
+                      : t("execution.confirmAndDryRun")}
                 </button>
               </div>
             )}
@@ -242,7 +244,7 @@ export function ExecutionPipelineViewer({
               <div className="dry-run-section">
                 {dr ? (
                   <div className="dry-run-result-card">
-                    <div className="proposal-label">Dry-Run Result</div>
+                    <div className="proposal-label">{t("execution.dryRunResult")}</div>
                     <div className="dry-run-meta">
                       <span className="dry-run-mode-badge">
                         {dr.result_data.mode?.toUpperCase() || "DRY RUN"}
@@ -269,7 +271,7 @@ export function ExecutionPipelineViewer({
 
                     {/* Planned file actions */}
                     <div className="dry-run-list-section">
-                      <div className="proposal-label">Planned File Actions</div>
+                      <div className="proposal-label">{t("execution.plannedFileActions")}</div>
                       {dr.result_data.planned_file_actions.length > 0 ? (
                         dr.result_data.planned_file_actions.map((fa, i) => (
                           <div key={i} className="dry-run-action-item">
@@ -294,14 +296,14 @@ export function ExecutionPipelineViewer({
                         ))
                       ) : (
                         <div className="dry-run-empty">
-                          No file actions planned
+                          {t("execution.noFileActions")}
                         </div>
                       )}
                     </div>
 
                     {/* Planned command actions */}
                     <div className="dry-run-list-section">
-                      <div className="proposal-label">Planned Command Actions</div>
+                      <div className="proposal-label">{t("execution.plannedCommandActions")}</div>
                       {dr.result_data.planned_command_actions.length > 0 ? (
                         dr.result_data.planned_command_actions.map((ca, i) => (
                           <div key={i} className="dry-run-action-item">
@@ -318,7 +320,7 @@ export function ExecutionPipelineViewer({
                         ))
                       ) : (
                         <div className="dry-run-empty">
-                          No command actions planned
+                          {t("execution.noCommandActions")}
                         </div>
                       )}
                     </div>
@@ -327,7 +329,7 @@ export function ExecutionPipelineViewer({
                     {dr.result_data.warnings.length > 0 && (
                       <div className="dry-run-warnings">
                         <div className="proposal-label" style={{ color: "var(--accent-yellow)" }}>
-                          Warnings
+                          {t("execution.warnings")}
                         </div>
                         {dr.result_data.warnings.map((w, i) => (
                           <div key={i} className="dry-run-warning-item">
@@ -339,19 +341,19 @@ export function ExecutionPipelineViewer({
                   </div>
                 ) : drLoading ? (
                   <div className="dry-run-loading">
-                    Loading dry-run result...
+                    {t("execution.loadingDryRun")}
                   </div>
                 ) : dryRunError && !dryRunLoading ? (
                   <div className="dry-run-error-section">
                     <span className="snapshot-error" style={{ marginTop: 0 }}>
-                      Failed to load dry-run result
+                      {t("execution.failedDryRun")}
                     </span>
                     <button
                       className="btn btn-secondary btn-sm"
                       style={{ marginLeft: 8, fontSize: 10 }}
                       onClick={() => onLoadDryRunResult(er.id)}
                     >
-                      Retry
+                      {t("execution.retry")}
                     </button>
                   </div>
                 ) : (
@@ -360,10 +362,10 @@ export function ExecutionPipelineViewer({
                       className="btn btn-secondary btn-sm dry-run-btn"
                       onClick={() => onTriggerDryRun(er.id)}
                     >
-                      Run Dry-Run
+                      {t("execution.runDryRun")}
                     </button>
                     <span className="exec-request-hint">
-                      Simulates execution without performing any real operations.
+                      {t("execution.dryRunHint")}
                     </span>
                   </div>
                 )}
@@ -379,7 +381,7 @@ export function ExecutionPipelineViewer({
               <div className="action-plan-section">
                 {ap ? (
                   <div className="action-plan-card">
-                    <div className="proposal-label">Action Plan</div>
+                    <div className="proposal-label">{t("execution.actionPlan")}</div>
                     <div className="action-plan-meta">
                       <span className="action-plan-summary">{ap.summary}</span>
                       <span
@@ -396,14 +398,14 @@ export function ExecutionPipelineViewer({
                         <span className="badge" style={{
                           color: "var(--accent-red)", borderColor: "var(--accent-red)", fontSize: 9,
                         }}>
-                          HAS DENIED
+                          {t("execution.hasDenied")}
                         </span>
                       )}
                       {ap.needs_confirmation_count > 0 && (
                         <span className="badge" style={{
                           color: "var(--accent-yellow)", borderColor: "var(--accent-yellow)", fontSize: 9,
                         }}>
-                          {ap.needs_confirmation_count} NEED CONFIRM
+                          {t("execution.needConfirm", { count: ap.needs_confirmation_count })}
                         </span>
                       )}
                     </div>
@@ -433,23 +435,23 @@ export function ExecutionPipelineViewer({
                         </div>
                       ))}
                       {ap.actions.length === 0 && (
-                        <div className="dry-run-empty">No actions in plan</div>
+                        <div className="dry-run-empty">{t("execution.noActions")}</div>
                       )}
                     </div>
                   </div>
                 ) : apLoading ? (
-                  <div className="dry-run-loading">Loading action plan...</div>
+                  <div className="dry-run-loading">{t("execution.loadingActionPlan")}</div>
                 ) : actionPlanError && !actionPlanLoading ? (
                   <div className="dry-run-error-section">
                     <span className="snapshot-error" style={{ marginTop: 0 }}>
-                      Failed to load action plan
+                      {t("execution.failedActionPlan")}
                     </span>
                     <button
                       className="btn btn-secondary btn-sm"
                       style={{ marginLeft: 8, fontSize: 10 }}
                       onClick={() => onLoadActionPlan(er.id)}
                     >
-                      Retry
+                      {t("execution.retry")}
                     </button>
                   </div>
                 ) : (
@@ -459,10 +461,10 @@ export function ExecutionPipelineViewer({
                       style={{ color: "var(--accent-blue)", borderColor: "var(--accent-blue)" }}
                       onClick={() => onLoadActionPlan(er.id)}
                     >
-                      View Action Plan
+                      {t("execution.viewActionPlan")}
                     </button>
                     <span className="exec-request-hint">
-                      Shows normalized actions with policy decisions.
+                      {t("execution.actionPlanHint")}
                     </span>
                   </div>
                 )}
@@ -478,10 +480,10 @@ export function ExecutionPipelineViewer({
                 disabled={executeLoading}
                 onClick={() => onTriggerExecution(er.id)}
               >
-                {executeLoading ? "Executing..." : "Execute"}
+                {executeLoading ? t("execution.executing") : t("execution.execute")}
               </button>
               <span className="exec-request-hint">
-                Writes real files to your project workspace (file_create / file_modify only).
+                {t("execution.executeHint")}
               </span>
               {executeError && (
                 <div className="execute-error">{executeError}</div>
@@ -497,9 +499,9 @@ export function ExecutionPipelineViewer({
             <div className="real-run-section">
               {rr && rr !== "empty" ? (
                 <div className="real-run-result-card">
-                  <div className="proposal-label">Execution Result</div>
+                  <div className="proposal-label">{t("execution.executionResult")}</div>
                   <div className="real-run-meta">
-                    <span className="real-run-mode-badge">REAL RUN</span>
+                    <span className="real-run-mode-badge">{t("execution.realRun")}</span>
                     <span
                       className="real-run-status-badge"
                       style={{
@@ -514,7 +516,7 @@ export function ExecutionPipelineViewer({
                   <div className="real-run-summary">{rr.result_data?.summary}</div>
                   {rr.status === "failed" && rr.result_data?.stop_reason && (
                     <div className="real-run-stop-reason">
-                      <strong>Stopped at file #{rr.result_data.stopped_at}:</strong>{" "}
+                      <strong>{t("execution.stoppedAt", { index: rr.result_data.stopped_at })}</strong>{" "}
                       {rr.result_data.stop_reason}
                     </div>
                   )}
@@ -551,13 +553,13 @@ export function ExecutionPipelineViewer({
                       </div>
                     ))}
                     {(!rr.result_data?.file_results || rr.result_data.file_results.length === 0) && (
-                      <div className="dry-run-empty">No file results</div>
+                      <div className="dry-run-empty">{t("execution.noFileResults")}</div>
                     )}
                   </div>
                   {/* Command Results (Phase 8B-2) */}
                   {rr.result_data?.command_results && rr.result_data.command_results.length > 0 && (
                     <div className="real-run-cmd-section">
-                      <div className="real-run-cmd-header">Commands</div>
+                      <div className="real-run-cmd-header">{t("execution.commands")}</div>
                       <div className="real-run-cmd-list">
                         {rr.result_data.command_results.map((cr, i) => (
                           <div key={i} className="real-run-cmd-item">
@@ -616,10 +618,10 @@ export function ExecutionPipelineViewer({
                         disabled={rollbackTriggerLoading}
                         onClick={() => onTriggerRollback(er.id, rr.id)}
                       >
-                        {rollbackTriggerLoading ? "Rolling back..." : "Rollback"}
+                        {rollbackTriggerLoading ? t("execution.rollingBack") : t("execution.rollback")}
                       </button>
                       <span className="exec-request-hint">
-                        Restores modified files and removes created files.
+                        {t("execution.rollbackHint")}
                       </span>
                       {rollbackTriggerError && (
                         <div className="rollback-trigger-error">{rollbackTriggerError}</div>
@@ -628,20 +630,20 @@ export function ExecutionPipelineViewer({
                   )}
                 </div>
               ) : rr === "empty" ? (
-                <div className="real-run-empty">No real execution result yet</div>
+                <div className="real-run-empty">{t("execution.noExecutionResult")}</div>
               ) : rrLoading ? (
-                <div className="dry-run-loading">Loading execution result...</div>
+                <div className="dry-run-loading">{t("execution.loadingExecution")}</div>
               ) : realRunError && !realRunLoading ? (
                 <div className="dry-run-error-section">
                   <span className="snapshot-error" style={{ marginTop: 0 }}>
-                    Failed to load execution result
+                    {t("execution.failedExecution")}
                   </span>
                   <button
                     className="btn btn-secondary btn-sm"
                     style={{ marginLeft: 8, fontSize: 10 }}
                     onClick={() => onLoadRealRunResult(er.id)}
                   >
-                    Retry
+                    {t("execution.retry")}
                   </button>
                 </div>
               ) : (
@@ -651,10 +653,10 @@ export function ExecutionPipelineViewer({
                     style={{ color: "#ff8c00", borderColor: "#ff8c00" }}
                     onClick={() => onLoadRealRunResult(er.id)}
                   >
-                    View Execution Result
+                    {t("execution.viewExecution")}
                   </button>
                   <span className="exec-request-hint">
-                    Shows real file execution result (read-only).
+                    {t("execution.viewExecutionHint")}
                   </span>
                 </div>
               )}
@@ -670,7 +672,7 @@ export function ExecutionPipelineViewer({
             <div className="rollback-section">
               {rb && rb !== "empty" ? (
                 <div className="rollback-result-card">
-                  <div className="proposal-label">Rollback Result</div>
+                  <div className="proposal-label">{t("execution.rollbackResult")}</div>
                   <div className="rollback-meta">
                     <span className="rollback-mode-badge">ROLLBACK</span>
                     <span
@@ -707,25 +709,25 @@ export function ExecutionPipelineViewer({
                       </div>
                     ))}
                     {(!rb.result_data?.file_results || rb.result_data.file_results.length === 0) && (
-                      <div className="dry-run-empty">No file results</div>
+                      <div className="dry-run-empty">{t("execution.noFileResults")}</div>
                     )}
                   </div>
                 </div>
               ) : rb === "empty" ? (
-                <div className="rollback-empty">No rollback result yet</div>
+                <div className="rollback-empty">{t("execution.noRollbackResult")}</div>
               ) : rbLoading ? (
-                <div className="dry-run-loading">Loading rollback result...</div>
+                <div className="dry-run-loading">{t("execution.loadingRollback")}</div>
               ) : rollbackError && !rollbackLoading ? (
                 <div className="dry-run-error-section">
                   <span className="snapshot-error" style={{ marginTop: 0 }}>
-                    Failed to load rollback result
+                    {t("execution.failedRollback")}
                   </span>
                   <button
                     className="btn btn-secondary btn-sm"
                     style={{ marginLeft: 8, fontSize: 10 }}
                     onClick={() => onLoadRollbackResult(er.id)}
                   >
-                    Retry
+                    {t("execution.retry")}
                   </button>
                 </div>
               ) : (
@@ -735,10 +737,10 @@ export function ExecutionPipelineViewer({
                     style={{ color: "#6ea8d9", borderColor: "#6ea8d9" }}
                     onClick={() => onLoadRollbackResult(er.id)}
                   >
-                    View Rollback Result
+                    {t("execution.viewRollback")}
                   </button>
                   <span className="exec-request-hint">
-                    Shows rollback result (read-only).
+                    {t("execution.viewRollbackHint")}
                   </span>
                 </div>
               )}
@@ -754,11 +756,11 @@ export function ExecutionPipelineViewer({
               onClick={() => onRequestExecution(s.id)}
             >
               {execReqLoading
-                ? "Requesting..."
-                : "Request Execution"}
+                ? t("execution.requesting")
+                : t("execution.requestExecution")}
             </button>
             <span className="exec-request-hint">
-              Records execution intent only — does not execute files, shell, or git operations.
+              {t("execution.requestHint")}
             </span>
           </div>
         )}

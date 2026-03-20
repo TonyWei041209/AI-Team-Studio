@@ -5,10 +5,13 @@ import sqlite3
 from pathlib import Path
 
 # Database file lives in the project-level data/ directory.
-# Override with RUNTIME_DB env var for isolated test runs.
+# Override with RUNTIME_DB or ATS_DB_PATH env var for isolated test runs.
 DATA_DIR = Path(__file__).resolve().parent.parent.parent / "data"
-_db_override = os.environ.get("RUNTIME_DB")
+_db_override = os.environ.get("ATS_DB_PATH") or os.environ.get("RUNTIME_DB")
 DB_PATH = Path(_db_override) if _db_override else DATA_DIR / "ai_team_studio.db"
+
+# For :memory: databases, reuse a single connection so all callers share state.
+_MEMORY_CONN: sqlite3.Connection | None = None
 
 
 def get_db_path() -> Path:
@@ -16,8 +19,41 @@ def get_db_path() -> Path:
     return DB_PATH
 
 
+class _MemoryConnProxy:
+    """Proxy for the shared :memory: connection.
+
+    close() is intentionally a no-op so that helper callers using
+    ``finally: conn.close()`` do not destroy the shared in-memory state.
+    Test reset routines that want a clean slate should drop tables and call
+    ``_ensure_schema()`` — the migration runner will rebuild from scratch.
+    """
+
+    def __init__(self, conn: sqlite3.Connection) -> None:
+        self._conn = conn
+
+    def __getattr__(self, name: str):
+        return getattr(self._conn, name)
+
+    def close(self) -> None:
+        # No-op: keep the shared in-memory connection alive between calls.
+        pass
+
+
 def get_connection() -> sqlite3.Connection:
-    """Get a synchronous SQLite connection with row factory."""
+    """Get a synchronous SQLite connection with row factory.
+
+    For :memory: databases (test mode) returns a shared-state proxy so that
+    all callers see the same in-memory database.  Calling close() on the proxy
+    resets the shared connection, enabling test isolation.
+    For file-based databases a new connection is returned as usual.
+    """
+    global _MEMORY_CONN
+    if str(DB_PATH) == ":memory:":
+        if _MEMORY_CONN is None:
+            _MEMORY_CONN = sqlite3.connect(":memory:", check_same_thread=False)
+            _MEMORY_CONN.row_factory = sqlite3.Row
+            _MEMORY_CONN.execute("PRAGMA foreign_keys=ON")
+        return _MemoryConnProxy(_MEMORY_CONN)  # type: ignore[return-value]
     conn = sqlite3.connect(str(DB_PATH))
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
@@ -575,6 +611,108 @@ def _apply_v13(conn: sqlite3.Connection) -> None:
     conn.execute("INSERT INTO schema_version (version) VALUES (13)")
 
 
+def _apply_v14(conn: sqlite3.Connection) -> None:
+    """V14: Skills table (Phase 14-1).
+
+    Supports global and per-agent skills with enable/disable toggle.
+    Single-table design: agent_role is NULL for global skills.
+    """
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS skills (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            description TEXT NOT NULL DEFAULT '',
+            content TEXT NOT NULL DEFAULT '',
+            scope_type TEXT NOT NULL DEFAULT 'global' CHECK(scope_type IN ('global', 'agent')),
+            agent_role TEXT,
+            is_enabled INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+            CHECK(
+                (scope_type = 'global' AND agent_role IS NULL) OR
+                (scope_type = 'agent' AND agent_role IN ('planner', 'builder', 'qa', 'reviewer'))
+            )
+        )
+    """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_skills_scope "
+        "ON skills(scope_type, agent_role)"
+    )
+    conn.execute("INSERT INTO schema_version (version) VALUES (14)")
+
+
+def _apply_v15(conn: sqlite3.Connection) -> None:
+    """V15: Role registry table (Phase 15-1).
+
+    Stores both system (built-in) and custom agent roles.
+    System roles (planner, builder, qa, reviewer) are seeded on migration.
+    Custom roles can be created for future dynamic team composition.
+    """
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS roles (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL UNIQUE,
+            display_name TEXT NOT NULL,
+            description TEXT NOT NULL DEFAULT '',
+            department TEXT NOT NULL DEFAULT 'engineering',
+            is_system INTEGER NOT NULL DEFAULT 0,
+            is_enabled INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+        )
+    """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_roles_department ON roles(department)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_roles_is_system ON roles(is_system)"
+    )
+
+    # Seed the four system roles
+    import uuid
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc).isoformat()
+    system_roles = [
+        ("planner", "Planner", "Breaks down tasks into subtasks and sets acceptance criteria", "engineering"),
+        ("builder", "Builder", "Produces execution proposals in supervised preparation mode", "engineering"),
+        ("qa", "QA", "Validates implementation against acceptance criteria", "engineering"),
+        ("reviewer", "Reviewer", "Final review and approve/reject decision", "engineering"),
+    ]
+    for name, display, desc, dept in system_roles:
+        role_id = str(uuid.uuid4())
+        conn.execute(
+            """INSERT OR IGNORE INTO roles (id, name, display_name, description, department, is_system, is_enabled, created_at, updated_at)
+               VALUES (?, ?, ?, ?, ?, 1, 1, ?, ?)""",
+            (role_id, name, display, desc, dept, now, now),
+        )
+
+    conn.execute("INSERT INTO schema_version (version) VALUES (15)")
+
+
+def _apply_v16(conn: sqlite3.Connection) -> None:
+    """V16: Project role participants table (Phase 15-3).
+
+    Binds roles to projects. Each project can independently enable/disable
+    which roles participate in its orchestration pipeline.
+    Default: all 4 system roles enabled for new/existing projects.
+    """
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS project_role_participants (
+            id TEXT PRIMARY KEY,
+            project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+            role_name TEXT NOT NULL,
+            is_enabled INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+            UNIQUE (project_id, role_name)
+        )
+    """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_prp_project ON project_role_participants(project_id)"
+    )
+    conn.execute("INSERT INTO schema_version (version) VALUES (16)")
+
+
 # Ordered list of migrations
 _MIGRATIONS = [
     (1, _apply_v1),
@@ -590,21 +728,39 @@ _MIGRATIONS = [
     (11, _apply_v11),
     (12, _apply_v12),
     (13, _apply_v13),
+    (14, _apply_v14),
+    (15, _apply_v15),
+    (16, _apply_v16),
 ]
 
 
-def init_db() -> None:
-    """Initialize the SQLite database and apply pending migrations."""
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(str(DB_PATH))
-    conn.execute("PRAGMA journal_mode=WAL")
-    conn.execute("PRAGMA foreign_keys=ON")
+def _ensure_schema() -> None:
+    """Apply any pending migrations using the current DB_PATH connection.
+
+    Safe to call on both file-based and :memory: databases.
+    Used by tests to reset and re-run migrations without directory creation.
+    """
+    conn = get_connection()
     try:
+        # Disable FK checks during migrations so DROP TABLE works even when
+        # referenced by other tables (e.g. V3 approval_requests rebuild).
+        # PRAGMA foreign_keys must be set outside a transaction.
+        conn.execute("PRAGMA foreign_keys = OFF")
         current = _get_current_version(conn)
         for version, migrate_fn in _MIGRATIONS:
             if version > current:
                 migrate_fn(conn)
                 print(f"[database] Applied migration v{version}")
         conn.commit()
+        conn.execute("PRAGMA foreign_keys = ON")
     finally:
-        conn.close()
+        # Do not close the shared :memory: connection
+        if str(DB_PATH) != ":memory:":
+            conn.close()
+
+
+def init_db() -> None:
+    """Initialize the SQLite database and apply pending migrations."""
+    if str(DB_PATH) != ":memory:":
+        DATA_DIR.mkdir(parents=True, exist_ok=True)
+    _ensure_schema()

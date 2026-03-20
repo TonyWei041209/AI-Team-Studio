@@ -1,0 +1,579 @@
+.dashboard-panel {
+  padding: 16px;
+  height: 100%;
+  overflow-y: auto;
+}
+
+.dashboard-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.dashboard-card {
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 16px;
+  text-align: center;
+  transition: border-color 0.2s;
+}
+
+.dashboard-card:hover {
+  border-color: var(--text-muted);
+}
+
+.dashboard-card-value {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  line-height: 1.2;
+}
+
+.dashboard-card-label {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-top: 4px;
+}
+
+/* Card variant colors */
+.dashboard-card-warn {
+  border-color: rgba(255, 200, 50, 0.3);
+}
+.dashboard-card-warn .dashboard-card-value {
+  color: var(--accent-yellow);
+}
+
+.dashboard-card-danger {
+  border-color: rgba(248, 81, 73, 0.3);
+}
+.dashboard-card-danger .dashboard-card-value {
+  color: var(--accent-red);
+}
+
+.dashboard-card-active {
+  border-color: rgba(88, 166, 255, 0.3);
+}
+.dashboard-card-active .dashboard-card-value {
+  color: var(--accent-blue);
+}
+
+/* Section */
+.dashboard-section {
+  margin-bottom: 20px;
+}
+
+.dashboard-section-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 10px;
+}
+
+/* Status breakdown grid */
+.dashboard-status-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+}
+
+.dashboard-status-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.dashboard-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background-color: var(--text-muted);
+}
+
+.dashboard-status-dot[data-status="pending"] { background-color: var(--text-muted); }
+.dashboard-status-dot[data-status="planning"] { background-color: var(--accent-blue); }
+.dashboard-status-dot[data-status="in_progress"] { background-color: var(--accent-yellow); }
+.dashboard-status-dot[data-status="reviewing"] { background-color: var(--accent-blue); }
+.dashboard-status-dot[data-status="done"] { background-color: var(--accent-green); }
+.dashboard-status-dot[data-status="failed"] { background-color: var(--accent-red); }
+
+.dashboard-status-label {
+  color: var(--text-primary);
+}
+
+.dashboard-status-count {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.dashboard-empty {
+  text-align: center;
+  color: var(--text-muted);
+  padding: 40px;
+  font-size: 13px;
+}
+
+.dashboard-empty-inline {
+  color: var(--text-muted);
+  font-size: 12px;
+  padding: 8px 0;
+}
+
+/* Project health table */
+.dashboard-project-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.dashboard-project-table th {
+  text-align: left;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  padding: 4px 8px 6px 0;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.dashboard-project-table td {
+  padding: 6px 8px 6px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  color: var(--text-secondary);
+  vertical-align: middle;
+}
+
+.dashboard-project-table tr:last-child td {
+  border-bottom: none;
+}
+
+.dashboard-project-table tbody tr:hover td {
+  background-color: rgba(255, 255, 255, 0.03);
+}
+
+.project-table-name {
+  color: var(--text-primary) !important;
+  font-weight: 500;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-table-date {
+  color: var(--text-muted) !important;
+  font-size: 11px;
+}
+
+/* Inline badges */
+.badge {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  font-family: var(--font-mono);
+}
+
+.badge-active {
+  background-color: rgba(88, 166, 255, 0.15);
+  color: var(--accent-blue);
+}
+
+.badge-done {
+  background-color: rgba(63, 185, 80, 0.15);
+  color: var(--accent-green);
+}
+
+.badge-warn {
+  background-color: rgba(255, 200, 50, 0.15);
+  color: var(--accent-yellow);
+}
+
+.badge-zero {
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+/* Token summary card */
+.dashboard-token-card {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 24px;
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 12px 16px;
+}
+
+.token-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 100px;
+}
+
+.token-stat-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.token-stat-value {
+  font-size: 16px;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  color: var(--text-primary);
+}
+
+.token-prompt {
+  color: var(--accent-blue);
+}
+
+.token-completion {
+  color: var(--accent-green);
+}
+
+/* ── Needs Attention section ───────────────────────── */
+.dashboard-attention {
+  margin-bottom: 20px;
+}
+
+.dashboard-attention-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.dashboard-attention-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-left-width: 3px;
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-size: 12px;
+}
+
+.dashboard-attention-item--failed {
+  border-left-color: var(--accent-red);
+}
+
+.dashboard-attention-item--approval {
+  border-left-color: var(--accent-yellow);
+}
+
+.dashboard-attention-item--stalled {
+  border-left-color: #f97316; /* orange */
+}
+
+.attention-item-type {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  white-space: nowrap;
+  margin-top: 1px;
+  min-width: 100px;
+}
+
+.attention-item-type--failed {
+  color: var(--accent-red);
+}
+
+.attention-item-type--approval {
+  color: var(--accent-yellow);
+}
+
+.attention-item-type--stalled {
+  color: #f97316;
+}
+
+.attention-item-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.attention-item-title {
+  color: var(--text-primary);
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.attention-item-meta {
+  color: var(--text-muted);
+  font-size: 11px;
+  margin-top: 2px;
+}
+
+.attention-item-time {
+  color: var(--text-muted);
+  font-size: 11px;
+  white-space: nowrap;
+  margin-top: 1px;
+  font-family: var(--font-mono);
+}
+
+.dashboard-attention-empty {
+  color: var(--accent-green);
+  font-size: 12px;
+  padding: 8px 0;
+}
+
+/* ── Recent Activity section ───────────────────────── */
+.dashboard-activity {
+  margin-bottom: 20px;
+}
+
+.dashboard-activity-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.dashboard-activity-item {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 5px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  font-size: 12px;
+}
+
+.dashboard-activity-item:last-child {
+  border-bottom: none;
+}
+
+.activity-item-time {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-family: var(--font-mono);
+  white-space: nowrap;
+  min-width: 64px;
+}
+
+.activity-item-desc {
+  flex: 1;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.activity-item-title {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.activity-item-project {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.dashboard-activity-empty {
+  color: var(--text-muted);
+  font-size: 12px;
+  padding: 8px 0;
+}
+
+/* ── Navigation / clickable states ────────────────── */
+
+/* Header right side (last refreshed + refresh button) */
+.dashboard-header-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* Last refreshed timestamp */
+.dashboard-last-refreshed {
+  font-size: 10px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+
+/* Clickable summary cards */
+.dashboard-card-clickable {
+  cursor: pointer;
+}
+.dashboard-card-clickable:hover {
+  border-color: var(--accent-blue);
+  background-color: rgba(88, 166, 255, 0.05);
+}
+
+/* Clickable project rows */
+.dashboard-project-row-clickable {
+  cursor: pointer;
+}
+.dashboard-project-row-clickable:hover td {
+  background-color: rgba(88, 166, 255, 0.08) !important;
+}
+
+/* Clickable attention items */
+.dashboard-attention-item-clickable {
+  cursor: pointer;
+}
+.dashboard-attention-item-clickable:hover {
+  background-color: rgba(88, 166, 255, 0.05);
+}
+
+/* Clickable activity items */
+.dashboard-activity-item-clickable {
+  cursor: pointer;
+}
+.dashboard-activity-item-clickable:hover {
+  background-color: rgba(88, 166, 255, 0.05);
+}
+
+/* ── Readiness Card (Phase 19-5) ── */
+.dashboard-readiness-card {
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 12px 16px;
+}
+
+.dashboard-readiness-card.dashboard-readiness-ready {
+  border-color: rgba(63, 185, 80, 0.3);
+}
+
+.dashboard-readiness-body {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+
+.dashboard-readiness-badge {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 3px 10px;
+  border-radius: 4px;
+}
+
+.dashboard-readiness-badge.ready {
+  background-color: rgba(63, 185, 80, 0.15);
+  color: var(--accent-green, #3fb950);
+}
+
+.dashboard-readiness-badge.not-ready {
+  background-color: rgba(210, 153, 34, 0.15);
+  color: var(--accent-yellow, #d29922);
+}
+
+.dashboard-readiness-detail {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.dashboard-readiness-summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+}
+
+.dashboard-readiness-steps {
+  width: 100%;
+  margin: 4px 0 0 0;
+  padding-left: 20px;
+  font-size: 12px;
+  color: var(--text-muted);
+  list-style: disc;
+}
+
+.dashboard-readiness-steps li {
+  margin-bottom: 2px;
+}
+
+/* ── Mode Badge (Phase 19-6) ── */
+.dashboard-mode-badge {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 2px 8px;
+  border-radius: 3px;
+  margin-left: 10px;
+  vertical-align: middle;
+}
+
+.dashboard-mode-badge.real {
+  background-color: rgba(63, 185, 80, 0.15);
+  color: var(--accent-green, #3fb950);
+}
+
+.dashboard-mode-badge.mock {
+  background-color: rgba(210, 153, 34, 0.15);
+  color: var(--accent-yellow, #d29922);
+}
+
+/* ── Empty State Guidance (Phase 19-6) ── */
+.dashboard-empty-guidance {
+  text-align: center;
+  padding: 32px 16px;
+  color: var(--text-muted);
+}
+
+.dashboard-empty-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+}
+
+.dashboard-empty-text {
+  font-size: 13px;
+  margin-bottom: 20px;
+}
+
+.dashboard-empty-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 360px;
+  margin: 0 auto;
+  text-align: left;
+}
+
+.dashboard-empty-step {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.dashboard-empty-step-num {
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--bg-tertiary);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 700;
+  flex-shrink: 0;
+}

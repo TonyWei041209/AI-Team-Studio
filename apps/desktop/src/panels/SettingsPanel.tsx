@@ -1,17 +1,21 @@
 /**
- * Settings panel — Provider configuration, model selection, API key management,
- * and per-role model routing (Phase 6A + 6C).
+ * Settings panel — Language, Provider configuration, model selection,
+ * API key management, and per-role model routing (Phase 6A + 6C + 13-2).
  */
 
 import { useCallback, useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useProviders } from "../hooks/useProviders";
 import { settingsApi } from "../api/settings";
+import { SUPPORTED_LANGUAGES, setLanguage } from "../i18n/index.ts";
+import type { LanguageCode } from "../i18n/index.ts";
 import type { ProviderSettingUpdate, RoleModelSetting, RoleModelSettingUpdate } from "../types/api";
 
 // Roles that support real model configuration (Phase 6C+6D)
 const CONFIGURABLE_ROLES = ["planner", "builder", "reviewer"] as const;
 
 export function SettingsPanel() {
+  const { t, i18n } = useTranslation();
   const {
     providers,
     models,
@@ -26,6 +30,8 @@ export function SettingsPanel() {
   const [edits, setEdits] = useState<Record<string, { apiKey: string; baseUrl: string }>>({});
   const [saving, setSaving] = useState<string | null>(null);
   const [testing, setTesting] = useState<string | null>(null);
+  const [saveSuccess, setSaveSuccess] = useState<string | null>(null);
+  const [testTimestamps, setTestTimestamps] = useState<Record<string, number>>({});
 
   // Role-model state
   const [roleModels, setRoleModels] = useState<Record<string, RoleModelSetting>>({});
@@ -51,8 +57,14 @@ export function SettingsPanel() {
   }, [refreshRoleModels]);
 
   if (loading || roleLoading) {
-    return <div className="settings-panel"><p className="settings-loading">Loading settings...</p></div>;
+    return <div className="settings-panel"><p className="settings-loading">{t("settings.loadingSettings")}</p></div>;
   }
+
+  // ── Language handler ──
+
+  const handleLanguageChange = (code: string) => {
+    setLanguage(code as LanguageCode);
+  };
 
   // ── Provider helpers ──
 
@@ -89,6 +101,8 @@ export function SettingsPanel() {
         delete next[providerName];
         return next;
       });
+      setSaveSuccess(providerName);
+      setTimeout(() => setSaveSuccess(null), 2000);
     } finally {
       setSaving(null);
     }
@@ -98,6 +112,7 @@ export function SettingsPanel() {
     setTesting(providerName);
     try {
       await testProvider(providerName);
+      setTestTimestamps((prev) => ({ ...prev, [providerName]: Date.now() }));
     } finally {
       setTesting(null);
     }
@@ -147,14 +162,112 @@ export function SettingsPanel() {
     }
   };
 
+  // ── Status overview ──
+  const configuredProviderCount = settings.filter(
+    (s) => s.api_key_masked !== "(not set)"
+  ).length;
+
+  const realModelCount = CONFIGURABLE_ROLES.filter((role) => {
+    const current = roleModels[role];
+    return current?.enabled && current?.provider !== "mock";
+  }).length;
+
+  // System is "ready" when at least 1 provider configured AND at least 1 role using real model
+  const overallReady = configuredProviderCount > 0 && realModelCount > 0;
+
+  // ── Provider status helpers ──
+  const getProviderStatusClass = (name: string): string => {
+    const s = settings.find((s) => s.provider_name === name);
+    const isConfigured = s?.api_key_masked !== "(not set)";
+    const result = testResults[name];
+    if (result?.ok) return "connected";
+    if (result && !result.ok) return "failed";
+    if (isConfigured) return "configured";
+    return "not-configured";
+  };
+
+  const getProviderStatusLabel = (name: string): string => {
+    const s = settings.find((s) => s.provider_name === name);
+    const isConfigured = s?.api_key_masked !== "(not set)";
+    const result = testResults[name];
+    if (result?.ok) return t("settings.connected");
+    if (result && !result.ok) return t("settings.connectionFailed");
+    if (isConfigured) return t("settings.configured");
+    return t("settings.notConfigured");
+  };
+
   return (
     <div className="settings-panel">
+      {/* ── Status Overview (Phase 19-1) ── */}
+      <div className="settings-overview">
+        <div className="settings-overview-card">
+          <div className="settings-overview-value">{configuredProviderCount}/{providers.length}</div>
+          <div className="settings-overview-label">{t("settings.providersConfigured")}</div>
+          <div className="settings-overview-dots">
+            {providers.map((p) => {
+              const s = settings.find((s) => s.provider_name === p.name);
+              const isConfigured = s?.api_key_masked !== "(not set)";
+              return (
+                <span
+                  key={p.name}
+                  className={`settings-overview-dot ${isConfigured ? "configured" : "not-configured"}`}
+                  title={`${p.display_name}: ${isConfigured ? t("settings.configured") : t("settings.notConfigured")}`}
+                />
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="settings-overview-card">
+          <div className="settings-overview-value">{realModelCount}/{CONFIGURABLE_ROLES.length}</div>
+          <div className="settings-overview-label">{t("settings.rolesUsingRealModel")}</div>
+          <div className="settings-overview-dots">
+            {CONFIGURABLE_ROLES.map((role) => {
+              const current = roleModels[role];
+              const isReal = current?.enabled && current?.provider !== "mock";
+              return (
+                <span
+                  key={role}
+                  className={`settings-overview-dot ${isReal ? "real" : "mock"}`}
+                  title={`${role}: ${isReal ? t("settings.realModel") : t("settings.mockModel")}`}
+                />
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="settings-overview-card">
+          <div className={`settings-overview-value ${overallReady ? "ready" : "not-ready"}`}>
+            {overallReady ? t("settings.readyStatus") : t("settings.setupNeeded")}
+          </div>
+          <div className="settings-overview-label">{t("settings.systemStatus")}</div>
+        </div>
+      </div>
+
+      {/* ── Language (Phase 13-2) ── */}
+      <h2>{t("settings.language")}</h2>
+      <p className="settings-subtitle">{t("settings.languageDescription")}</p>
+
+      <div className="provider-card" style={{ maxWidth: 400 }}>
+        <div className="provider-field">
+          <label>{t("settings.languageLabel")}</label>
+          <select
+            className="provider-input"
+            value={i18n.language}
+            onChange={(e) => handleLanguageChange(e.target.value)}
+          >
+            {SUPPORTED_LANGUAGES.map((lang) => (
+              <option key={lang.code} value={lang.code}>
+                {lang.label}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+
       {/* ── Role Model Configuration (Phase 6C+6D) ── */}
-      <h2>Role Model Configuration</h2>
-      <p className="settings-subtitle">
-        Configure which provider and model each agent role uses.
-        Planner and Reviewer support full model integration. Builder supports plan-only mode.
-      </p>
+      <h2 style={{ marginTop: 32 }}>{t("settings.roleModelConfig")}</h2>
+      <p className="settings-subtitle">{t("settings.roleModelDescription")}</p>
 
       {roleError && (
         <div className="provider-test-result error" style={{ marginBottom: 12 }}>
@@ -170,29 +283,46 @@ export function SettingsPanel() {
           const effectiveModel = edit.model ?? current?.model ?? "";
           const effectiveEnabled = edit.enabled ?? current?.enabled ?? false;
 
+          // Derive role status for badge
+          const isMock = effectiveProvider === "mock";
+          const isReal = effectiveEnabled && !isMock;
+          const providerSetting = settings.find((s) => s.provider_name === effectiveProvider);
+          const providerNotConfigured = !isMock && providerSetting?.api_key_masked === "(not set)";
+
           return (
-            <div key={role} className="provider-card">
+            <div key={role} className={`provider-card${isReal ? " role-card-real" : ""}`}>
               <div className="provider-card-header">
                 <h3>{role.charAt(0).toUpperCase() + role.slice(1)}</h3>
-                <span className={`provider-status ${effectiveEnabled ? "configured" : "not-configured"}`}>
-                  {effectiveEnabled ? "Enabled" : "Disabled"}
-                </span>
+                <div className="role-badges">
+                  <span className={`role-mode-badge ${isReal ? "real" : "mock"}`}>
+                    {isReal ? t("settings.realModel") : t("settings.mockModel")}
+                  </span>
+                  <span className={`provider-status ${effectiveEnabled ? "configured" : "not-configured"}`}>
+                    {effectiveEnabled ? t("settings.enabled") : t("settings.disabled")}
+                  </span>
+                </div>
               </div>
 
               {role === "builder" && (
-                <div style={{ padding: "4px 8px", marginBottom: 8, background: "rgba(255,200,50,0.1)", borderRadius: 4, fontSize: 12, color: "#cca" }}>
-                  Plan-only mode: Builder outputs a structured change plan. It will NOT execute file modifications, shell commands, or git operations.
+                <div className="role-info-banner role-info-warning">
+                  {t("settings.builderPlanOnly")}
+                </div>
+              )}
+
+              {providerNotConfigured && !isMock && (
+                <div className="role-info-banner role-info-error">
+                  {t("settings.providerKeyMissing", { provider: effectiveProvider })}
                 </div>
               )}
 
               <div className="provider-field">
-                <label>Provider</label>
+                <label>{t("settings.provider")}</label>
                 <select
                   className="provider-input"
                   value={effectiveProvider}
                   onChange={(e) => setRoleEdit(role, "provider", e.target.value)}
                 >
-                  <option value="mock">mock (disabled)</option>
+                  <option value="mock">{t("settings.mockOption")}</option>
                   {providers.map((p) => (
                     <option key={p.name} value={p.name}>{p.display_name}</option>
                   ))}
@@ -200,13 +330,13 @@ export function SettingsPanel() {
               </div>
 
               <div className="provider-field">
-                <label>Model</label>
+                <label>{t("settings.model")}</label>
                 <select
                   className="provider-input"
                   value={effectiveModel}
                   onChange={(e) => setRoleEdit(role, "model", e.target.value)}
                 >
-                  <option value="">Select model...</option>
+                  <option value="">{t("settings.modelPlaceholder")}</option>
                   {models
                     .filter((m) => m.provider === effectiveProvider)
                     .map((m) => (
@@ -217,7 +347,7 @@ export function SettingsPanel() {
                 <input
                   type="text"
                   className="provider-input"
-                  placeholder="Or enter model ID manually..."
+                  placeholder={t("settings.modelManualPlaceholder")}
                   value={effectiveModel}
                   onChange={(e) => setRoleEdit(role, "model", e.target.value)}
                   style={{ marginTop: 4 }}
@@ -231,7 +361,7 @@ export function SettingsPanel() {
                     checked={effectiveEnabled}
                     onChange={(e) => setRoleEdit(role, "enabled", e.target.checked)}
                   />
-                  Enable real model calls
+                  {t("settings.enableRealModel")}
                 </label>
               </div>
 
@@ -241,7 +371,7 @@ export function SettingsPanel() {
                   disabled={roleSaving === role}
                   onClick={() => handleRoleSave(role)}
                 >
-                  {roleSaving === role ? "Saving..." : "Save"}
+                  {roleSaving === role ? t("settings.saving") : t("settings.save")}
                 </button>
               </div>
             </div>
@@ -251,15 +381,12 @@ export function SettingsPanel() {
 
       {/* QA info */}
       <div style={{ margin: "12px 0", padding: "8px 12px", background: "rgba(255,255,255,0.05)", borderRadius: 6, fontSize: 13, color: "#999" }}>
-        <strong>QA</strong> role uses mock executor in the current phase.
-        Real model integration for QA will be available in a future update.
+        <strong>QA</strong> — {t("settings.qaNote")}
       </div>
 
       {/* ── Provider Settings (Phase 6A) ── */}
-      <h2 style={{ marginTop: 32 }}>Provider Settings</h2>
-      <p className="settings-subtitle">
-        Configure LLM providers and API keys. Keys are stored locally — never in git.
-      </p>
+      <h2 style={{ marginTop: 32 }}>{t("settings.providerSettings")}</h2>
+      <p className="settings-subtitle">{t("settings.providerDescription")}</p>
 
       <div className="provider-cards">
         {providers.map((p) => {
@@ -272,33 +399,33 @@ export function SettingsPanel() {
             <div key={p.name} className="provider-card">
               <div className="provider-card-header">
                 <h3>{p.display_name}</h3>
-                <span className={`provider-status ${s?.api_key_masked !== "(not set)" ? "configured" : "not-configured"}`}>
-                  {s?.api_key_masked !== "(not set)" ? "Configured" : "Not configured"}
+                <span className={`provider-status ${getProviderStatusClass(p.name)}`}>
+                  {getProviderStatusLabel(p.name)}
                 </span>
               </div>
 
               <div className="provider-field">
-                <label>API Key</label>
+                <label>{t("settings.apiKey")}</label>
                 <div className="provider-field-row">
                   <input
                     type="password"
-                    placeholder={s?.api_key_masked ?? "Enter API key..."}
+                    placeholder={s?.api_key_masked ?? t("settings.apiKeyPlaceholder")}
                     value={edit.apiKey}
                     onChange={(e) => setEdit(p.name, "apiKey", e.target.value)}
                     className="provider-input"
                   />
                 </div>
                 {s?.api_key_masked && s.api_key_masked !== "(not set)" && (
-                  <span className="provider-hint">Current: {s.api_key_masked}</span>
+                  <span className="provider-hint">{t("settings.currentKey", { masked: s.api_key_masked })}</span>
                 )}
               </div>
 
               {["openai", "deepseek", "kimi", "minimax"].includes(p.name) && (
                 <div className="provider-field">
-                  <label>Base URL</label>
+                  <label>{t("settings.baseUrl")}</label>
                   <input
                     type="text"
-                    placeholder={s?.base_url || "Default endpoint"}
+                    placeholder={s?.base_url || t("settings.baseUrlPlaceholder")}
                     value={edit.baseUrl}
                     onChange={(e) => setEdit(p.name, "baseUrl", e.target.value)}
                     className="provider-input"
@@ -308,7 +435,7 @@ export function SettingsPanel() {
 
               {pModels.length > 0 && (
                 <div className="provider-field">
-                  <label>Available Models</label>
+                  <label>{t("settings.availableModels")}</label>
                   <div className="provider-models">
                     {pModels.map((m) => (
                       <span key={m.id} className="model-tag">{m.display_name}</span>
@@ -323,22 +450,30 @@ export function SettingsPanel() {
                   disabled={saving === p.name || !edit.apiKey}
                   onClick={() => handleSave(p.name)}
                 >
-                  {saving === p.name ? "Saving..." : "Save"}
+                  {saving === p.name ? t("settings.saving") : t("settings.save")}
                 </button>
                 <button
                   className="btn btn-secondary"
                   disabled={testing === p.name || s?.api_key_masked === "(not set)"}
                   onClick={() => handleTest(p.name)}
                 >
-                  {testing === p.name ? "Testing..." : "Test Connection"}
+                  {testing === p.name ? t("settings.testing") : t("settings.testConnection")}
                 </button>
+                {saveSuccess === p.name && (
+                  <span className="provider-save-success">{t("settings.saved")}</span>
+                )}
               </div>
 
               {result && (
                 <div className={`provider-test-result ${result.ok ? "success" : "error"}`}>
                   {result.ok
-                    ? `Connected (${result.latency_ms}ms)`
+                    ? t("settings.testSuccess", { ms: Math.round(result.latency_ms) })
                     : result.message}
+                  {testTimestamps[p.name] && (
+                    <span className="provider-test-time">
+                      {new Date(testTimestamps[p.name]).toLocaleTimeString()}
+                    </span>
+                  )}
                 </div>
               )}
             </div>

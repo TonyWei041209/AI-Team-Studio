@@ -15,6 +15,7 @@ from typing import Any
 
 from models import AgentRole, ReviewDecision
 from agents.definitions import get_definition
+from agents.skill_loader import build_enhanced_system_prompt
 from agents.executor import ExecutionResult
 from providers.base import CompletionRequest, Message, MessageRole
 from providers.registry import get_registry, ProviderRegistry
@@ -520,7 +521,7 @@ class ModelAgentExecutor:
         request = CompletionRequest(
             model=model_name,
             messages=[Message(role=MessageRole.user, content=user_msg)],
-            system_prompt=defn.system_prompt,
+            system_prompt=build_enhanced_system_prompt(defn.system_prompt, defn.role),
             max_tokens=4096,
             temperature=0.3,
         )
@@ -577,6 +578,7 @@ class ModelAgentExecutor:
 
         result = self._parse_and_validate(raw_content, "Planner", PlannerOutputSchema)
         if isinstance(result, ExecutionResult):
+            result.token_usage = usage  # preserve actual provider/model for logging
             return result  # validation failed
 
         # Normalize optional fields
@@ -613,6 +615,7 @@ class ModelAgentExecutor:
 
         result = self._parse_and_validate(raw_content, "Builder", BuilderOutputSchema)
         if isinstance(result, ExecutionResult):
+            result.token_usage = usage  # preserve actual provider/model for logging
             return result  # validation failed
 
         # Normalize optional fields (Phase 6D core)
@@ -654,6 +657,7 @@ class ModelAgentExecutor:
 
         result = self._parse_and_validate(raw_content, "Reviewer", ReviewerOutputSchema)
         if isinstance(result, ExecutionResult):
+            result.token_usage = usage  # preserve actual provider/model for logging
             return result  # validation failed
 
         # Normalize optional fields

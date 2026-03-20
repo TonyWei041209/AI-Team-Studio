@@ -130,10 +130,26 @@ class Orchestrator:
             "previous_outputs": {},
         }
 
+        # ── 2b. Load project participant config ────────────
+        enabled_roles = self._get_enabled_roles(task_context["project_id"])
+        # Filter pipeline: keep only enabled roles
+        active_pipeline = [
+            defn for defn in AGENT_PIPELINE
+            if defn.role.value in enabled_roles
+        ]
+        if not active_pipeline:
+            # Safety: if somehow all roles disabled, use full pipeline
+            active_pipeline = list(AGENT_PIPELINE)
+
+        self._log(
+            task_id, None, "info", "orchestrator",
+            f"Active pipeline roles: {[d.role.value for d in active_pipeline]}",
+        )
+
         # ── 3. Pipeline loop ─────────────────────────────────
         idx = 0
-        while idx < len(AGENT_PIPELINE):
-            defn = AGENT_PIPELINE[idx]
+        while idx < len(active_pipeline):
+            defn = active_pipeline[idx]
 
             step = await self._execute_step(task_id, defn, task_context)
             steps.append(step)
@@ -183,7 +199,11 @@ class Orchestrator:
                     # Compress older rejections to save tokens (Phase 12-3)
                     self._compress_rejection_history(task_context["rejection_history"])
                     task_context["rejection_feedback"] = step.get("output", {})
-                    idx = 1  # Builder index
+                    builder_idx = next(
+                        (i for i, d in enumerate(active_pipeline) if d.role == AgentRole.BUILDER),
+                        1,
+                    )
+                    idx = builder_idx
                     continue
 
                 if decision == ReviewDecision.BLOCK.value:
@@ -297,7 +317,10 @@ class Orchestrator:
             self._log(task_id, run_id, "error", defn.role.value,
                       f"{defn.display_name} failed: {result.error_message}")
 
-        # 6. Record token usage (Phase 12-1)
+        # 6. Patch agent_runs with actual runtime provider/model
+        self._update_run_model_info(run_id, result.token_usage)
+
+        # 7. Record token usage (Phase 12-1)
         self._record_token_usage(task_id, run_id, defn.role.value, result)
 
         return {
@@ -504,6 +527,7 @@ class Orchestrator:
     # if a future caller ever passes untrusted keys into the dict.
     _ALLOWED_RUN_COLUMNS = frozenset({
         "status", "started_at", "ended_at", "output_summary",
+        "model_provider", "model_name",
     })
 
     @staticmethod
@@ -532,6 +556,38 @@ class Orchestrator:
             values = list(updates.values()) + [run_id]
             conn.execute(
                 f"UPDATE agent_runs SET {set_clause} WHERE id = ?", values,
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+    @staticmethod
+    def _update_run_model_info(run_id: str, token_usage: dict | None) -> None:
+        """Patch agent_runs with the actual runtime provider/model.
+
+        Called after execution so the logged provider/model reflects what
+        was really used, not the seed defaults from definitions.py.
+        """
+        if not token_usage:
+            return
+        provider = token_usage.get("provider", "")
+        model = token_usage.get("model", "")
+        if not provider and not model:
+            return
+        conn = get_connection()
+        try:
+            updates = []
+            values: list[str] = []
+            if provider:
+                updates.append("model_provider = ?")
+                values.append(provider)
+            if model:
+                updates.append("model_name = ?")
+                values.append(model)
+            values.append(run_id)
+            conn.execute(
+                f"UPDATE agent_runs SET {', '.join(updates)} WHERE id = ?",
+                values,
             )
             conn.commit()
         finally:
@@ -639,6 +695,29 @@ class Orchestrator:
                  json.dumps(payload or {}), now),
             )
             conn.commit()
+        finally:
+            conn.close()
+
+    # ── Project participant config (Phase 15-3) ────────────────
+
+    @staticmethod
+    def _get_enabled_roles(project_id: str) -> set[str]:
+        """Return set of enabled role names for a project.
+
+        If no participant config exists, returns all 4 default roles.
+        """
+        if not project_id:
+            return {"planner", "builder", "qa", "reviewer"}
+        conn = get_connection()
+        try:
+            rows = conn.execute(
+                "SELECT role_name FROM project_role_participants WHERE project_id = ? AND is_enabled = 1",
+                (project_id,),
+            ).fetchall()
+            if not rows:
+                # No config yet → all defaults enabled
+                return {"planner", "builder", "qa", "reviewer"}
+            return {r["role_name"] for r in rows}
         finally:
             conn.close()
 

@@ -25,7 +25,7 @@ export type LogLevel = "debug" | "info" | "warn" | "error";
 
 // ── Tab navigation ──────────────────────────────────────
 
-export type TabId = "projects" | "tasks" | "approvals" | "logs" | "settings";
+export type TabId = "dashboard" | "projects" | "tasks" | "skills" | "roles" | "approvals" | "logs" | "settings";
 
 // ── Connection state ────────────────────────────────────
 
@@ -186,4 +186,78 @@ export interface RoleModelSettingUpdate {
   provider?: string;
   model?: string;
   enabled?: boolean;
+}
+
+// ── Skill (Phase 14) ────────────────────────────────
+
+export type SkillScopeType = "global" | "agent";
+
+export interface Skill {
+  id: string;
+  name: string;
+  description: string;
+  content: string;
+  scope_type: SkillScopeType;
+  agent_role: AgentRole | null;
+  is_enabled: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SkillCreate {
+  name: string;
+  description?: string;
+  content?: string;
+  scope_type: SkillScopeType;
+  agent_role?: AgentRole | null;
+  is_enabled?: boolean;
+}
+
+export interface SkillUpdate {
+  name?: string;
+  description?: string;
+  content?: string;
+  scope_type?: SkillScopeType;
+  agent_role?: AgentRole | null;
+  is_enabled?: boolean;
+}
+
+// ── Role (Phase 15) ────────────────────────────────
+
+export interface Role {
+  id: string;
+  name: string;
+  display_name: string;
+  description: string;
+  department: string;
+  is_system: boolean;
+  is_enabled: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface RoleCreate {
+  name: string;
+  display_name: string;
+  description?: string;
+  department?: string;
+  is_enabled?: boolean;
+}
+
+export interface RoleUpdate {
+  display_name?: string;
+  description?: string;
+  department?: string;
+  is_enabled?: boolean;
+}
+
+// ── Project Participants (Phase 15-3) ──────────────────
+
+export interface ProjectParticipant {
+  role_name: string;
+  is_enabled: boolean;
+}
+
+export interface ProjectParticipantsUpdate {
+  participants: ProjectParticipant[];
 }

@@ -1,7 +1,12 @@
-import { useState } from "react";
-import type { ProjectCreate } from "../types/api";
+import { useState, useEffect, useCallback } from "react";
+import { useTranslation } from "react-i18next";
+import type { ProjectCreate, ProjectParticipant } from "../types/api";
 import { useProjects } from "../hooks/useProjects";
+import { projectsApi } from "../api/projects";
+import type { GodotInfo } from "../api/projects";
 import "./ProjectPanel.css";
+
+const MANDATORY_ROLES = new Set(["planner", "builder"]);
 
 interface ProjectPanelProps {
   selectedProjectId: string | null;
@@ -12,10 +17,34 @@ export function ProjectPanel({
   selectedProjectId,
   onSelectProject,
 }: ProjectPanelProps) {
+  const { t } = useTranslation();
   const { projects, loading, error, refresh, createProject } = useProjects();
   const [showForm, setShowForm] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+
+  // Participant state
+  const [participants, setParticipants] = useState<ProjectParticipant[]>([]);
+  const [participantsLoading, setParticipantsLoading] = useState(false);
+  const [participantsSaving, setParticipantsSaving] = useState(false);
+  const [participantsSaved, setParticipantsSaved] = useState(false);
+  const [participantsError, setParticipantsError] = useState<string | null>(null);
+
+  // Godot detection (Phase 5.8)
+  const [godotInfo, setGodotInfo] = useState<Record<string, GodotInfo>>({});
+
+  // Load Godot info for all projects
+  useEffect(() => {
+    if (projects.length === 0) return;
+    projects.forEach(async (p) => {
+      try {
+        const info = await projectsApi.getGodotInfo(p.id);
+        setGodotInfo((prev) => ({ ...prev, [p.id]: info }));
+      } catch {
+        // Silent — Godot detection is non-critical
+      }
+    });
+  }, [projects]);
 
   // Form fields
   const [name, setName] = useState("");
@@ -50,6 +79,56 @@ export function ProjectPanel({
     }
   };
 
+  const loadParticipants = useCallback(async (projectId: string) => {
+    setParticipantsLoading(true);
+    setParticipantsError(null);
+    setParticipantsSaved(false);
+    try {
+      const data = await projectsApi.getParticipants(projectId);
+      setParticipants(data);
+    } catch {
+      setParticipantsError(t("projects.participantError"));
+    } finally {
+      setParticipantsLoading(false);
+    }
+  }, [t]);
+
+  useEffect(() => {
+    if (selectedProjectId) {
+      loadParticipants(selectedProjectId);
+    } else {
+      setParticipants([]);
+    }
+  }, [selectedProjectId, loadParticipants]);
+
+  const handleToggleParticipant = async (roleName: string, currentEnabled: boolean) => {
+    if (!selectedProjectId) return;
+    if (MANDATORY_ROLES.has(roleName) && currentEnabled) return; // can't disable mandatory
+
+    const updated = participants.map((p) =>
+      p.role_name === roleName ? { ...p, is_enabled: !currentEnabled } : p
+    );
+    setParticipants(updated);
+    setParticipantsSaving(true);
+    setParticipantsSaved(false);
+    setParticipantsError(null);
+    try {
+      const result = await projectsApi.updateParticipants(selectedProjectId, {
+        participants: updated,
+      });
+      setParticipants(result);
+      setParticipantsSaved(true);
+    } catch {
+      setParticipantsError(t("projects.participantError"));
+      // Revert optimistic update
+      if (selectedProjectId) {
+        await loadParticipants(selectedProjectId);
+      }
+    } finally {
+      setParticipantsSaving(false);
+    }
+  };
+
   const formatDate = (iso: string) => {
     try {
       return new Date(iso).toLocaleDateString();
@@ -61,12 +140,12 @@ export function ProjectPanel({
   return (
     <div className="project-panel">
       <div className="panel-header">
-        <h2 className="panel-title">Projects</h2>
+        <h2 className="panel-title">{t("projects.title")}</h2>
         <div className="panel-actions">
           <button
             className="btn btn-secondary"
             onClick={refresh}
-            title="Refresh"
+            title={t("projects.refresh")}
           >
             &#8635;
           </button>
@@ -75,7 +154,7 @@ export function ProjectPanel({
             data-testid="project-create-btn"
             onClick={() => setShowForm(!showForm)}
           >
-            {showForm ? "Cancel" : "+ New Project"}
+            {showForm ? t("projects.cancel") : t("projects.newProject")}
           </button>
         </div>
       </div>
@@ -84,37 +163,37 @@ export function ProjectPanel({
       {showForm && (
         <form className="project-form" onSubmit={handleSubmit}>
           <div className="form-field">
-            <label className="form-label">Name *</label>
+            <label className="form-label">{t("projects.nameLabel")}</label>
             <input
               className="form-input"
               data-testid="project-name-input"
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="My Project"
+              placeholder={t("projects.namePlaceholder")}
               required
             />
           </div>
           <div className="form-field">
-            <label className="form-label">Local Repo Path *</label>
+            <label className="form-label">{t("projects.repoPathLabel")}</label>
             <input
               className="form-input"
               data-testid="project-path-input"
               type="text"
               value={repoPath}
               onChange={(e) => setRepoPath(e.target.value)}
-              placeholder="D:/projects/my-project"
+              placeholder={t("projects.repoPathPlaceholder")}
               required
             />
           </div>
           <div className="form-field">
-            <label className="form-label">Description</label>
+            <label className="form-label">{t("projects.descriptionLabel")}</label>
             <input
               className="form-input"
               type="text"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="Optional description"
+              placeholder={t("projects.descriptionPlaceholder")}
             />
           </div>
           {formError && <div className="form-error">{formError}</div>}
@@ -124,7 +203,7 @@ export function ProjectPanel({
             type="submit"
             disabled={submitting || !name.trim() || !repoPath.trim()}
           >
-            {submitting ? "Creating..." : "Create Project"}
+            {submitting ? t("projects.creating") : t("projects.createProject")}
           </button>
         </form>
       )}
@@ -134,18 +213,18 @@ export function ProjectPanel({
         <div className="panel-error">
           <span>&#9888; {error}</span>
           <button className="btn btn-secondary btn-sm" onClick={refresh}>
-            Retry
+            {t("projects.retry")}
           </button>
         </div>
       )}
 
       {/* Loading state */}
-      {loading && <div className="panel-loading">Loading projects...</div>}
+      {loading && <div className="panel-loading">{t("projects.loading")}</div>}
 
       {/* Empty state */}
       {!loading && !error && projects.length === 0 && (
         <div className="panel-empty">
-          No projects yet. Create one to get started.
+          {t("projects.empty")}
         </div>
       )}
 
@@ -168,11 +247,66 @@ export function ProjectPanel({
               )}
               <div className="project-meta">
                 <span className="project-branch">{p.default_branch}</span>
+                {godotInfo[p.id]?.is_godot && (
+                  <span className="project-godot-badge" title={godotInfo[p.id].project_name || "Godot Project"}>
+                    {t("projects.godotBadge")}
+                  </span>
+                )}
               </div>
             </div>
           ))}
         </div>
       )}
+
+      {/* Team Configuration */}
+      <div className="team-config">
+        <div className="team-config-title">{t("projects.teamConfig")}</div>
+        {!selectedProjectId ? (
+          <div className="team-config-hint">{t("projects.selectProjectForTeam")}</div>
+        ) : (
+          <>
+            <div className="team-config-hint">{t("projects.teamConfigHint")}</div>
+            {participantsLoading && (
+              <div className="panel-loading">{t("projects.loading")}</div>
+            )}
+            {!participantsLoading && participants.length > 0 && (
+              <div className="participant-list">
+                {participants.map((p) => {
+                  const isMandatory = MANDATORY_ROLES.has(p.role_name);
+                  return (
+                    <div key={p.role_name} className="participant-row">
+                      <div className="participant-info">
+                        <span className="participant-role-name">{p.role_name}</span>
+                        {isMandatory && (
+                          <span className="participant-mandatory-badge">
+                            {t("projects.participantMandatory")}
+                          </span>
+                        )}
+                      </div>
+                      <div
+                        className={`participant-toggle ${p.is_enabled ? "enabled" : ""} ${isMandatory ? "disabled-toggle" : ""}`}
+                        onClick={() => handleToggleParticipant(p.role_name, p.is_enabled)}
+                        title={isMandatory ? t("projects.participantMandatory") : (p.is_enabled ? t("projects.participantEnabled") : t("projects.participantDisabled"))}
+                      >
+                        <div className="participant-toggle-knob" />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            {(participantsSaving || participantsSaved || participantsError) && (
+              <div className={`team-config-status ${participantsError ? "error" : ""}`}>
+                {participantsSaving
+                  ? t("projects.participantSaving")
+                  : participantsError
+                  ? participantsError
+                  : t("projects.participantSaved")}
+              </div>
+            )}
+          </>
+        )}
+      </div>
     </div>
   );
 }
