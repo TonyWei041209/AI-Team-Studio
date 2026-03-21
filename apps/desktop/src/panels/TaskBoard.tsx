@@ -614,6 +614,9 @@ export function TaskBoard({ projectId, onNavigateToSettings }: TaskBoardProps) {
   if (!projectId) {
     return (
       <div className="task-board">
+        <div className="panel-header">
+          <h2 className="panel-title">{t("tasks.title")}</h2>
+        </div>
         <div className="panel-empty">
           {t("tasks.selectProject")}
         </div>

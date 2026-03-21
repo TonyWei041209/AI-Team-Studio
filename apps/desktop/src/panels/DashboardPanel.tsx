@@ -139,31 +139,6 @@ export function DashboardPanel({
 
   return (
     <div className="dashboard-panel">
-      <div className="panel-header">
-        <h2 className="panel-title">
-          {t("dashboard.title")}
-          {readiness && (
-            <span className={`dashboard-mode-badge ${readiness.overall_ready ? "real" : "mock"}`}>
-              {readiness.overall_ready ? t("dashboard.modeReal") : t("dashboard.modeMock")}
-            </span>
-          )}
-        </h2>
-        <div className="dashboard-header-right">
-          {lastRefreshed && (
-            <span className="dashboard-last-refreshed" title={t("dashboard.autoRefresh")}>
-              {t("dashboard.lastRefreshed", { time: formatTime(lastRefreshed) })}
-            </span>
-          )}
-          <button
-            className="btn btn-secondary"
-            onClick={() => { load(); loadAttention(); }}
-            title={t("dashboard.refresh")}
-          >
-            &#8635;
-          </button>
-        </div>
-      </div>
-
       {error && (
         <div className="panel-error">
           <span>&#9888; {error}</span>
@@ -178,6 +153,28 @@ export function DashboardPanel({
       )}
 
       {summary && (
+        <>
+        <div className="dashboard-refresh-row">
+          {readiness && (
+            <span className={`dashboard-mode-badge ${readiness.overall_ready ? "real" : "mock"}`}>
+              {readiness.overall_ready ? t("dashboard.modeReal") : t("dashboard.modeMock")}
+            </span>
+          )}
+          <div className="dashboard-refresh-right">
+            {lastRefreshed && (
+              <span className="dashboard-last-refreshed" title={t("dashboard.autoRefresh")}>
+                {t("dashboard.lastRefreshed", { time: formatTime(lastRefreshed) })}
+              </span>
+            )}
+            <button
+              className="btn btn-secondary btn-sm"
+              onClick={() => { load(); loadAttention(); }}
+              title={t("dashboard.refresh")}
+            >
+              &#8635;
+            </button>
+          </div>
+        </div>
         <div className="dashboard-cards">
           {/* Projects */}
           <div
@@ -239,10 +236,11 @@ export function DashboardPanel({
             </div>
           </div>
         </div>
+        </>
       )}
 
       {/* ── Row 2: Task Breakdown (left) + Setup Status (right) ── */}
-      <div className="dashboard-grid-row">
+      <div className="dashboard-grid-row dashboard-grid-row-stretch">
         {/* Task status breakdown */}
         {summary && Object.keys(summary.task_by_status).length > 0 && (
           <div className="dashboard-section-card dashboard-grid-2">
@@ -354,70 +352,68 @@ export function DashboardPanel({
             )}
           </div>
 
-          {/* Right stack: Resource Allocation + Team Availability */}
+          {/* Right stack: Token Summary (top) + Team Availability (bottom) */}
           <div className="dashboard-grid-1 dashboard-right-stack">
+            {/* Token Summary */}
             <div className="dashboard-section-card">
-              <div className="dashboard-section-title">RESOURCE ALLOCATION</div>
-              <div className="dashboard-resource-list">
-                <div className="dashboard-resource-item">
-                  <span className="dashboard-resource-label">API CALLS</span>
-                  <span className="dashboard-resource-value" style={{ color: "var(--accent-green)" }}>
-                    {summary.token_summary.log_entries > 0
-                      ? Math.min(Math.round((summary.token_summary.log_entries / 100) * 100), 100)
-                      : 0}%
-                  </span>
+              <div className="dashboard-section-title">{t("dashboard.tokenSummary")}</div>
+              {summary.token_summary.log_entries === 0 ? (
+                <div className="dashboard-empty-inline">{t("dashboard.noTokenData")}</div>
+              ) : (
+                <div className="dashboard-token-grid">
+                  <div className="token-stat">
+                    <span className="token-stat-label">{t("dashboard.totalTokens")}</span>
+                    <span className="token-stat-value">{summary.token_summary.total_tokens.toLocaleString()}</span>
+                  </div>
+                  <div className="token-stat">
+                    <span className="token-stat-label">{t("dashboard.promptTokens")}</span>
+                    <span className="token-stat-value token-prompt">{summary.token_summary.total_prompt_tokens.toLocaleString()}</span>
+                  </div>
+                  <div className="token-stat">
+                    <span className="token-stat-label">{t("dashboard.completionTokens")}</span>
+                    <span className="token-stat-value token-completion">{summary.token_summary.total_completion_tokens.toLocaleString()}</span>
+                  </div>
+                  <div className="token-stat">
+                    <span className="token-stat-label">{t("dashboard.tokenEntries")}</span>
+                    <span className="token-stat-value">{summary.token_summary.log_entries.toLocaleString()}</span>
+                  </div>
                 </div>
-                <div className="dashboard-resource-bar">
-                  <div className="dashboard-resource-fill dashboard-resource-fill--green"
-                    style={{ width: `${Math.min(summary.token_summary.log_entries, 100)}%` }} />
-                </div>
-                <div className="dashboard-resource-item">
-                  <span className="dashboard-resource-label">TASK COMPLETION</span>
-                  <span className="dashboard-resource-value" style={{ color: "var(--accent-blue)" }}>
-                    {summary.total_tasks > 0
-                      ? Math.round(((summary.total_tasks - summary.failed_tasks) / summary.total_tasks) * 100)
-                      : 0}%
-                  </span>
-                </div>
-                <div className="dashboard-resource-bar">
-                  <div className="dashboard-resource-fill dashboard-resource-fill--blue"
-                    style={{ width: `${summary.total_tasks > 0 ? Math.round(((summary.total_tasks - summary.failed_tasks) / summary.total_tasks) * 100) : 0}%` }} />
-                </div>
-                <div className="dashboard-resource-item">
-                  <span className="dashboard-resource-label">FAILURE RATE</span>
-                  <span className="dashboard-resource-value" style={{ color: summary.failed_tasks > 0 ? "var(--accent-red)" : "var(--accent-green)" }}>
-                    {summary.total_tasks > 0
-                      ? Math.round((summary.failed_tasks / summary.total_tasks) * 100)
-                      : 0}%
-                  </span>
-                </div>
-                <div className="dashboard-resource-bar">
-                  <div className="dashboard-resource-fill dashboard-resource-fill--red"
-                    style={{ width: `${summary.total_tasks > 0 ? Math.round((summary.failed_tasks / summary.total_tasks) * 100) : 0}%` }} />
-                </div>
-              </div>
+              )}
             </div>
 
+            {/* Team Availability — vertical list */}
             <div className="dashboard-section-card">
-              <div className="dashboard-section-title">TEAM AVAILABILITY</div>
-              <div className="dashboard-team-roles">
-                {["planner", "builder", "qa", "reviewer"].map((role) => (
-                  <span key={role} className={`dashboard-team-avatar dashboard-team-avatar--${role}`}>
-                    {role.charAt(0).toUpperCase()}
-                  </span>
-                ))}
-              </div>
-              <div className="dashboard-team-status">
-                {readiness
-                  ? `${readiness.roles.real_model_count} ACTIVE / ${readiness.roles.total - readiness.roles.real_model_count} MOCK`
-                  : "4 ROLES CONFIGURED"}
+              <div className="dashboard-section-title">{t("dashboard.teamAvailability")}</div>
+              <div className="dashboard-team-list">
+                {(() => {
+                  const ROLE_ICONS: Record<string, string> = {
+                    planner: "🎯",
+                    builder: "🔨",
+                    qa: "✅",
+                    reviewer: "📋",
+                  };
+                  return (["planner", "builder", "qa", "reviewer"] as const).map((role) => {
+                    const detail = readiness?.roles.details.find((d) => d.role === role);
+                    const isActive = detail?.is_real ?? false;
+                    return (
+                      <div key={role} className="dashboard-team-list-row">
+                        <span className={`dashboard-team-role-dot dashboard-team-role-dot--${role}`} />
+                        <span className="dashboard-team-role-icon">{ROLE_ICONS[role]}</span>
+                        <span className="dashboard-team-role-name">{t(ROLE_I18N[role])}</span>
+                        <span className={`dashboard-team-role-badge dashboard-team-role-badge--${isActive ? "active" : "idle"}`}>
+                          {isActive ? t("dashboard.roleActive") : t("dashboard.roleIdle")}
+                        </span>
+                      </div>
+                    );
+                  });
+                })()}
               </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* ── Row 4: Recent Activity (left, scroll) + Token Summary (right) ── */}
+      {/* ── Row 4: Recent Activity (left, scroll) + Resource Allocation (right) ── */}
       <div className="dashboard-grid-row dashboard-grid-row-stretch">
         {/* Recent Activity — scrollable card */}
         <div className="dashboard-section-card dashboard-grid-2 dashboard-activity-card">
@@ -485,32 +481,48 @@ export function DashboardPanel({
           })()}
         </div>
 
-        {/* Token Summary */}
+        {/* Resource Allocation */}
         {summary && (
           <div className="dashboard-section-card dashboard-grid-1">
-            <div className="dashboard-section-title">{t("dashboard.tokenSummary")}</div>
-            {summary.token_summary.log_entries === 0 ? (
-              <div className="dashboard-empty-inline">{t("dashboard.noTokenData")}</div>
-            ) : (
-              <div className="dashboard-token-grid">
-                <div className="token-stat">
-                  <span className="token-stat-label">{t("dashboard.totalTokens")}</span>
-                  <span className="token-stat-value">{summary.token_summary.total_tokens.toLocaleString()}</span>
-                </div>
-                <div className="token-stat">
-                  <span className="token-stat-label">{t("dashboard.promptTokens")}</span>
-                  <span className="token-stat-value token-prompt">{summary.token_summary.total_prompt_tokens.toLocaleString()}</span>
-                </div>
-                <div className="token-stat">
-                  <span className="token-stat-label">{t("dashboard.completionTokens")}</span>
-                  <span className="token-stat-value token-completion">{summary.token_summary.total_completion_tokens.toLocaleString()}</span>
-                </div>
-                <div className="token-stat">
-                  <span className="token-stat-label">{t("dashboard.tokenEntries")}</span>
-                  <span className="token-stat-value">{summary.token_summary.log_entries.toLocaleString()}</span>
-                </div>
+            <div className="dashboard-section-title">{t("dashboard.resourceAllocation")}</div>
+            <div className="dashboard-resource-list">
+              <div className="dashboard-resource-item">
+                <span className="dashboard-resource-label">{t("dashboard.apiCalls")}</span>
+                <span className="dashboard-resource-value" style={{ color: "var(--accent-green)" }}>
+                  {summary.token_summary.log_entries > 0
+                    ? Math.min(Math.round((summary.token_summary.log_entries / 100) * 100), 100)
+                    : 0}%
+                </span>
               </div>
-            )}
+              <div className="dashboard-resource-bar">
+                <div className="dashboard-resource-fill dashboard-resource-fill--green"
+                  style={{ width: `${Math.min(summary.token_summary.log_entries, 100)}%` }} />
+              </div>
+              <div className="dashboard-resource-item">
+                <span className="dashboard-resource-label">{t("dashboard.taskCompletion")}</span>
+                <span className="dashboard-resource-value" style={{ color: "var(--accent-blue)" }}>
+                  {summary.total_tasks > 0
+                    ? Math.round(((summary.total_tasks - summary.failed_tasks) / summary.total_tasks) * 100)
+                    : 0}%
+                </span>
+              </div>
+              <div className="dashboard-resource-bar">
+                <div className="dashboard-resource-fill dashboard-resource-fill--blue"
+                  style={{ width: `${summary.total_tasks > 0 ? Math.round(((summary.total_tasks - summary.failed_tasks) / summary.total_tasks) * 100) : 0}%` }} />
+              </div>
+              <div className="dashboard-resource-item">
+                <span className="dashboard-resource-label">{t("dashboard.failureRate")}</span>
+                <span className="dashboard-resource-value" style={{ color: summary.failed_tasks > 0 ? "var(--accent-red)" : "var(--accent-green)" }}>
+                  {summary.total_tasks > 0
+                    ? Math.round((summary.failed_tasks / summary.total_tasks) * 100)
+                    : 0}%
+                </span>
+              </div>
+              <div className="dashboard-resource-bar">
+                <div className="dashboard-resource-fill dashboard-resource-fill--red"
+                  style={{ width: `${summary.total_tasks > 0 ? Math.round((summary.failed_tasks / summary.total_tasks) * 100) : 0}%` }} />
+              </div>
+            </div>
           </div>
         )}
       </div>

@@ -3,12 +3,12 @@
   height: 100%;
   overflow-y: auto;
   width: 100%;
-  max-width: 1200px;
 }
 
 /* ── Grid Layout ─────────────────────────────────────── */
 .dashboard-grid-row {
-  display: flex;
+  display: grid;
+  grid-template-columns: 2fr 1fr;
   gap: 16px;
   margin-bottom: 16px;
 }
@@ -17,13 +17,26 @@
   align-items: stretch;
 }
 
+.dashboard-grid-row-stretch > .dashboard-section-card {
+  display: flex;
+  flex-direction: column;
+}
+
+.dashboard-grid-row-stretch > .dashboard-right-stack {
+  justify-content: stretch;
+}
+
+.dashboard-grid-row-stretch > .dashboard-right-stack > .dashboard-section-card {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
 .dashboard-grid-2 {
-  flex: 2;
   min-width: 0;
 }
 
 .dashboard-grid-1 {
-  flex: 1;
   min-width: 0;
 }
 
@@ -411,7 +424,77 @@
   background-color: var(--accent-red);
 }
 
-/* ── Team Availability ───────────────────────────────── */
+/* ── Team Availability — vertical list ───────────────── */
+.dashboard-team-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+.dashboard-team-list-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 4px;
+  border-radius: var(--radius-btn);
+  transition: background-color 0.15s;
+}
+
+.dashboard-team-list-row:hover {
+  background-color: var(--bg-secondary);
+}
+
+.dashboard-team-role-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.dashboard-team-role-dot--planner { background-color: #22D3EE; }
+.dashboard-team-role-dot--builder { background-color: #FB7185; }
+.dashboard-team-role-dot--qa      { background-color: #A78BFA; }
+.dashboard-team-role-dot--reviewer { background-color: #FBBF24; }
+
+.dashboard-team-role-icon {
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.dashboard-team-role-name {
+  flex: 1;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-primary);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dashboard-team-role-badge {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 2px 8px;
+  border-radius: var(--radius-badge);
+  flex-shrink: 0;
+}
+
+.dashboard-team-role-badge--active {
+  background-color: rgba(34, 197, 94, 0.12);
+  color: var(--accent-green);
+}
+
+.dashboard-team-role-badge--idle {
+  background-color: rgba(148, 163, 184, 0.12);
+  color: var(--text-muted);
+}
+
+/* Legacy avatar styles — kept for backward compat if referenced elsewhere */
 .dashboard-team-roles {
   display: flex;
   gap: 8px;
@@ -431,21 +514,10 @@
   border: 2px solid var(--bg-tertiary);
 }
 
-.dashboard-team-avatar--planner {
-  background-color: var(--role-planner);
-}
-
-.dashboard-team-avatar--builder {
-  background-color: var(--role-builder);
-}
-
-.dashboard-team-avatar--qa {
-  background-color: var(--role-qa);
-}
-
-.dashboard-team-avatar--reviewer {
-  background-color: var(--role-reviewer);
-}
+.dashboard-team-avatar--planner { background-color: var(--role-planner); }
+.dashboard-team-avatar--builder { background-color: var(--role-builder); }
+.dashboard-team-avatar--qa      { background-color: var(--role-qa); }
+.dashboard-team-avatar--reviewer { background-color: var(--role-reviewer); }
 
 .dashboard-team-status {
   font-size: 11px;
@@ -634,6 +706,22 @@
 
 /* ── Navigation / clickable states ────────────────── */
 
+/* ── Refresh row above stat cards ─────────────────────── */
+.dashboard-refresh-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.dashboard-refresh-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+/* Legacy header-right — kept in case referenced elsewhere */
 .dashboard-header-right {
   display: flex;
   align-items: center;
