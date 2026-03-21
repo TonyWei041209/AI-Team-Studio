@@ -51,6 +51,7 @@ const en = {
 
   // ── Settings panel ─────────────────────────────────
   settings: {
+    title: "Settings",
     language: "Language",
     languageDescription: "Select the display language for the application.",
     languageLabel: "Display Language",

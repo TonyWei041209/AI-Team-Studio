@@ -43,6 +43,7 @@ const zhCN = {
 
   // ── Settings panel ─────────────────────────────────
   settings: {
+    title: "设置",
     language: "语言",
     languageDescription: "选择应用的显示语言。",
     languageLabel: "显示语言",

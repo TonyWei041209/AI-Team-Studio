@@ -267,7 +267,7 @@
 /* ── Settings Panel ───────────────────────────────────── */
 
 .settings-panel {
-  padding: 20px;
+  width: 100%;
   max-width: 900px;
 }
 
@@ -277,6 +277,10 @@
   font-weight: 700;
   color: var(--text-primary);
   line-height: 1.4;
+}
+
+.settings-panel .panel-title {
+  margin: 0;
 }
 
 .settings-subtitle {

@@ -57,7 +57,7 @@ export function SettingsPanel() {
   }, [refreshRoleModels]);
 
   if (loading || roleLoading) {
-    return <div className="settings-panel"><p className="settings-loading">{t("settings.loadingSettings")}</p></div>;
+    return <div className="settings-panel"><div className="panel-header"><h2 className="panel-title">{t("settings.title")}</h2></div><p className="settings-loading">{t("settings.loadingSettings")}</p></div>;
   }
 
   // ── Language handler ──
@@ -198,6 +198,9 @@ export function SettingsPanel() {
 
   return (
     <div className="settings-panel">
+      <div className="panel-header">
+        <h2 className="panel-title">{t("settings.title")}</h2>
+      </div>
       {/* ── Status Overview (Phase 19-1) ── */}
       <div className="settings-overview">
         <div className="settings-overview-card">
