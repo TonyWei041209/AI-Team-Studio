@@ -307,116 +307,191 @@ export function DashboardPanel({
         </div>
       )}
 
-      {/* Task status breakdown */}
-      {summary && Object.keys(summary.task_by_status).length > 0 && (
-        <div className="dashboard-section dashboard-section-card">
-          <div className="dashboard-section-title">
-            {t("dashboard.taskBreakdown")}
-          </div>
-          <div className="dashboard-status-grid">
-            {Object.entries(summary.task_by_status).map(([status, count]) => (
-              <div key={status} className="dashboard-status-item">
-                <span className="dashboard-status-dot" data-status={status} />
-                <span className="dashboard-status-label">
-                  {t(`dashboard.status_${status}`, status)}
-                </span>
-                <span className="dashboard-status-count">{count}</span>
+      {/* ── Grid Row: Task Breakdown + Token Summary ── */}
+      {summary && (
+        <div className="dashboard-grid-row">
+          {/* Task status breakdown */}
+          {Object.keys(summary.task_by_status).length > 0 && (
+            <div className="dashboard-section dashboard-section-card dashboard-grid-2">
+              <div className="dashboard-section-title">
+                {t("dashboard.taskBreakdown")}
               </div>
-            ))}
+              <div className="dashboard-status-grid">
+                {Object.entries(summary.task_by_status).map(([status, count]) => (
+                  <div key={status} className="dashboard-status-item">
+                    <span className="dashboard-status-dot" data-status={status} />
+                    <span className="dashboard-status-label">
+                      {t(`dashboard.status_${status}`, status)}
+                    </span>
+                    <span className="dashboard-status-count">{count}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Token summary */}
+          <div className="dashboard-section dashboard-section-card dashboard-grid-1">
+            <div className="dashboard-section-title">
+              {t("dashboard.tokenSummary")}
+            </div>
+            {summary.token_summary.log_entries === 0 ? (
+              <div className="dashboard-empty-inline">{t("dashboard.noTokenData")}</div>
+            ) : (
+              <div className="dashboard-token-grid">
+                <div className="token-stat">
+                  <span className="token-stat-label">{t("dashboard.totalTokens")}</span>
+                  <span className="token-stat-value">
+                    {summary.token_summary.total_tokens.toLocaleString()}
+                  </span>
+                </div>
+                <div className="token-stat">
+                  <span className="token-stat-label">{t("dashboard.promptTokens")}</span>
+                  <span className="token-stat-value token-prompt">
+                    {summary.token_summary.total_prompt_tokens.toLocaleString()}
+                  </span>
+                </div>
+                <div className="token-stat">
+                  <span className="token-stat-label">{t("dashboard.completionTokens")}</span>
+                  <span className="token-stat-value token-completion">
+                    {summary.token_summary.total_completion_tokens.toLocaleString()}
+                  </span>
+                </div>
+                <div className="token-stat">
+                  <span className="token-stat-label">{t("dashboard.tokenEntries")}</span>
+                  <span className="token-stat-value">
+                    {summary.token_summary.log_entries.toLocaleString()}
+                  </span>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
 
-      {/* Project health */}
+      {/* ── Grid Row: Project Health + Right Sidebar Cards ── */}
       {summary && (
-        <div className="dashboard-section dashboard-section-card">
-          <div className="dashboard-section-header">
-            <div className="dashboard-section-title">
-              {t("dashboard.projectHealth")}
+        <div className="dashboard-grid-row">
+          {/* Project health — fixed height with scroll */}
+          <div className="dashboard-section dashboard-section-card dashboard-grid-2 dashboard-project-card">
+            <div className="dashboard-section-header">
+              <div className="dashboard-section-title">
+                {t("dashboard.projectHealth")}
+              </div>
             </div>
-          </div>
-          {summary.project_health.length === 0 ? (
-            <div className="dashboard-empty-inline">{t("dashboard.noProjects")}</div>
-          ) : (
-            <div className="dashboard-project-list">
-              {summary.project_health.map((p: ProjectHealth) => (
-                <div
-                  key={p.project_id}
-                  className={`dashboard-project-row${onNavigateToTasks ? " dashboard-project-row-clickable" : ""}`}
-                  onClick={() => onNavigateToTasks?.(p.project_id)}
-                  title={onNavigateToTasks ? t("dashboard.clickToView") : undefined}
-                >
-                  <div className="dashboard-project-row-left">
-                    <span className="dashboard-project-avatar">
-                      {p.project_name.charAt(0).toUpperCase()}
-                    </span>
-                    <div className="dashboard-project-info">
-                      <span className="dashboard-project-name">{p.project_name}</span>
-                      <span className="dashboard-project-meta-text">
-                        {t("dashboard.tasks")}: {p.total_tasks}
+            {summary.project_health.length === 0 ? (
+              <div className="dashboard-empty-inline">{t("dashboard.noProjects")}</div>
+            ) : (
+              <div className="dashboard-project-list dashboard-project-scroll">
+                {summary.project_health.map((p: ProjectHealth) => (
+                  <div
+                    key={p.project_id}
+                    className={`dashboard-project-row${onNavigateToTasks ? " dashboard-project-row-clickable" : ""}`}
+                    onClick={() => onNavigateToTasks?.(p.project_id)}
+                    title={onNavigateToTasks ? t("dashboard.clickToView") : undefined}
+                  >
+                    <div className="dashboard-project-row-left">
+                      <span className="dashboard-project-avatar">
+                        {p.project_name.charAt(0).toUpperCase()}
                       </span>
+                      <div className="dashboard-project-info">
+                        <span className="dashboard-project-name">{p.project_name}</span>
+                        <span className="dashboard-project-meta-text">
+                          {t("dashboard.tasks")}: {p.total_tasks}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="dashboard-project-row-right">
+                      {p.active_tasks > 0 && (
+                        <span className="badge badge-active">{p.active_tasks} {t("dashboard.activeTasks")}</span>
+                      )}
+                      {p.done_tasks > 0 && (
+                        <span className="badge badge-done">{p.done_tasks} {t("dashboard.doneTasks")}</span>
+                      )}
+                      {p.pending_approvals > 0 && (
+                        <span className="badge badge-warn">{p.pending_approvals}</span>
+                      )}
+                      <span className="dashboard-project-date">
+                        {p.last_activity
+                          ? new Date(p.last_activity).toLocaleDateString()
+                          : t("dashboard.never")}
+                      </span>
+                      <span className="dashboard-project-chevron">&#8250;</span>
                     </div>
                   </div>
-                  <div className="dashboard-project-row-right">
-                    {p.active_tasks > 0 && (
-                      <span className="badge badge-active">{p.active_tasks} {t("dashboard.activeTasks")}</span>
-                    )}
-                    {p.done_tasks > 0 && (
-                      <span className="badge badge-done">{p.done_tasks} {t("dashboard.doneTasks")}</span>
-                    )}
-                    {p.pending_approvals > 0 && (
-                      <span className="badge badge-warn">{p.pending_approvals}</span>
-                    )}
-                    <span className="dashboard-project-date">
-                      {p.last_activity
-                        ? new Date(p.last_activity).toLocaleDateString()
-                        : t("dashboard.never")}
-                    </span>
-                    <span className="dashboard-project-chevron">&#8250;</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Token summary */}
-      {summary && (
-        <div className="dashboard-section">
-          <div className="dashboard-section-title">
-            {t("dashboard.tokenSummary")}
+                ))}
+              </div>
+            )}
           </div>
-          {summary.token_summary.log_entries === 0 ? (
-            <div className="dashboard-empty-inline">{t("dashboard.noTokenData")}</div>
-          ) : (
-            <div className="dashboard-token-card">
-              <div className="token-stat">
-                <span className="token-stat-label">{t("dashboard.totalTokens")}</span>
-                <span className="token-stat-value">
-                  {summary.token_summary.total_tokens.toLocaleString()}
-                </span>
-              </div>
-              <div className="token-stat">
-                <span className="token-stat-label">{t("dashboard.promptTokens")}</span>
-                <span className="token-stat-value token-prompt">
-                  {summary.token_summary.total_prompt_tokens.toLocaleString()}
-                </span>
-              </div>
-              <div className="token-stat">
-                <span className="token-stat-label">{t("dashboard.completionTokens")}</span>
-                <span className="token-stat-value token-completion">
-                  {summary.token_summary.total_completion_tokens.toLocaleString()}
-                </span>
-              </div>
-              <div className="token-stat">
-                <span className="token-stat-label">{t("dashboard.tokenEntries")}</span>
-                <span className="token-stat-value">
-                  {summary.token_summary.log_entries.toLocaleString()}
-                </span>
+
+          {/* Right sidebar: Resource Allocation + Team Availability */}
+          <div className="dashboard-grid-1 dashboard-right-stack">
+            {/* Resource Allocation */}
+            <div className="dashboard-section-card">
+              <div className="dashboard-section-title">RESOURCE ALLOCATION</div>
+              <div className="dashboard-resource-list">
+                <div className="dashboard-resource-item">
+                  <span className="dashboard-resource-label">API CALLS</span>
+                  <span className="dashboard-resource-value" style={{ color: "var(--accent-green)" }}>
+                    {summary.token_summary.log_entries > 0
+                      ? Math.min(Math.round((summary.token_summary.log_entries / 100) * 100), 100)
+                      : 0}%
+                  </span>
+                </div>
+                <div className="dashboard-resource-bar">
+                  <div
+                    className="dashboard-resource-fill dashboard-resource-fill--green"
+                    style={{ width: `${Math.min(summary.token_summary.log_entries, 100)}%` }}
+                  />
+                </div>
+                <div className="dashboard-resource-item">
+                  <span className="dashboard-resource-label">TASK COMPLETION</span>
+                  <span className="dashboard-resource-value" style={{ color: "var(--accent-blue)" }}>
+                    {summary.total_tasks > 0
+                      ? Math.round(((summary.total_tasks - summary.failed_tasks) / summary.total_tasks) * 100)
+                      : 0}%
+                  </span>
+                </div>
+                <div className="dashboard-resource-bar">
+                  <div
+                    className="dashboard-resource-fill dashboard-resource-fill--blue"
+                    style={{ width: `${summary.total_tasks > 0 ? Math.round(((summary.total_tasks - summary.failed_tasks) / summary.total_tasks) * 100) : 0}%` }}
+                  />
+                </div>
+                <div className="dashboard-resource-item">
+                  <span className="dashboard-resource-label">FAILURE RATE</span>
+                  <span className="dashboard-resource-value" style={{ color: summary.failed_tasks > 0 ? "var(--accent-red)" : "var(--accent-green)" }}>
+                    {summary.total_tasks > 0
+                      ? Math.round((summary.failed_tasks / summary.total_tasks) * 100)
+                      : 0}%
+                  </span>
+                </div>
+                <div className="dashboard-resource-bar">
+                  <div
+                    className="dashboard-resource-fill dashboard-resource-fill--red"
+                    style={{ width: `${summary.total_tasks > 0 ? Math.round((summary.failed_tasks / summary.total_tasks) * 100) : 0}%` }}
+                  />
+                </div>
               </div>
             </div>
-          )}
+
+            {/* Team Availability */}
+            <div className="dashboard-section-card">
+              <div className="dashboard-section-title">TEAM AVAILABILITY</div>
+              <div className="dashboard-team-roles">
+                {["planner", "builder", "qa", "reviewer"].map((role) => (
+                  <span key={role} className={`dashboard-team-avatar dashboard-team-avatar--${role}`}>
+                    {role.charAt(0).toUpperCase()}
+                  </span>
+                ))}
+              </div>
+              <div className="dashboard-team-status">
+                {readiness
+                  ? `${readiness.roles.real_model_count} ACTIVE / ${readiness.roles.total - readiness.roles.real_model_count} MOCK`
+                  : "4 ROLES CONFIGURED"}
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
