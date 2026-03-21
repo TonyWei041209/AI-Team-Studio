@@ -120,7 +120,8 @@ def compile_actions(snapshot_data: dict) -> list[NormalizedAction]:
     # ── File actions ──
     for f in snapshot_data.get("proposed_files", []):
         path = f.get("path", "") if isinstance(f, dict) else str(f)
-        operation = f.get("operation", "") if isinstance(f, dict) else ""
+        # Builder may use "action" or "operation" for the file operation field
+        operation = (f.get("operation") or f.get("action") or "") if isinstance(f, dict) else ""
         action_type = _FILE_OP_MAP.get(operation.lower(), ActionType.unsupported)
         file_params = {"operation": operation} if operation else {}
         actions.append(NormalizedAction(type=action_type, target=path, params=file_params))
