@@ -309,7 +309,7 @@ export function DashboardPanel({
 
       {/* Task status breakdown */}
       {summary && Object.keys(summary.task_by_status).length > 0 && (
-        <div className="dashboard-section">
+        <div className="dashboard-section dashboard-section-card">
           <div className="dashboard-section-title">
             {t("dashboard.taskBreakdown")}
           </div>
@@ -329,64 +329,54 @@ export function DashboardPanel({
 
       {/* Project health */}
       {summary && (
-        <div className="dashboard-section">
-          <div className="dashboard-section-title">
-            {t("dashboard.projectHealth")}
+        <div className="dashboard-section dashboard-section-card">
+          <div className="dashboard-section-header">
+            <div className="dashboard-section-title">
+              {t("dashboard.projectHealth")}
+            </div>
           </div>
           {summary.project_health.length === 0 ? (
             <div className="dashboard-empty-inline">{t("dashboard.noProjects")}</div>
           ) : (
-            <table className="dashboard-project-table">
-              <thead>
-                <tr>
-                  <th>{t("dashboard.projectName")}</th>
-                  <th>{t("dashboard.tasks")}</th>
-                  <th>{t("dashboard.activeTasks")}</th>
-                  <th>{t("dashboard.doneTasks")}</th>
-                  <th>{t("dashboard.pendingApprovals")}</th>
-                  <th>{t("dashboard.lastActivity")}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {summary.project_health.map((p: ProjectHealth) => (
-                  <tr
-                    key={p.project_id}
-                    className={onNavigateToTasks ? "dashboard-project-row-clickable" : undefined}
-                    onClick={() => onNavigateToTasks?.(p.project_id)}
-                    title={onNavigateToTasks ? t("dashboard.clickToView") : undefined}
-                  >
-                    <td className="project-table-name">{p.project_name}</td>
-                    <td>{p.total_tasks}</td>
-                    <td>
-                      {p.active_tasks > 0 ? (
-                        <span className="badge badge-active">{p.active_tasks}</span>
-                      ) : (
-                        <span className="badge-zero">0</span>
-                      )}
-                    </td>
-                    <td>
-                      {p.done_tasks > 0 ? (
-                        <span className="badge badge-done">{p.done_tasks}</span>
-                      ) : (
-                        <span className="badge-zero">0</span>
-                      )}
-                    </td>
-                    <td>
-                      {p.pending_approvals > 0 ? (
-                        <span className="badge badge-warn">{p.pending_approvals}</span>
-                      ) : (
-                        <span className="badge-zero">0</span>
-                      )}
-                    </td>
-                    <td className="project-table-date">
+            <div className="dashboard-project-list">
+              {summary.project_health.map((p: ProjectHealth) => (
+                <div
+                  key={p.project_id}
+                  className={`dashboard-project-row${onNavigateToTasks ? " dashboard-project-row-clickable" : ""}`}
+                  onClick={() => onNavigateToTasks?.(p.project_id)}
+                  title={onNavigateToTasks ? t("dashboard.clickToView") : undefined}
+                >
+                  <div className="dashboard-project-row-left">
+                    <span className="dashboard-project-avatar">
+                      {p.project_name.charAt(0).toUpperCase()}
+                    </span>
+                    <div className="dashboard-project-info">
+                      <span className="dashboard-project-name">{p.project_name}</span>
+                      <span className="dashboard-project-meta-text">
+                        {t("dashboard.tasks")}: {p.total_tasks}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="dashboard-project-row-right">
+                    {p.active_tasks > 0 && (
+                      <span className="badge badge-active">{p.active_tasks} {t("dashboard.activeTasks")}</span>
+                    )}
+                    {p.done_tasks > 0 && (
+                      <span className="badge badge-done">{p.done_tasks} {t("dashboard.doneTasks")}</span>
+                    )}
+                    {p.pending_approvals > 0 && (
+                      <span className="badge badge-warn">{p.pending_approvals}</span>
+                    )}
+                    <span className="dashboard-project-date">
                       {p.last_activity
                         ? new Date(p.last_activity).toLocaleDateString()
                         : t("dashboard.never")}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                    </span>
+                    <span className="dashboard-project-chevron">&#8250;</span>
+                  </div>
+                </div>
+              ))}
+            </div>
           )}
         </div>
       )}
