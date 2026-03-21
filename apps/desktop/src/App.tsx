@@ -43,6 +43,15 @@ function App() {
   );
   const [pendingCount, setPendingCount] = useState(0);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+  const [theme, setTheme] = useState<"dark" | "light">(() => {
+    return (localStorage.getItem("theme") as "dark" | "light") || "dark";
+  });
+
+  // Apply theme to document
+  useEffect(() => {
+    document.documentElement.setAttribute("data-theme", theme);
+    localStorage.setItem("theme", theme);
+  }, [theme]);
 
   // ── Health check polling ────────────────────────────
   const checkHealth = useCallback(async () => {
@@ -166,6 +175,13 @@ function App() {
           >
             &#128269; {t("commandPalette.search")}
             <kbd className="title-bar-kbd">Ctrl+K</kbd>
+          </button>
+          <button
+            className="title-bar-theme-btn"
+            onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+            title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+          >
+            {theme === "dark" ? "\u2600" : "\u263E"}
           </button>
           <StatusIndicator state={connectionState} />
         </div>

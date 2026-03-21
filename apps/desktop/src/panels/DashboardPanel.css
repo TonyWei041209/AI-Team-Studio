@@ -1,23 +1,26 @@
 .dashboard-panel {
-  padding: 16px;
+  padding: 20px;
   height: 100%;
   overflow-y: auto;
+  width: 100%;
+  max-width: 1100px;
 }
 
 .dashboard-cards {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-  gap: 12px;
-  margin-bottom: 20px;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
 }
 
 .dashboard-card {
-  background-color: var(--bg-secondary);
+  background-color: var(--bg-tertiary);
   border: 1px solid var(--border-color);
-  border-radius: 8px;
-  padding: 16px;
-  text-align: center;
-  transition: border-color 0.2s;
+  border-radius: var(--radius-card);
+  padding: 20px;
+  text-align: left;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  box-shadow: var(--shadow-card);
 }
 
 .dashboard-card:hover {
@@ -25,7 +28,7 @@
 }
 
 .dashboard-card-value {
-  font-size: 28px;
+  font-size: 32px;
   font-weight: 700;
   color: var(--text-primary);
   font-family: var(--font-mono);
@@ -33,48 +36,48 @@
 }
 
 .dashboard-card-label {
-  font-size: 11px;
-  font-weight: 500;
+  font-size: 10px;
+  font-weight: 700;
   color: var(--text-muted);
   text-transform: uppercase;
-  letter-spacing: 0.5px;
-  margin-top: 4px;
+  letter-spacing: 0.08em;
+  margin-top: 8px;
 }
 
 /* Card variant colors */
 .dashboard-card-warn {
-  border-color: rgba(255, 200, 50, 0.3);
+  border-color: rgba(251, 191, 36, 0.3);
 }
 .dashboard-card-warn .dashboard-card-value {
   color: var(--accent-yellow);
 }
 
 .dashboard-card-danger {
-  border-color: rgba(248, 81, 73, 0.3);
+  border-color: rgba(239, 68, 68, 0.3);
 }
 .dashboard-card-danger .dashboard-card-value {
   color: var(--accent-red);
 }
 
 .dashboard-card-active {
-  border-color: rgba(88, 166, 255, 0.3);
+  border-color: rgba(34, 197, 94, 0.3);
 }
 .dashboard-card-active .dashboard-card-value {
-  color: var(--accent-blue);
+  color: var(--accent-green);
 }
 
 /* Section */
 .dashboard-section {
-  margin-bottom: 20px;
+  margin-bottom: 24px;
 }
 
 .dashboard-section-title {
-  font-size: 11px;
-  font-weight: 600;
+  font-size: 10px;
+  font-weight: 700;
   color: var(--text-muted);
   text-transform: uppercase;
-  letter-spacing: 0.5px;
-  margin-bottom: 10px;
+  letter-spacing: 0.08em;
+  margin-bottom: 12px;
 }
 
 /* Status breakdown grid */
@@ -138,18 +141,18 @@
 
 .dashboard-project-table th {
   text-align: left;
-  font-size: 11px;
-  font-weight: 600;
+  font-size: 10px;
+  font-weight: 700;
   color: var(--text-muted);
   text-transform: uppercase;
-  letter-spacing: 0.4px;
-  padding: 4px 8px 6px 0;
+  letter-spacing: 0.05em;
+  padding: 8px 12px;
   border-bottom: 1px solid var(--border-color);
 }
 
 .dashboard-project-table td {
-  padding: 6px 8px 6px 0;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
   color: var(--text-secondary);
   vertical-align: middle;
 }
@@ -159,13 +162,13 @@
 }
 
 .dashboard-project-table tbody tr:hover td {
-  background-color: rgba(255, 255, 255, 0.03);
+  background-color: var(--bg-tertiary);
 }
 
 .project-table-name {
   color: var(--text-primary) !important;
-  font-weight: 500;
-  max-width: 180px;
+  font-weight: 600;
+  max-width: 200px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -179,25 +182,25 @@
 /* Inline badges */
 .badge {
   display: inline-block;
-  padding: 1px 6px;
-  border-radius: 4px;
+  padding: 2px 8px;
+  border-radius: var(--radius-badge);
   font-size: 11px;
   font-weight: 600;
   font-family: var(--font-mono);
 }
 
 .badge-active {
-  background-color: rgba(88, 166, 255, 0.15);
-  color: var(--accent-blue);
+  background-color: rgba(34, 197, 94, 0.12);
+  color: var(--accent-green);
 }
 
 .badge-done {
-  background-color: rgba(63, 185, 80, 0.15);
+  background-color: rgba(34, 197, 94, 0.12);
   color: var(--accent-green);
 }
 
 .badge-warn {
-  background-color: rgba(255, 200, 50, 0.15);
+  background-color: rgba(251, 191, 36, 0.12);
   color: var(--accent-yellow);
 }
 
@@ -212,10 +215,11 @@
   display: flex;
   flex-wrap: wrap;
   gap: 8px 24px;
-  background-color: var(--bg-secondary);
+  background-color: var(--bg-tertiary);
   border: 1px solid var(--border-color);
-  border-radius: 8px;
-  padding: 12px 16px;
+  border-radius: var(--radius-card);
+  padding: 16px 20px;
+  box-shadow: var(--shadow-card);
 }
 
 .token-stat {
@@ -227,14 +231,14 @@
 
 .token-stat-label {
   font-size: 10px;
-  font-weight: 600;
+  font-weight: 700;
   color: var(--text-muted);
   text-transform: uppercase;
-  letter-spacing: 0.4px;
+  letter-spacing: 0.05em;
 }
 
 .token-stat-value {
-  font-size: 16px;
+  font-size: 18px;
   font-weight: 700;
   font-family: var(--font-mono);
   color: var(--text-primary);
@@ -250,25 +254,26 @@
 
 /* ── Needs Attention section ───────────────────────── */
 .dashboard-attention {
-  margin-bottom: 20px;
+  margin-bottom: 24px;
 }
 
 .dashboard-attention-list {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
 }
 
 .dashboard-attention-item {
   display: flex;
   align-items: flex-start;
-  gap: 10px;
-  background-color: var(--bg-secondary);
+  gap: 12px;
+  background-color: var(--bg-tertiary);
   border: 1px solid var(--border-color);
   border-left-width: 3px;
-  border-radius: 6px;
-  padding: 8px 12px;
+  border-radius: var(--radius-btn);
+  padding: 12px 16px;
   font-size: 12px;
+  box-shadow: var(--shadow-card);
 }
 
 .dashboard-attention-item--failed {
@@ -280,14 +285,14 @@
 }
 
 .dashboard-attention-item--stalled {
-  border-left-color: #f97316; /* orange */
+  border-left-color: #f97316;
 }
 
 .attention-item-type {
   font-size: 10px;
-  font-weight: 600;
+  font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.4px;
+  letter-spacing: 0.05em;
   white-space: nowrap;
   margin-top: 1px;
   min-width: 100px;
@@ -312,7 +317,7 @@
 
 .attention-item-title {
   color: var(--text-primary);
-  font-weight: 500;
+  font-weight: 600;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -340,7 +345,7 @@
 
 /* ── Recent Activity section ───────────────────────── */
 .dashboard-activity {
-  margin-bottom: 20px;
+  margin-bottom: 24px;
 }
 
 .dashboard-activity-list {
@@ -352,9 +357,9 @@
 .dashboard-activity-item {
   display: flex;
   align-items: baseline;
-  gap: 10px;
-  padding: 5px 0;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
   font-size: 12px;
 }
 
@@ -380,7 +385,7 @@
 
 .activity-item-title {
   color: var(--text-primary);
-  font-weight: 500;
+  font-weight: 600;
 }
 
 .activity-item-project {
@@ -396,62 +401,57 @@
 
 /* ── Navigation / clickable states ────────────────── */
 
-/* Header right side (last refreshed + refresh button) */
 .dashboard-header-right {
   display: flex;
   align-items: center;
   gap: 10px;
 }
 
-/* Last refreshed timestamp */
 .dashboard-last-refreshed {
   font-size: 10px;
   color: var(--text-muted);
   font-family: var(--font-mono);
 }
 
-/* Clickable summary cards */
 .dashboard-card-clickable {
   cursor: pointer;
 }
 .dashboard-card-clickable:hover {
-  border-color: var(--accent-blue);
-  background-color: rgba(88, 166, 255, 0.05);
+  border-color: var(--accent-green);
+  background-color: rgba(34, 197, 94, 0.04);
 }
 
-/* Clickable project rows */
 .dashboard-project-row-clickable {
   cursor: pointer;
 }
 .dashboard-project-row-clickable:hover td {
-  background-color: rgba(88, 166, 255, 0.08) !important;
+  background-color: rgba(34, 197, 94, 0.06) !important;
 }
 
-/* Clickable attention items */
 .dashboard-attention-item-clickable {
   cursor: pointer;
 }
 .dashboard-attention-item-clickable:hover {
-  background-color: rgba(88, 166, 255, 0.05);
+  background-color: rgba(34, 197, 94, 0.04);
 }
 
-/* Clickable activity items */
 .dashboard-activity-item-clickable {
   cursor: pointer;
 }
 .dashboard-activity-item-clickable:hover {
-  background-color: rgba(88, 166, 255, 0.05);
+  background-color: rgba(34, 197, 94, 0.04);
 }
 
-/* ── Readiness Card (Phase 19-5) ── */
+/* ── Readiness Card ── */
 .dashboard-readiness-card {
   border: 1px solid var(--border-color);
-  border-radius: 8px;
-  padding: 12px 16px;
+  border-radius: var(--radius-card);
+  padding: 16px 20px;
+  box-shadow: var(--shadow-card);
 }
 
 .dashboard-readiness-card.dashboard-readiness-ready {
-  border-color: rgba(63, 185, 80, 0.3);
+  border-color: rgba(34, 197, 94, 0.3);
 }
 
 .dashboard-readiness-body {
@@ -467,18 +467,18 @@
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  padding: 3px 10px;
-  border-radius: 4px;
+  padding: 4px 12px;
+  border-radius: var(--radius-badge);
 }
 
 .dashboard-readiness-badge.ready {
-  background-color: rgba(63, 185, 80, 0.15);
-  color: var(--accent-green, #3fb950);
+  background-color: rgba(34, 197, 94, 0.12);
+  color: var(--accent-green);
 }
 
 .dashboard-readiness-badge.not-ready {
-  background-color: rgba(210, 153, 34, 0.15);
-  color: var(--accent-yellow, #d29922);
+  background-color: rgba(251, 191, 36, 0.12);
+  color: var(--accent-yellow);
 }
 
 .dashboard-readiness-detail {
@@ -506,51 +506,51 @@
   margin-bottom: 2px;
 }
 
-/* ── Mode Badge (Phase 19-6) ── */
+/* ── Mode Badge ── */
 .dashboard-mode-badge {
   font-size: 10px;
-  font-weight: 600;
+  font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  padding: 2px 8px;
-  border-radius: 3px;
+  padding: 3px 10px;
+  border-radius: var(--radius-badge);
   margin-left: 10px;
   vertical-align: middle;
 }
 
 .dashboard-mode-badge.real {
-  background-color: rgba(63, 185, 80, 0.15);
-  color: var(--accent-green, #3fb950);
+  background-color: rgba(34, 197, 94, 0.12);
+  color: var(--accent-green);
 }
 
 .dashboard-mode-badge.mock {
-  background-color: rgba(210, 153, 34, 0.15);
-  color: var(--accent-yellow, #d29922);
+  background-color: rgba(251, 191, 36, 0.12);
+  color: var(--accent-yellow);
 }
 
-/* ── Empty State Guidance (Phase 19-6) ── */
+/* ── Empty State Guidance ── */
 .dashboard-empty-guidance {
   text-align: center;
-  padding: 32px 16px;
+  padding: 40px 20px;
   color: var(--text-muted);
 }
 
 .dashboard-empty-title {
-  font-size: 18px;
-  font-weight: 600;
+  font-size: 20px;
+  font-weight: 700;
   color: var(--text-primary);
   margin-bottom: 8px;
 }
 
 .dashboard-empty-text {
   font-size: 13px;
-  margin-bottom: 20px;
+  margin-bottom: 24px;
 }
 
 .dashboard-empty-steps {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
   max-width: 360px;
   margin: 0 auto;
   text-align: left;
@@ -565,14 +565,14 @@
 }
 
 .dashboard-empty-step-num {
-  width: 22px;
-  height: 22px;
+  width: 24px;
+  height: 24px;
   display: flex;
   align-items: center;
   justify-content: center;
   border-radius: 50%;
-  background: var(--bg-tertiary);
-  color: var(--text-muted);
+  background: var(--accent-green);
+  color: white;
   font-size: 11px;
   font-weight: 700;
   flex-shrink: 0;

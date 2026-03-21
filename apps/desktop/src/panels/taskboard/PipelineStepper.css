@@ -1,26 +1,27 @@
-/* ── Pipeline Stepper (Phase 16-1/2) ─────────────────── */
+/* ── Pipeline Stepper ─────────────────────────────────── */
 
 .pipeline-stepper {
   margin-top: 8px;
-  padding: 10px 12px;
+  padding: 14px 16px;
   background-color: var(--bg-tertiary);
   border: 1px solid var(--border-color);
-  border-radius: 6px;
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
 }
 
 .pipeline-stepper-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 8px;
+  margin-bottom: 10px;
 }
 
 .pipeline-stepper-title {
-  font-size: 11px;
-  font-weight: 600;
+  font-size: 10px;
+  font-weight: 700;
   color: var(--text-muted);
   text-transform: uppercase;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.08em;
 }
 
 .pipeline-stepper-progress {
@@ -37,9 +38,9 @@
 
 .pipeline-stepper-task-status {
   font-size: 10px;
-  font-weight: 600;
+  font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.3px;
+  letter-spacing: 0.05em;
 }
 
 /* Live polling badge */
@@ -49,10 +50,10 @@
   text-transform: uppercase;
   letter-spacing: 0.5px;
   color: var(--accent-green);
-  background-color: rgba(76, 175, 80, 0.12);
-  border: 1px solid rgba(76, 175, 80, 0.3);
+  background-color: rgba(34, 197, 94, 0.1);
+  border: 1px solid rgba(34, 197, 94, 0.25);
   border-radius: 4px;
-  padding: 0 5px;
+  padding: 0 6px;
   line-height: 16px;
   animation: live-pulse 2s ease-in-out infinite;
 }
@@ -99,12 +100,11 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 3px;
+  gap: 4px;
   flex: 1;
   min-width: 0;
 }
 
-/* Wrapper holds the icon + retry badge together */
 .pipeline-step-icon-wrapper {
   position: relative;
   display: flex;
@@ -113,19 +113,25 @@
 }
 
 .pipeline-step-icon {
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 700;
   border: 2px solid var(--border-color);
   background-color: var(--bg-secondary);
   color: var(--text-muted);
   transition: all 0.2s;
 }
+
+/* Role-specific icon colors */
+.pipeline-step[data-role="planner"] .pipeline-step-icon { color: var(--role-planner); }
+.pipeline-step[data-role="builder"] .pipeline-step-icon { color: var(--role-builder); }
+.pipeline-step[data-role="qa"] .pipeline-step-icon { color: var(--role-qa); }
+.pipeline-step[data-role="reviewer"] .pipeline-step-icon { color: var(--role-reviewer); }
 
 /* Status-specific icon styling */
 .pipeline-step-completed .pipeline-step-icon {
@@ -135,24 +141,23 @@
 }
 
 .pipeline-step-active .pipeline-step-icon {
-  border-color: var(--accent-blue);
-  background-color: rgba(88, 166, 255, 0.15);
-  color: var(--accent-blue);
+  border-color: var(--accent-green);
+  background-color: rgba(34, 197, 94, 0.12);
+  color: var(--accent-green);
   animation: pulse-glow 1.5s ease-in-out infinite;
 }
 
-/* Currently active role: stronger pulse, slightly larger icon */
 .pipeline-step-current .pipeline-step-icon {
-  width: 32px;
-  height: 32px;
-  font-size: 14px;
+  width: 36px;
+  height: 36px;
+  font-size: 15px;
   border-width: 2px;
   animation: pulse-glow-strong 1.2s ease-in-out infinite;
 }
 
 .pipeline-step-failed .pipeline-step-icon {
   border-color: var(--accent-red);
-  background-color: rgba(248, 81, 73, 0.15);
+  background-color: rgba(239, 68, 68, 0.12);
   color: var(--accent-red);
 }
 
@@ -171,13 +176,15 @@
 
 .pipeline-step-label {
   font-size: 10px;
-  font-weight: 500;
+  font-weight: 600;
   color: var(--text-primary);
   text-align: center;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: 80px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
 }
 
 .pipeline-step-disabled .pipeline-step-label {
@@ -187,23 +194,23 @@
 
 .pipeline-step-status-tag {
   font-size: 9px;
-  padding: 1px 6px;
-  border-radius: 8px;
-  font-weight: 500;
+  padding: 2px 8px;
+  border-radius: var(--radius-badge);
+  font-weight: 600;
   text-transform: lowercase;
 }
 
-/* Retry badge: shown above/beside the icon */
+/* Retry badge */
 .pipeline-retry-badge {
   position: absolute;
   top: -6px;
   right: -22px;
   font-size: 8px;
-  font-weight: 600;
+  font-weight: 700;
   font-family: var(--font-mono);
-  background-color: rgba(248, 81, 73, 0.18);
+  background-color: rgba(239, 68, 68, 0.15);
   color: var(--accent-red);
-  border: 1px solid rgba(248, 81, 73, 0.35);
+  border: 1px solid rgba(239, 68, 68, 0.3);
   border-radius: 6px;
   padding: 0px 4px;
   white-space: nowrap;
@@ -222,56 +229,56 @@
 
 .pipeline-step-active .pipeline-step-elapsed,
 .pipeline-step-current .pipeline-step-elapsed {
-  color: var(--accent-blue);
+  color: var(--accent-green);
   opacity: 1;
 }
 
 .status-completed {
-  background-color: rgba(76, 175, 80, 0.15);
+  background-color: rgba(34, 197, 94, 0.12);
   color: var(--accent-green);
 }
 
 .status-active {
-  background-color: rgba(88, 166, 255, 0.15);
-  color: var(--accent-blue);
+  background-color: rgba(34, 197, 94, 0.12);
+  color: var(--accent-green);
 }
 
 .status-failed {
-  background-color: rgba(248, 81, 73, 0.15);
+  background-color: rgba(239, 68, 68, 0.12);
   color: var(--accent-red);
 }
 
 .status-disabled {
-  background-color: rgba(128, 128, 128, 0.1);
+  background-color: rgba(107, 114, 128, 0.08);
   color: var(--text-muted);
   opacity: 0.6;
 }
 
 .status-waiting {
-  background-color: rgba(128, 128, 128, 0.08);
+  background-color: rgba(107, 114, 128, 0.06);
   color: var(--text-muted);
 }
 
 .status-skipped {
-  background-color: rgba(128, 128, 128, 0.08);
+  background-color: rgba(107, 114, 128, 0.06);
   color: var(--text-muted);
   opacity: 0.6;
 }
 
 @keyframes pulse-glow {
   0%, 100% {
-    box-shadow: 0 0 0 0 rgba(88, 166, 255, 0.3);
+    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.3);
   }
   50% {
-    box-shadow: 0 0 0 4px rgba(88, 166, 255, 0.1);
+    box-shadow: 0 0 0 5px rgba(34, 197, 94, 0.08);
   }
 }
 
 @keyframes pulse-glow-strong {
   0%, 100% {
-    box-shadow: 0 0 0 0 rgba(88, 166, 255, 0.5);
+    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.5);
   }
   50% {
-    box-shadow: 0 0 0 7px rgba(88, 166, 255, 0.12);
+    box-shadow: 0 0 0 8px rgba(34, 197, 94, 0.1);
   }
 }

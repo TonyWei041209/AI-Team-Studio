@@ -9,8 +9,12 @@
 
 .logs-level-filter {
   width: 130px;
-  padding: 4px 10px;
+  padding: 6px 12px;
   font-size: 12px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-btn);
+  color: var(--text-primary);
 }
 
 .logs-panel .last-updated {
@@ -22,17 +26,18 @@
 /* ── Terminal ─────────────────────────────────────────── */
 
 .log-terminal {
-  background-color: var(--bg-primary);
+  background-color: #000000;
   border: 1px solid var(--border-color);
-  border-radius: 8px;
+  border-radius: var(--radius-card);
   overflow: hidden;
+  box-shadow: var(--shadow-card);
 }
 
 .log-terminal-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 8px 14px;
+  padding: 10px 16px;
   background-color: var(--bg-secondary);
   border-bottom: 1px solid var(--border-color);
 }
@@ -53,7 +58,7 @@
   display: flex;
   align-items: baseline;
   gap: 8px;
-  padding: 3px 14px;
+  padding: 4px 16px;
   font-family: var(--font-mono);
   font-size: 12px;
   line-height: 1.6;
@@ -61,7 +66,7 @@
 }
 
 .log-entry:hover {
-  background-color: var(--bg-secondary);
+  background-color: rgba(255, 255, 255, 0.03);
 }
 
 .log-date {
@@ -81,14 +86,14 @@
   font-size: 11px;
   flex-shrink: 0;
   min-width: 42px;
-  padding: 0 4px;
+  padding: 1px 6px;
   border: 1px solid;
-  border-radius: 3px;
+  border-radius: 4px;
   text-align: center;
 }
 
 .log-source {
-  color: var(--accent-blue);
+  color: var(--role-planner);
   flex-shrink: 0;
   font-size: 11px;
 }

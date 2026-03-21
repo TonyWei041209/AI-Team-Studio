@@ -1,4 +1,4 @@
-/* ── Execution Chain Stepper (Phase 16-3) ────────────────
+/* ── Execution Chain Stepper ──────────────────────────────
    Compact horizontal execution chain shown inside ProposalCard.
    Uses 8px dots instead of 28px icons to stay narrow.
    ─────────────────────────────────────────────────────── */
@@ -8,13 +8,12 @@
   align-items: flex-start;
   padding: 6px 0 4px;
   overflow-x: auto;
-  scrollbar-width: none; /* Firefox */
+  scrollbar-width: none;
 }
 .exec-chain::-webkit-scrollbar {
-  display: none; /* Chrome/Safari */
+  display: none;
 }
 
-/* One step = dot + label stacked */
 .exec-chain-step {
   display: flex;
   flex-direction: column;
@@ -24,13 +23,12 @@
   min-width: 36px;
 }
 
-/* Connecting line between steps */
 .exec-chain-connector {
   width: 14px;
   height: 2px;
   background-color: var(--border-color);
   flex-shrink: 0;
-  margin-top: 3px; /* align vertically with dot centre */
+  margin-top: 3px;
   align-self: flex-start;
 }
 
@@ -38,7 +36,6 @@
   background-color: var(--accent-green);
 }
 
-/* The dot */
 .exec-chain-dot {
   width: 8px;
   height: 8px;
@@ -49,21 +46,20 @@
   flex-shrink: 0;
 }
 
-/* Status variants */
 .exec-chain-step-completed .exec-chain-dot {
   border-color: var(--accent-green);
   background-color: var(--accent-green);
 }
 
 .exec-chain-step-active .exec-chain-dot {
-  border-color: var(--accent-blue);
-  background-color: rgba(88, 166, 255, 0.2);
+  border-color: var(--accent-green);
+  background-color: rgba(34, 197, 94, 0.2);
   animation: exec-chain-pulse 1.6s ease-in-out infinite;
 }
 
 .exec-chain-step-failed .exec-chain-dot {
   border-color: var(--accent-red);
-  background-color: rgba(248, 81, 73, 0.2);
+  background-color: rgba(239, 68, 68, 0.2);
 }
 
 .exec-chain-step-waiting .exec-chain-dot {
@@ -77,10 +73,9 @@
   opacity: 0.4;
 }
 
-/* Labels */
 .exec-chain-label {
   font-size: 9px;
-  font-weight: 500;
+  font-weight: 600;
   color: var(--text-muted);
   white-space: nowrap;
   text-align: center;
@@ -92,7 +87,7 @@
 }
 
 .exec-chain-step-active .exec-chain-label {
-  color: var(--accent-blue);
+  color: var(--accent-green);
 }
 
 .exec-chain-step-failed .exec-chain-label {
@@ -106,9 +101,9 @@
 
 @keyframes exec-chain-pulse {
   0%, 100% {
-    box-shadow: 0 0 0 0 rgba(88, 166, 255, 0.4);
+    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.4);
   }
   50% {
-    box-shadow: 0 0 0 3px rgba(88, 166, 255, 0.1);
+    box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.1);
   }
 }

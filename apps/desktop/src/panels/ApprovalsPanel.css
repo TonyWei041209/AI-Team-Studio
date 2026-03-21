@@ -5,17 +5,17 @@
   flex-direction: column;
   gap: 16px;
   width: 100%;
-  max-width: 720px;
+  max-width: 900px;
 }
 
 .count-inline {
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 700;
   padding: 2px 8px;
   margin-left: 8px;
   background-color: var(--accent-red);
   color: white;
-  border-radius: 10px;
+  border-radius: var(--radius-badge);
   vertical-align: middle;
 }
 
@@ -34,13 +34,14 @@
 }
 
 .approval-card {
-  padding: 16px;
-  background-color: var(--bg-secondary);
+  padding: 20px;
+  background-color: var(--bg-tertiary);
   border: 1px solid var(--border-color);
-  border-radius: 8px;
+  border-radius: var(--radius-card);
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
+  box-shadow: var(--shadow-card);
 }
 
 .approval-header {
@@ -51,7 +52,7 @@
 
 .approval-type {
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 700;
   color: var(--accent-yellow);
   font-family: var(--font-mono);
 }
@@ -68,9 +69,10 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
-  padding: 10px 12px;
-  background-color: var(--bg-tertiary);
-  border-radius: 4px;
+  padding: 12px 14px;
+  background-color: var(--bg-secondary);
+  border-radius: var(--radius-btn);
+  border: 1px solid var(--border-color);
 }
 
 .payload-row {
@@ -83,6 +85,7 @@
   color: var(--text-muted);
   min-width: 50px;
   flex-shrink: 0;
+  font-weight: 600;
 }
 
 .payload-value {
@@ -121,7 +124,7 @@
 }
 
 .approval-actions .btn.active {
-  outline: 2px solid var(--text-primary);
+  outline: 2px solid var(--accent-green);
   outline-offset: 1px;
 }
 
@@ -131,7 +134,7 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding-top: 4px;
+  padding-top: 8px;
   border-top: 1px solid var(--border-color);
 }
 
