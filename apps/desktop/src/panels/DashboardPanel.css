@@ -10,7 +10,11 @@
 .dashboard-grid-row {
   display: flex;
   gap: 16px;
-  margin-bottom: 24px;
+  margin-bottom: 16px;
+}
+
+.dashboard-grid-row-stretch {
+  align-items: stretch;
 }
 
 .dashboard-grid-2 {
@@ -29,11 +33,24 @@
   gap: 16px;
 }
 
+/* Activity card with scroll */
+.dashboard-activity-card {
+  display: flex;
+  flex-direction: column;
+}
+
+.dashboard-activity-scroll {
+  max-height: 280px;
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+}
+
 .dashboard-cards {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-  gap: 16px;
-  margin-bottom: 24px;
+  gap: 12px;
+  margin-bottom: 16px;
 }
 
 .dashboard-card {
@@ -91,7 +108,7 @@
 
 /* Section */
 .dashboard-section {
-  margin-bottom: 24px;
+  margin-bottom: 16px;
 }
 
 /* Section with card outline */
@@ -99,7 +116,7 @@
   background-color: var(--bg-tertiary);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-card);
-  padding: 20px;
+  padding: 16px 20px;
   box-shadow: var(--shadow-card);
 }
 
@@ -124,7 +141,7 @@
 }
 
 .dashboard-section-card > .dashboard-section-title {
-  margin-bottom: 16px;
+  margin-bottom: 12px;
 }
 
 /* Status breakdown grid */

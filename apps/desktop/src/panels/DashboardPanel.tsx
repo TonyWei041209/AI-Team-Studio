@@ -241,16 +241,37 @@ export function DashboardPanel({
         </div>
       )}
 
-      {/* Readiness card (Phase 19-5) */}
-      {readiness && !readiness.overall_ready && (
-        <div className="dashboard-section dashboard-readiness-card">
-          <div className="dashboard-section-title">
-            {t("dashboard.setupStatus")}
+      {/* ── Row 2: Task Breakdown (left) + Setup Status (right) ── */}
+      <div className="dashboard-grid-row">
+        {/* Task status breakdown */}
+        {summary && Object.keys(summary.task_by_status).length > 0 && (
+          <div className="dashboard-section-card dashboard-grid-2">
+            <div className="dashboard-section-title">
+              {t("dashboard.taskBreakdown")}
+            </div>
+            <div className="dashboard-status-grid">
+              {Object.entries(summary.task_by_status).map(([status, count]) => (
+                <div key={status} className="dashboard-status-item">
+                  <span className="dashboard-status-dot" data-status={status} />
+                  <span className="dashboard-status-label">
+                    {t(`dashboard.status_${status}`, status)}
+                  </span>
+                  <span className="dashboard-status-count">{count}</span>
+                </div>
+              ))}
+            </div>
           </div>
-          <div className="dashboard-readiness-body">
-            <div className="dashboard-readiness-summary">
-              <span className="dashboard-readiness-badge not-ready">
-                {t("dashboard.setupNeeded")}
+        )}
+
+        {/* Setup Status */}
+        {readiness && (
+          <div className={`dashboard-section-card dashboard-grid-1${readiness.overall_ready ? " dashboard-readiness-ready" : ""}`}>
+            <div className="dashboard-section-title">
+              {t("dashboard.setupStatus")}
+            </div>
+            <div className="dashboard-readiness-body">
+              <span className={`dashboard-readiness-badge ${readiness.overall_ready ? "ready" : "not-ready"}`}>
+                {readiness.overall_ready ? t("dashboard.systemReady") : t("dashboard.setupNeeded")}
               </span>
               <span className="dashboard-readiness-detail">
                 {t("dashboard.providersReady", {
@@ -264,120 +285,29 @@ export function DashboardPanel({
                 })}
               </span>
             </div>
-            {readiness.missing_steps.length > 0 && (
+            {!readiness.overall_ready && readiness.missing_steps.length > 0 && (
               <ul className="dashboard-readiness-steps">
                 {readiness.missing_steps.map((step) => (
                   <li key={step}>{t(`dashboard.step_${step}`, step)}</li>
                 ))}
               </ul>
             )}
-            {onNavigateToSettings && (
-              <button
-                className="btn btn-primary btn-sm"
-                onClick={onNavigateToSettings}
-              >
+            {!readiness.overall_ready && onNavigateToSettings && (
+              <button className="btn btn-primary btn-sm" onClick={onNavigateToSettings} style={{ marginTop: 8 }}>
                 {t("dashboard.goToSettings")}
               </button>
             )}
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
-      {readiness && readiness.overall_ready && (
-        <div className="dashboard-section dashboard-readiness-card dashboard-readiness-ready">
-          <div className="dashboard-section-title">
-            {t("dashboard.setupStatus")}
-          </div>
-          <div className="dashboard-readiness-body">
-            <span className="dashboard-readiness-badge ready">
-              {t("dashboard.systemReady")}
-            </span>
-            <span className="dashboard-readiness-detail">
-              {t("dashboard.providersReady", {
-                count: readiness.providers.configured,
-                total: readiness.providers.total,
-              })}
-              {" · "}
-              {t("dashboard.rolesReady", {
-                count: readiness.roles.real_model_count,
-                total: readiness.roles.total,
-              })}
-            </span>
-          </div>
-        </div>
-      )}
-
-      {/* ── Grid Row: Task Breakdown + Token Summary ── */}
+      {/* ── Row 3: Project Health (left, scroll) + Resource + Team (right) ── */}
       {summary && (
-        <div className="dashboard-grid-row">
-          {/* Task status breakdown */}
-          {Object.keys(summary.task_by_status).length > 0 && (
-            <div className="dashboard-section dashboard-section-card dashboard-grid-2">
-              <div className="dashboard-section-title">
-                {t("dashboard.taskBreakdown")}
-              </div>
-              <div className="dashboard-status-grid">
-                {Object.entries(summary.task_by_status).map(([status, count]) => (
-                  <div key={status} className="dashboard-status-item">
-                    <span className="dashboard-status-dot" data-status={status} />
-                    <span className="dashboard-status-label">
-                      {t(`dashboard.status_${status}`, status)}
-                    </span>
-                    <span className="dashboard-status-count">{count}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Token summary */}
-          <div className="dashboard-section dashboard-section-card dashboard-grid-1">
-            <div className="dashboard-section-title">
-              {t("dashboard.tokenSummary")}
-            </div>
-            {summary.token_summary.log_entries === 0 ? (
-              <div className="dashboard-empty-inline">{t("dashboard.noTokenData")}</div>
-            ) : (
-              <div className="dashboard-token-grid">
-                <div className="token-stat">
-                  <span className="token-stat-label">{t("dashboard.totalTokens")}</span>
-                  <span className="token-stat-value">
-                    {summary.token_summary.total_tokens.toLocaleString()}
-                  </span>
-                </div>
-                <div className="token-stat">
-                  <span className="token-stat-label">{t("dashboard.promptTokens")}</span>
-                  <span className="token-stat-value token-prompt">
-                    {summary.token_summary.total_prompt_tokens.toLocaleString()}
-                  </span>
-                </div>
-                <div className="token-stat">
-                  <span className="token-stat-label">{t("dashboard.completionTokens")}</span>
-                  <span className="token-stat-value token-completion">
-                    {summary.token_summary.total_completion_tokens.toLocaleString()}
-                  </span>
-                </div>
-                <div className="token-stat">
-                  <span className="token-stat-label">{t("dashboard.tokenEntries")}</span>
-                  <span className="token-stat-value">
-                    {summary.token_summary.log_entries.toLocaleString()}
-                  </span>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* ── Grid Row: Project Health + Right Sidebar Cards ── */}
-      {summary && (
-        <div className="dashboard-grid-row">
+        <div className="dashboard-grid-row dashboard-grid-row-stretch">
           {/* Project health — fixed height with scroll */}
-          <div className="dashboard-section dashboard-section-card dashboard-grid-2 dashboard-project-card">
-            <div className="dashboard-section-header">
-              <div className="dashboard-section-title">
-                {t("dashboard.projectHealth")}
-              </div>
+          <div className="dashboard-section-card dashboard-grid-2 dashboard-project-card">
+            <div className="dashboard-section-title">
+              {t("dashboard.projectHealth")}
             </div>
             {summary.project_health.length === 0 ? (
               <div className="dashboard-empty-inline">{t("dashboard.noProjects")}</div>
@@ -424,9 +354,8 @@ export function DashboardPanel({
             )}
           </div>
 
-          {/* Right sidebar: Resource Allocation + Team Availability */}
+          {/* Right stack: Resource Allocation + Team Availability */}
           <div className="dashboard-grid-1 dashboard-right-stack">
-            {/* Resource Allocation */}
             <div className="dashboard-section-card">
               <div className="dashboard-section-title">RESOURCE ALLOCATION</div>
               <div className="dashboard-resource-list">
@@ -439,10 +368,8 @@ export function DashboardPanel({
                   </span>
                 </div>
                 <div className="dashboard-resource-bar">
-                  <div
-                    className="dashboard-resource-fill dashboard-resource-fill--green"
-                    style={{ width: `${Math.min(summary.token_summary.log_entries, 100)}%` }}
-                  />
+                  <div className="dashboard-resource-fill dashboard-resource-fill--green"
+                    style={{ width: `${Math.min(summary.token_summary.log_entries, 100)}%` }} />
                 </div>
                 <div className="dashboard-resource-item">
                   <span className="dashboard-resource-label">TASK COMPLETION</span>
@@ -453,10 +380,8 @@ export function DashboardPanel({
                   </span>
                 </div>
                 <div className="dashboard-resource-bar">
-                  <div
-                    className="dashboard-resource-fill dashboard-resource-fill--blue"
-                    style={{ width: `${summary.total_tasks > 0 ? Math.round(((summary.total_tasks - summary.failed_tasks) / summary.total_tasks) * 100) : 0}%` }}
-                  />
+                  <div className="dashboard-resource-fill dashboard-resource-fill--blue"
+                    style={{ width: `${summary.total_tasks > 0 ? Math.round(((summary.total_tasks - summary.failed_tasks) / summary.total_tasks) * 100) : 0}%` }} />
                 </div>
                 <div className="dashboard-resource-item">
                   <span className="dashboard-resource-label">FAILURE RATE</span>
@@ -467,15 +392,12 @@ export function DashboardPanel({
                   </span>
                 </div>
                 <div className="dashboard-resource-bar">
-                  <div
-                    className="dashboard-resource-fill dashboard-resource-fill--red"
-                    style={{ width: `${summary.total_tasks > 0 ? Math.round((summary.failed_tasks / summary.total_tasks) * 100) : 0}%` }}
-                  />
+                  <div className="dashboard-resource-fill dashboard-resource-fill--red"
+                    style={{ width: `${summary.total_tasks > 0 ? Math.round((summary.failed_tasks / summary.total_tasks) * 100) : 0}%` }} />
                 </div>
               </div>
             </div>
 
-            {/* Team Availability */}
             <div className="dashboard-section-card">
               <div className="dashboard-section-title">TEAM AVAILABILITY</div>
               <div className="dashboard-team-roles">
@@ -495,214 +417,125 @@ export function DashboardPanel({
         </div>
       )}
 
-      {/* Needs Attention */}
-      <div className="dashboard-section dashboard-attention">
-        <div className="dashboard-section-title">{t("dashboard.needsAttention")}</div>
-        {attentionError && (
-          <div className="panel-error">
-            <span>&#9888; {attentionError}</span>
-            <button className="btn btn-secondary btn-sm" onClick={loadAttention}>
-              {t("dashboard.retry")}
-            </button>
-          </div>
-        )}
-        {attention && (() => {
-          const { failed_tasks, pending_approvals, stalled_requests } = attention.attention;
-          const hasItems =
-            failed_tasks.length > 0 ||
-            pending_approvals.length > 0 ||
-            stalled_requests.length > 0;
-          if (!hasItems) {
+      {/* ── Row 4: Recent Activity (left, scroll) + Token Summary (right) ── */}
+      <div className="dashboard-grid-row dashboard-grid-row-stretch">
+        {/* Recent Activity — scrollable card */}
+        <div className="dashboard-section-card dashboard-grid-2 dashboard-activity-card">
+          <div className="dashboard-section-title">{t("dashboard.recentActivity")}</div>
+          {attention && (() => {
+            const { recent_tasks, recent_runs } = attention.recent_activity;
+
+            type FeedItem =
+              | { kind: "task"; ts: number; data: RecentTask }
+              | { kind: "run"; ts: number; data: RecentRun };
+
+            const feed: FeedItem[] = [
+              ...recent_tasks.map(
+                (r: RecentTask): FeedItem => ({ kind: "task", ts: new Date(r.updated_at).getTime(), data: r })
+              ),
+              ...recent_runs.map(
+                (r: RecentRun): FeedItem => ({ kind: "run", ts: new Date(r.created_at).getTime(), data: r })
+              ),
+            ]
+              .sort((a, b) => b.ts - a.ts)
+              .slice(0, 15);
+
+            if (feed.length === 0) {
+              return <div className="dashboard-activity-empty">{t("dashboard.noRecentActivity")}</div>;
+            }
+
             return (
-              <div className="dashboard-attention-empty">{t("dashboard.allClear")}</div>
-            );
-          }
-          return (
-            <div className="dashboard-attention-list">
-              {failed_tasks.map((item: AttentionFailedTask) => (
-                <div
-                  key={`failed-${item.id}`}
-                  className={`dashboard-attention-item dashboard-attention-item--failed${onNavigateToTasks ? " dashboard-attention-item-clickable" : ""}`}
-                  onClick={() => onNavigateToTasks?.(item.project_id)}
-                  title={onNavigateToTasks ? t("dashboard.clickToView") : undefined}
-                >
-                  <span className="attention-item-type attention-item-type--failed">
-                    {t("dashboard.attentionFailedTask")}
-                  </span>
-                  <div className="attention-item-body">
-                    <div className="attention-item-title">{item.title}</div>
-                    <div className="attention-item-meta">
-                      {t("dashboard.inProject", { project: item.project_name })}
-                    </div>
-                  </div>
-                  <span className="attention-item-time">
-                    {relativeTime(item.updated_at)}
-                  </span>
-                </div>
-              ))}
-              {pending_approvals.map((item: AttentionPendingApproval) => (
-                <div
-                  key={`approval-${item.id}`}
-                  className={`dashboard-attention-item dashboard-attention-item--approval${onNavigateToApprovals ? " dashboard-attention-item-clickable" : ""}`}
-                  onClick={() => onNavigateToApprovals?.()}
-                  title={onNavigateToApprovals ? t("dashboard.clickToView") : undefined}
-                >
-                  <span className="attention-item-type attention-item-type--approval">
-                    {t("dashboard.attentionPendingApproval")}
-                  </span>
-                  <div className="attention-item-body">
-                    <div className="attention-item-title">{item.task_title}</div>
-                    <div className="attention-item-meta">
-                      {t("dashboard.inProject", { project: item.project_name })}
-                      {item.action_type ? ` · ${item.action_type}` : ""}
-                    </div>
-                  </div>
-                  <span className="attention-item-time">
-                    {relativeTime(item.created_at)}
-                  </span>
-                </div>
-              ))}
-              {stalled_requests.map((item: AttentionStalledRequest) => (
-                <div
-                  key={`stalled-${item.id}`}
-                  className={`dashboard-attention-item dashboard-attention-item--stalled${onNavigateToTasks ? " dashboard-attention-item-clickable" : ""}`}
-                  onClick={() => onNavigateToTasks?.(item.project_id)}
-                  title={onNavigateToTasks ? t("dashboard.clickToView") : undefined}
-                >
-                  <span className="attention-item-type attention-item-type--stalled">
-                    {t("dashboard.attentionStalledRequest")}
-                  </span>
-                  <div className="attention-item-body">
-                    <div className="attention-item-title">{item.task_title}</div>
-                    <div className="attention-item-meta">
-                      {t("dashboard.inProject", { project: item.project_name })}
-                      {item.risk_level ? ` · ${item.risk_level}` : ""}
-                    </div>
-                  </div>
-                  <span className="attention-item-time">
-                    {relativeTime(item.created_at)}
-                  </span>
-                </div>
-              ))}
-            </div>
-          );
-        })()}
-      </div>
-
-      {/* Recent Activity */}
-      <div className="dashboard-section dashboard-activity">
-        <div className="dashboard-section-title">{t("dashboard.recentActivity")}</div>
-        {attention && (() => {
-          const { recent_tasks, recent_runs } = attention.recent_activity;
-
-          type FeedItem =
-            | { kind: "task"; ts: number; data: RecentTask }
-            | { kind: "run"; ts: number; data: RecentRun };
-
-          const feed: FeedItem[] = [
-            ...recent_tasks.map(
-              (r: RecentTask): FeedItem => ({
-                kind: "task",
-                ts: new Date(r.updated_at).getTime(),
-                data: r,
-              })
-            ),
-            ...recent_runs.map(
-              (r: RecentRun): FeedItem => ({
-                kind: "run",
-                ts: new Date(r.created_at).getTime(),
-                data: r,
-              })
-            ),
-          ]
-            .sort((a, b) => b.ts - a.ts)
-            .slice(0, 15);
-
-          if (feed.length === 0) {
-            return (
-              <div className="dashboard-activity-empty">
-                {t("dashboard.noRecentActivity")}
-              </div>
-            );
-          }
-
-          return (
-            <div className="dashboard-activity-list">
-              {feed.map((item, idx) => {
-                if (item.kind === "task") {
-                  const task = item.data as RecentTask;
-                  const isNew =
-                    Math.abs(
-                      new Date(task.created_at).getTime() -
-                        new Date(task.updated_at).getTime()
-                    ) < 5000;
-                  const descKey = isNew
-                    ? "dashboard.activityTaskCreated"
-                    : "dashboard.activityTaskUpdated";
-                  return (
-                    <div
-                      key={`feed-task-${task.id}-${idx}`}
-                      className={`dashboard-activity-item${onNavigateToTasks ? " dashboard-activity-item-clickable" : ""}`}
-                      onClick={() => onNavigateToTasks?.(task.project_id)}
-                      title={onNavigateToTasks ? t("dashboard.clickToView") : undefined}
-                    >
-                      <span className="activity-item-time">{relativeTime(task.updated_at)}</span>
-                      <span className="activity-item-desc">
-                        {t(descKey)} &mdash;{" "}
-                        <span className="activity-item-title">{task.title}</span>{" "}
-                        <span className="activity-item-project">
-                          {t("dashboard.inProject", { project: task.project_name })}
+              <div className="dashboard-activity-list dashboard-activity-scroll">
+                {feed.map((item, idx) => {
+                  if (item.kind === "task") {
+                    const task = item.data as RecentTask;
+                    const isNew = Math.abs(new Date(task.created_at).getTime() - new Date(task.updated_at).getTime()) < 5000;
+                    const descKey = isNew ? "dashboard.activityTaskCreated" : "dashboard.activityTaskUpdated";
+                    return (
+                      <div key={`feed-task-${task.id}-${idx}`}
+                        className={`dashboard-activity-item${onNavigateToTasks ? " dashboard-activity-item-clickable" : ""}`}
+                        onClick={() => onNavigateToTasks?.(task.project_id)}
+                        title={onNavigateToTasks ? t("dashboard.clickToView") : undefined}
+                      >
+                        <span className="activity-item-time">{relativeTime(task.updated_at)}</span>
+                        <span className="activity-item-desc">
+                          {t(descKey)} &mdash; <span className="activity-item-title">{task.title}</span>{" "}
+                          <span className="activity-item-project">{t("dashboard.inProject", { project: task.project_name })}</span>
                         </span>
-                      </span>
-                    </div>
-                  );
-                } else {
-                  const run = item.data as RecentRun;
-                  let descKey = "dashboard.activityRunStarted";
-                  if (run.status === "completed") descKey = "dashboard.activityRunCompleted";
-                  else if (run.status === "failed") descKey = "dashboard.activityRunFailed";
-                  return (
-                    <div
-                      key={`feed-run-${run.id}-${idx}`}
-                      className="dashboard-activity-item"
-                    >
-                      <span className="activity-item-time">{relativeTime(run.created_at)}</span>
-                      <span className="activity-item-desc">
-                        {t(descKey, { role: ROLE_I18N[run.role] ? t(ROLE_I18N[run.role]) : run.role })} &mdash;{" "}
-                        <span className="activity-item-title">{run.task_title}</span>
-                      </span>
-                    </div>
-                  );
-                }
-              })}
-            </div>
-          );
-        })()}
-      </div>
+                      </div>
+                    );
+                  } else {
+                    const run = item.data as RecentRun;
+                    let descKey = "dashboard.activityRunStarted";
+                    if (run.status === "completed") descKey = "dashboard.activityRunCompleted";
+                    else if (run.status === "failed") descKey = "dashboard.activityRunFailed";
+                    return (
+                      <div key={`feed-run-${run.id}-${idx}`} className="dashboard-activity-item">
+                        <span className="activity-item-time">{relativeTime(run.created_at)}</span>
+                        <span className="activity-item-desc">
+                          {t(descKey, { role: ROLE_I18N[run.role] ? t(ROLE_I18N[run.role]) : run.role })} &mdash;{" "}
+                          <span className="activity-item-title">{run.task_title}</span>
+                        </span>
+                      </div>
+                    );
+                  }
+                })}
+              </div>
+            );
+          })()}
+        </div>
 
-      {/* Empty state — enhanced with onboarding guidance (Phase 19-6) */}
-      {summary &&
-        summary.total_tasks === 0 &&
-        summary.project_count === 0 && (
-          <div className="dashboard-empty-guidance">
-            <div className="dashboard-empty-title">{t("dashboard.emptyTitle")}</div>
-            <div className="dashboard-empty-text">{t("dashboard.empty")}</div>
-            <div className="dashboard-empty-steps">
-              <div className="dashboard-empty-step">
-                <span className="dashboard-empty-step-num">1</span>
-                <span>{t("dashboard.emptyStep1")}</span>
+        {/* Token Summary */}
+        {summary && (
+          <div className="dashboard-section-card dashboard-grid-1">
+            <div className="dashboard-section-title">{t("dashboard.tokenSummary")}</div>
+            {summary.token_summary.log_entries === 0 ? (
+              <div className="dashboard-empty-inline">{t("dashboard.noTokenData")}</div>
+            ) : (
+              <div className="dashboard-token-grid">
+                <div className="token-stat">
+                  <span className="token-stat-label">{t("dashboard.totalTokens")}</span>
+                  <span className="token-stat-value">{summary.token_summary.total_tokens.toLocaleString()}</span>
+                </div>
+                <div className="token-stat">
+                  <span className="token-stat-label">{t("dashboard.promptTokens")}</span>
+                  <span className="token-stat-value token-prompt">{summary.token_summary.total_prompt_tokens.toLocaleString()}</span>
+                </div>
+                <div className="token-stat">
+                  <span className="token-stat-label">{t("dashboard.completionTokens")}</span>
+                  <span className="token-stat-value token-completion">{summary.token_summary.total_completion_tokens.toLocaleString()}</span>
+                </div>
+                <div className="token-stat">
+                  <span className="token-stat-label">{t("dashboard.tokenEntries")}</span>
+                  <span className="token-stat-value">{summary.token_summary.log_entries.toLocaleString()}</span>
+                </div>
               </div>
-              <div className="dashboard-empty-step">
-                <span className="dashboard-empty-step-num">2</span>
-                <span>{t("dashboard.emptyStep2")}</span>
-              </div>
-              <div className="dashboard-empty-step">
-                <span className="dashboard-empty-step-num">3</span>
-                <span>{t("dashboard.emptyStep3")}</span>
-              </div>
-            </div>
+            )}
           </div>
         )}
+      </div>
+
+      {/* Empty state */}
+      {summary && summary.total_tasks === 0 && summary.project_count === 0 && (
+        <div className="dashboard-empty-guidance">
+          <div className="dashboard-empty-title">{t("dashboard.emptyTitle")}</div>
+          <div className="dashboard-empty-text">{t("dashboard.empty")}</div>
+          <div className="dashboard-empty-steps">
+            <div className="dashboard-empty-step">
+              <span className="dashboard-empty-step-num">1</span>
+              <span>{t("dashboard.emptyStep1")}</span>
+            </div>
+            <div className="dashboard-empty-step">
+              <span className="dashboard-empty-step-num">2</span>
+              <span>{t("dashboard.emptyStep2")}</span>
+            </div>
+            <div className="dashboard-empty-step">
+              <span className="dashboard-empty-step-num">3</span>
+              <span>{t("dashboard.emptyStep3")}</span>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
