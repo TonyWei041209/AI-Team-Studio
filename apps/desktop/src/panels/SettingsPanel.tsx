@@ -292,7 +292,7 @@ export function SettingsPanel() {
           return (
             <div key={role} className={`provider-card${isReal ? " role-card-real" : ""}`}>
               <div className="provider-card-header">
-                <h3>{role.charAt(0).toUpperCase() + role.slice(1)}</h3>
+                <h3>{t(`settings.roleName_${role}`)}</h3>
                 <div className="role-badges">
                   <span className={`role-mode-badge ${isReal ? "real" : "mock"}`}>
                     {isReal ? t("settings.realModel") : t("settings.mockModel")}
@@ -381,7 +381,7 @@ export function SettingsPanel() {
 
       {/* QA info */}
       <div style={{ margin: "12px 0", padding: "8px 12px", background: "rgba(255,255,255,0.05)", borderRadius: 6, fontSize: 13, color: "#999" }}>
-        <strong>QA</strong> — {t("settings.qaNote")}
+        <strong>{t("settings.roleName_qa")}</strong> — {t("settings.qaNote")}
       </div>
 
       {/* ── Provider Settings (Phase 6A) ── */}

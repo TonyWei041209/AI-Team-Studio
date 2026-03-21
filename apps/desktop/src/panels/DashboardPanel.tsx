@@ -13,6 +13,14 @@ import type {
   RecentRun,
 } from "../api/dashboard";
 import type { ReadinessSummary } from "../api/settings";
+
+/** Map role keys to i18n keys */
+const ROLE_I18N: Record<string, string> = {
+  planner: "settings.roleName_planner",
+  builder: "settings.roleName_builder",
+  qa: "settings.roleName_qa",
+  reviewer: "settings.roleName_reviewer",
+};
 import "./DashboardPanel.css";
 
 const REFRESH_INTERVAL = 15000; // 15 seconds
@@ -595,7 +603,7 @@ export function DashboardPanel({
                     >
                       <span className="activity-item-time">{relativeTime(run.created_at)}</span>
                       <span className="activity-item-desc">
-                        {t(descKey, { role: run.role })} &mdash;{" "}
+                        {t(descKey, { role: ROLE_I18N[run.role] ? t(ROLE_I18N[run.role]) : run.role })} &mdash;{" "}
                         <span className="activity-item-title">{run.task_title}</span>
                       </span>
                     </div>

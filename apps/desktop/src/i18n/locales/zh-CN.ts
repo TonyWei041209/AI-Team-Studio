@@ -49,11 +49,11 @@ const zhCN = {
 
     roleModelConfig: "角色模型配置",
     roleModelDescription:
-      "配置每个 Agent 角色使用的模型提供方和模型。Planner 和 Reviewer 支持完整模型集成，Builder 支持仅规划模式。",
+      "配置每个 Agent 角色使用的模型提供方和模型。策划师和审核员支持完整模型集成，开发工程师支持仅规划模式。",
     builderPlanOnly:
-      "仅规划模式：Builder 输出结构化变更计划，不会执行文件修改、Shell 命令或 Git 操作。",
+      "仅规划模式：开发工程师输出结构化变更计划，不会执行文件修改、Shell 命令或 Git 操作。",
     qaNote:
-      "QA 角色在当前阶段使用模拟执行器。未来更新将支持 QA 的真实模型集成。",
+      "测试工程师在当前阶段使用模拟执行器。未来更新将支持测试工程师的真实模型集成。",
     provider: "提供方",
     model: "模型",
     modelPlaceholder: "选择模型...",
@@ -93,6 +93,10 @@ const zhCN = {
     mockModel: "模拟模式",
     mockOption: "模拟模式（已禁用）",
     providerKeyMissing: "警告：{{provider}} 的 API 密钥未配置。请前往下方提供方设置配置。",
+    roleName_planner: "策划师",
+    roleName_builder: "开发工程师",
+    roleName_qa: "测试工程师",
+    roleName_reviewer: "审核员",
   },
 
   // ── Dashboard panel ────────────────────────────────
@@ -509,10 +513,10 @@ const zhCN = {
   // ── 流水线可视化 (Phase 16-1/2/4) ────────────────────
   pipeline: {
     title: "流水线",
-    role_planner: "规划者",
-    role_builder: "构建者",
-    role_qa: "质量保证",
-    role_reviewer: "审查者",
+    role_planner: "策划师",
+    role_builder: "开发工程师",
+    role_qa: "测试工程师",
+    role_reviewer: "审核员",
     status_waiting: "等待中",
     status_active: "进行中",
     status_completed: "已完成",

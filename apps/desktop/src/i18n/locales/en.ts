@@ -101,6 +101,10 @@ const en = {
     mockModel: "Mock",
     mockOption: "Mock (disabled)",
     providerKeyMissing: "Warning: {{provider}} API key is not configured. Go to Provider Settings below.",
+    roleName_planner: "Planner",
+    roleName_builder: "Builder",
+    roleName_qa: "QA",
+    roleName_reviewer: "Reviewer",
   },
 
   // ── Dashboard panel ────────────────────────────────

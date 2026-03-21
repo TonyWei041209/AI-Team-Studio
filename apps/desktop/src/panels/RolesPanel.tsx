@@ -7,6 +7,14 @@ import "./RolesPanel.css";
 
 type RoleFilter = "all" | "system" | "custom";
 
+/** Map system role names to i18n keys for localized display names */
+const SYSTEM_ROLE_I18N: Record<string, string> = {
+  planner: "settings.roleName_planner",
+  builder: "settings.roleName_builder",
+  qa: "settings.roleName_qa",
+  reviewer: "settings.roleName_reviewer",
+};
+
 export function RolesPanel() {
   const { t } = useTranslation();
   const { roles, loading, error, refresh, createRole, updateRole, deleteRole } = useRoles();
@@ -266,7 +274,11 @@ export function RolesPanel() {
             <div key={role.id} className={`role-card ${!role.is_enabled ? "role-disabled" : ""}`}>
               <div className="role-card-header">
                 <div className="role-card-title">
-                  <span className="role-display-name">{role.display_name}</span>
+                  <span className="role-display-name">
+                    {role.is_system && SYSTEM_ROLE_I18N[role.name]
+                      ? t(SYSTEM_ROLE_I18N[role.name])
+                      : role.display_name}
+                  </span>
                   <span className="role-name-tag">{role.name}</span>
                   <span className={`role-type-badge ${role.is_system ? "badge-system" : "badge-custom"}`}>
                     {role.is_system ? t("roles.systemBadge") : t("roles.customBadge")}

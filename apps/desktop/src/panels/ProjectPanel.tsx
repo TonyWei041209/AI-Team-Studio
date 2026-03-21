@@ -8,6 +8,14 @@ import "./ProjectPanel.css";
 
 const MANDATORY_ROLES = new Set(["planner", "builder"]);
 
+/** Map system role names to i18n keys */
+const ROLE_I18N: Record<string, string> = {
+  planner: "settings.roleName_planner",
+  builder: "settings.roleName_builder",
+  qa: "settings.roleName_qa",
+  reviewer: "settings.roleName_reviewer",
+};
+
 interface ProjectPanelProps {
   selectedProjectId: string | null;
   onSelectProject: (id: string) => void;
@@ -276,7 +284,9 @@ export function ProjectPanel({
                   return (
                     <div key={p.role_name} className="participant-row">
                       <div className="participant-info">
-                        <span className="participant-role-name">{p.role_name}</span>
+                        <span className="participant-role-name">
+                          {ROLE_I18N[p.role_name] ? t(ROLE_I18N[p.role_name]) : p.role_name}
+                        </span>
                         {isMandatory && (
                           <span className="participant-mandatory-badge">
                             {t("projects.participantMandatory")}
