@@ -333,14 +333,29 @@ _FENCE_RE = re.compile(
     re.DOTALL,
 )
 
+# Fallback: opening fence without closing (truncated response)
+_FENCE_OPEN_RE = re.compile(
+    r"^\s*```(?:json)?\s*\n(.+)",
+    re.DOTALL,
+)
+
 
 def strip_code_fences(text: str) -> str:
     """Remove markdown code fences wrapping JSON output.
 
     Handles both ````` ```json ... ``` ````` and ````` ``` ... ``` `````.
+    Also handles truncated responses where the closing fence is missing.
     """
-    m = _FENCE_RE.match(text.strip())
-    return m.group(1).strip() if m else text.strip()
+    stripped = text.strip()
+    # Try full fence first
+    m = _FENCE_RE.match(stripped)
+    if m:
+        return m.group(1).strip()
+    # Fallback: opening fence only (truncated by max_tokens)
+    m = _FENCE_OPEN_RE.match(stripped)
+    if m:
+        return m.group(1).strip()
+    return stripped
 
 
 # ── Model Agent Executor ──────────────────────────────────────
@@ -522,7 +537,7 @@ class ModelAgentExecutor:
             model=model_name,
             messages=[Message(role=MessageRole.user, content=user_msg)],
             system_prompt=build_enhanced_system_prompt(defn.system_prompt, defn.role),
-            max_tokens=4096,
+            max_tokens=8192,
             temperature=0.3,
         )
         response = await provider.complete(request)

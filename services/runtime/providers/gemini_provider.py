@@ -78,6 +78,16 @@ class GeminiProvider(BaseProvider):
             "max_output_tokens": request.max_tokens,
             "temperature": request.temperature,
         }
+        # For thinking models (2.5-flash, 2.5-pro), disable thinking to ensure
+        # all output tokens are used for the actual response content.
+        # Without this, thinking tokens consume most of the budget and
+        # structured JSON output gets truncated.
+        if "2.5" in request.model:
+            try:
+                from google.genai.types import ThinkingConfig
+                config["thinking_config"] = ThinkingConfig(thinking_budget=0)
+            except ImportError:
+                pass  # older SDK version, skip
         if request.system_prompt:
             config["system_instruction"] = request.system_prompt
 
