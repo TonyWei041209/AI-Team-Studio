@@ -283,6 +283,7 @@
   margin: 0 0 20px 0;
   font-size: 13px;
   color: var(--text-muted);
+  line-height: 1.5;
 }
 
 .settings-loading {
@@ -316,6 +317,7 @@
   font-size: 15px;
   font-weight: 700;
   color: var(--text-primary);
+  line-height: 1.5;
 }
 
 .provider-status {
@@ -356,6 +358,8 @@
   color: var(--text-secondary);
   margin-bottom: 4px;
   font-weight: 500;
+  line-height: 1.4;
+  min-height: 18px;
 }
 
 .provider-input {
@@ -497,6 +501,8 @@
   flex-direction: column;
   align-items: center;
   gap: 4px;
+  min-width: 0;
+  text-align: center;
 }
 
 .settings-overview-value {
@@ -504,6 +510,7 @@
   font-weight: 700;
   color: var(--text-primary);
   font-family: var(--font-mono);
+  line-height: 1.3;
 }
 
 .settings-overview-value.ready {
