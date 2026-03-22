@@ -31,6 +31,7 @@ import { PipelineStepper } from "./taskboard/PipelineStepper";
 import { OrchestrationErrorGuide } from "./taskboard/OrchestrationErrorGuide";
 import { TaskStateSummary, derivePhase } from "./taskboard/TaskStateSummary";
 import { NextStepHint } from "./taskboard/NextStepHint";
+import { QuickTaskInput } from "./taskboard/QuickTaskInput";
 
 interface TaskBoardProps {
   projectId: string | null;
@@ -658,6 +659,11 @@ export function TaskBoard({ projectId, onNavigateToSettings }: TaskBoardProps) {
     }
   };
 
+  const handleQuickTask = useCallback(async (text: string) => {
+    if (!projectId) return;
+    await createTask({ title: text, description: text, priority: "medium" });
+  }, [projectId, createTask]);
+
   return (
     <div className="task-board">
       <div className="panel-header">
@@ -679,6 +685,12 @@ export function TaskBoard({ projectId, onNavigateToSettings }: TaskBoardProps) {
           </button>
         </div>
       </div>
+
+      <QuickTaskInput
+        projectId={projectId}
+        onSubmit={handleQuickTask}
+        disabled={!!orchestrateLoading}
+      />
 
       {/* Create form */}
       {showForm && (

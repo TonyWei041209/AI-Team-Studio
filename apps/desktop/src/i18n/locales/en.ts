@@ -249,6 +249,9 @@ const en = {
     sectionOrchestration: "Orchestration Pipeline",
     sectionProposals: "Execution Proposals",
     sectionAuditTrail: "Audit Trail",
+    quickInputPlaceholder: "Describe what you want to do...",
+    quickInputNoProject: "Select a project first",
+    quickInputSend: "Send",
   },
 
   // ── Approvals panel ────────────────────────────────

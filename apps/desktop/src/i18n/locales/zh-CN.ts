@@ -241,6 +241,9 @@ const zhCN = {
     sectionOrchestration: "编排流水线",
     sectionProposals: "执行提案",
     sectionAuditTrail: "审计追踪",
+    quickInputPlaceholder: "输入你想做的事...",
+    quickInputNoProject: "请先选择项目",
+    quickInputSend: "发送",
   },
 
   // ── Approvals panel ────────────────────────────────
