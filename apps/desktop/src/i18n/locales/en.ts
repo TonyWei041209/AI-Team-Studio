@@ -252,6 +252,10 @@ const en = {
     quickInputPlaceholder: "Describe what you want to do...",
     quickInputNoProject: "Select a project first",
     quickInputSend: "Send",
+    roleRunning: "Running...",
+    roleCompleted: "Done",
+    roleFailed: "Failed",
+    roleIdle: "Idle",
   },
 
   // ── Approvals panel ────────────────────────────────

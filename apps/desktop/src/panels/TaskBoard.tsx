@@ -32,6 +32,7 @@ import { OrchestrationErrorGuide } from "./taskboard/OrchestrationErrorGuide";
 import { TaskStateSummary, derivePhase } from "./taskboard/TaskStateSummary";
 import { NextStepHint } from "./taskboard/NextStepHint";
 import { QuickTaskInput } from "./taskboard/QuickTaskInput";
+import { RoleStatusCards } from "./taskboard/RoleStatusCards";
 
 interface TaskBoardProps {
   projectId: string | null;
@@ -659,10 +660,96 @@ export function TaskBoard({ projectId, onNavigateToSettings }: TaskBoardProps) {
     }
   };
 
+  const deriveRoleStatuses = useCallback((taskId: string): Array<{role: string, status: "idle" | "running" | "completed" | "failed"}> => {
+    const isOrchestrating = orchestrateLoading === taskId;
+    const task = tasks.find(t => t.id === taskId);
+
+    const roles = ["planner", "builder", "qa", "reviewer"];
+    const phaseMap: Record<string, number> = {
+      planning: 0,
+      in_progress: 1,
+      reviewing: 2,
+    };
+
+    if (!isOrchestrating && (!task || task.status === "pending")) {
+      return roles.map(r => ({ role: r, status: "idle" as const }));
+    }
+
+    if (task?.status === "done") {
+      return roles.map(r => ({ role: r, status: "completed" as const }));
+    }
+
+    if (task?.status === "failed") {
+      return roles.map(r => ({ role: r, status: "idle" as const }));
+    }
+
+    const taskStatus = task?.status ?? "";
+    const currentPhaseIdx = phaseMap[taskStatus] ?? -1;
+
+    return roles.map((r, i) => {
+      if (taskStatus === "reviewing") {
+        if (i < 2) return { role: r, status: "completed" as const };
+        if (i === 2) return { role: r, status: "completed" as const };
+        if (i === 3) return { role: r, status: "running" as const };
+      }
+      if (i < currentPhaseIdx) return { role: r, status: "completed" as const };
+      if (i === currentPhaseIdx) return { role: r, status: "running" as const };
+      return { role: r, status: "idle" as const };
+    });
+  }, [orchestrateLoading, tasks]);
+
+  const handleOrchestrate = useCallback(async (taskId: string) => {
+    setOrchestrateLoading(taskId);
+    setOrchestratePhase("Starting\u2026");
+    setOrchestrateError((prev) => {
+      const next = { ...prev };
+      delete next[taskId];
+      return next;
+    });
+    if (orchestratePollRef.current) {
+      clearInterval(orchestratePollRef.current);
+    }
+    orchestratePollRef.current = setInterval(async () => {
+      try {
+        const polledTask = await tasksApi.get(taskId);
+        const label = ORCH_LABELS[polledTask.status] ?? polledTask.status;
+        setOrchestratePhase(label);
+      } catch {
+        // Polling failure is non-fatal; keep showing last known phase
+      }
+    }, 1500);
+    try {
+      await orchestrateTask(taskId);
+    } catch (err) {
+      setOrchestrateError((prev) => ({
+        ...prev,
+        [taskId]: err instanceof Error ? err.message : "Orchestration failed",
+      }));
+    } finally {
+      if (orchestratePollRef.current) {
+        clearInterval(orchestratePollRef.current);
+        orchestratePollRef.current = null;
+      }
+      setOrchestrateLoading(null);
+      try {
+        const finalTask = await tasksApi.get(taskId);
+        setExpandedTask(taskId);
+        if (finalTask.status === "done") {
+          loadProposals(taskId);
+          loadTaskApprovals(taskId);
+        }
+      } catch {
+        // Best-effort; don't block UI on fetch failure
+      }
+    }
+  }, [orchestrateTask, loadProposals, loadTaskApprovals, ORCH_LABELS]);
+
   const handleQuickTask = useCallback(async (text: string) => {
     if (!projectId) return;
-    await createTask({ title: text, description: text, priority: "medium" });
-  }, [projectId, createTask]);
+    const created = await createTask({ title: text, description: text, priority: "medium" });
+    setExpandedTask(created.id);
+    void handleOrchestrate(created.id);
+  }, [projectId, createTask, handleOrchestrate]);
 
   return (
     <div className="task-board">
@@ -810,53 +897,7 @@ export function TaskBoard({ projectId, onNavigateToSettings }: TaskBoardProps) {
                       borderColor: "#ff8c00",
                     }}
                     disabled={orchestrateLoading === task.id}
-                    onClick={async () => {
-                      setOrchestrateLoading(task.id);
-                      setOrchestratePhase("Starting\u2026");
-                      setOrchestrateError((prev) => {
-                        const next = { ...prev };
-                        delete next[task.id];
-                        return next;
-                      });
-                      // Start polling task status for progress (Phase 9-2)
-                      if (orchestratePollRef.current) {
-                        clearInterval(orchestratePollRef.current);
-                      }
-                      orchestratePollRef.current = setInterval(async () => {
-                        try {
-                          const polledTask = await tasksApi.get(task.id);
-                          const label = ORCH_LABELS[polledTask.status] ?? polledTask.status;
-                          setOrchestratePhase(label);
-                        } catch {
-                          // Polling failure is non-fatal; keep showing last known phase
-                        }
-                      }, 1500);
-                      try {
-                        await orchestrateTask(task.id);
-                      } catch (err) {
-                        setOrchestrateError((prev) => ({
-                          ...prev,
-                          [task.id]: err instanceof Error ? err.message : "Orchestration failed",
-                        }));
-                      } finally {
-                        if (orchestratePollRef.current) {
-                          clearInterval(orchestratePollRef.current);
-                          orchestratePollRef.current = null;
-                        }
-                        setOrchestrateLoading(null);
-                        // Phase 9-3: Auto-expand task after orchestration
-                        try {
-                          const finalTask = await tasksApi.get(task.id);
-                          setExpandedTask(task.id);
-                          if (finalTask.status === "done") {
-                            loadProposals(task.id);
-                            loadTaskApprovals(task.id);
-                          }
-                        } catch {
-                          // Best-effort; don't block UI on fetch failure
-                        }
-                      }
-                    }}
+                    onClick={() => void handleOrchestrate(task.id)}
                   >
                     {orchestrateLoading === task.id
                       ? orchestratePhase
@@ -952,6 +993,12 @@ export function TaskBoard({ projectId, onNavigateToSettings }: TaskBoardProps) {
                   error={auditTrailError}
                 />
               )}
+
+              {/* Role Status Cards (Chat-First UX Step 2) */}
+              <RoleStatusCards
+                roles={deriveRoleStatuses(task.id)}
+                visible={expandedTask === task.id && (!!orchestrateLoading || task.status !== "pending")}
+              />
 
               {/* Execution Proposals (Phase 6E-A) */}
               {expandedTask === task.id && proposals.length > 0 && (

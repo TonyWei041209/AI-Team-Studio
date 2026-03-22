@@ -1328,3 +1328,76 @@
   color: rgba(255, 255, 255, 0.3);
   cursor: not-allowed;
 }
+
+/* ── Role Status Cards ────────────────────────────── */
+.role-status-cards {
+  display: flex;
+  gap: 8px;
+  padding: 12px 16px 8px;
+}
+
+.role-status-card {
+  flex: 1;
+  background: #1a1a2e;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 8px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  transition: border-color 0.3s, background 0.3s;
+}
+
+.role-status-card__icon {
+  font-size: 1.1rem;
+  line-height: 1;
+}
+
+.role-status-card__name {
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.7);
+  font-weight: 500;
+}
+
+.role-status-card__label {
+  font-size: 0.65rem;
+  color: rgba(255, 255, 255, 0.4);
+}
+
+/* Status variants */
+.role-status-card--idle {
+  opacity: 0.5;
+}
+
+.role-status-card--running {
+  border-color: #22c55e;
+  opacity: 1;
+}
+
+.role-status-card--running .role-status-card__icon {
+  color: #22c55e;
+  animation: pulse-icon 1.5s ease-in-out infinite;
+}
+
+.role-status-card--completed {
+  opacity: 1;
+}
+
+.role-status-card--completed .role-status-card__icon {
+  color: #22c55e;
+}
+
+.role-status-card--failed {
+  border-color: #ef4444;
+  opacity: 1;
+}
+
+.role-status-card--failed .role-status-card__icon {
+  color: #ef4444;
+}
+
+@keyframes pulse-icon {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}

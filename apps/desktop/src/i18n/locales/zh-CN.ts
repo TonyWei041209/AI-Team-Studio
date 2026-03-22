@@ -244,6 +244,10 @@ const zhCN = {
     quickInputPlaceholder: "输入你想做的事...",
     quickInputNoProject: "请先选择项目",
     quickInputSend: "发送",
+    roleRunning: "运行中...",
+    roleCompleted: "完成",
+    roleFailed: "失败",
+    roleIdle: "待机",
   },
 
   // ── Approvals panel ────────────────────────────────
