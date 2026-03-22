@@ -256,6 +256,7 @@ const en = {
     roleCompleted: "Done",
     roleFailed: "Failed",
     roleIdle: "Idle",
+    tokenTotal: "Tokens",
   },
 
   // ── Approvals panel ────────────────────────────────

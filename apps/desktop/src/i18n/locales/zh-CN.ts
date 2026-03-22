@@ -248,6 +248,7 @@ const zhCN = {
     roleCompleted: "完成",
     roleFailed: "失败",
     roleIdle: "待机",
+    tokenTotal: "Token 使用",
   },
 
   // ── Approvals panel ────────────────────────────────

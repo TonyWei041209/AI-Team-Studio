@@ -33,6 +33,7 @@ import { TaskStateSummary, derivePhase } from "./taskboard/TaskStateSummary";
 import { NextStepHint } from "./taskboard/NextStepHint";
 import { QuickTaskInput } from "./taskboard/QuickTaskInput";
 import { RoleStatusCards } from "./taskboard/RoleStatusCards";
+import { TokenSummaryRow } from "./taskboard/TokenSummaryRow";
 
 interface TaskBoardProps {
   projectId: string | null;
@@ -1036,6 +1037,12 @@ export function TaskBoard({ projectId, onNavigateToSettings }: TaskBoardProps) {
               <RoleStatusCards
                 roles={deriveRoleStatuses(task.id)}
                 visible={expandedTask === task.id && (!!orchestrateLoading || task.status !== "pending")}
+              />
+
+              {/* Token Usage Summary (Chat-First UX Step 4) */}
+              <TokenSummaryRow
+                taskId={task.id}
+                visible={expandedTask === task.id && task.status !== "pending"}
               />
 
               {/* Execution Proposals (Phase 6E-A) */}
