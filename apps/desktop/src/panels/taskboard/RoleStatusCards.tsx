@@ -52,7 +52,7 @@ export function RoleStatusCards({ roles, visible }: RoleStatusCardsProps) {
         <div key={r.role} className={`role-status-card role-status-card--${r.status}`}>
           <span className="role-status-card__icon">{statusIcon(r.status)}</span>
           <span className="role-status-card__name">
-            {t(`enum.role_${r.role}`, r.role.charAt(0).toUpperCase() + r.role.slice(1))}
+            {t(`pipeline.role_${r.role}`, r.role.charAt(0).toUpperCase() + r.role.slice(1))}
           </span>
           <span className="role-status-card__label">{statusLabel(r.status)}</span>
         </div>
