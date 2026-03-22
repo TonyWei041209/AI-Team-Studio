@@ -653,6 +653,34 @@ const zhCN = {
     completed: "已完成",
     failed: "已失败",
   },
+
+  // ── 团队对话时间线 ────────────────────────────────
+  conversation: {
+    title: "团队动态",
+    you: "你",
+    system: "系统",
+    roleStarted: "{{role}} 开始工作",
+    roleWorking: "{{role}} 正在工作...",
+    dryRunDone: "模拟运行已完成",
+    executeDone: "执行完成：{{success}} 成功，{{fail}} 失败",
+  },
+
+  // ── 团队视图角色卡片 ──────────────────────────────
+  teamView: {
+    title: "团队概览",
+    backToTask: "返回任务",
+    viewTeam: "查看团队 \u2192",
+    loading: "加载团队数据...",
+    idle: "待命",
+    running: "运行中",
+    completed: "已完成",
+    failed: "失败",
+    waiting: "等待中",
+    currentAction: "当前状态",
+    nextStep: "下一步",
+    lastOutput: "最近产出",
+    model: "模型",
+  },
 } as const;
 
 export default zhCN;

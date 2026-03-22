@@ -34,6 +34,8 @@ import { NextStepHint } from "./taskboard/NextStepHint";
 import { QuickTaskInput } from "./taskboard/QuickTaskInput";
 import { RoleStatusCards } from "./taskboard/RoleStatusCards";
 import { TokenSummaryRow } from "./taskboard/TokenSummaryRow";
+import { TeamConversation } from "./taskboard/TeamConversation";
+import { TaskTeamView } from "./taskboard/TaskTeamView";
 
 interface TaskBoardProps {
   projectId: string | null;
@@ -107,6 +109,9 @@ export function TaskBoard({ projectId, onNavigateToSettings, autoExpandTaskId, o
   // Rollback trigger (Phase 7D-2)
   const [rollbackTriggerLoading, setRollbackTriggerLoading] = useState<string | null>(null);
   const [rollbackTriggerError, setRollbackTriggerError] = useState<Record<string, string | null>>({});
+
+  // Team view mode — shows TaskTeamView instead of task list
+  const [teamViewTaskId, setTeamViewTaskId] = useState<string | null>(null);
 
   // Inline approval actions (Phase 9-4)
   const [taskApprovals, setTaskApprovals] = useState<ApprovalRequestType[]>([]);
@@ -661,6 +666,7 @@ export function TaskBoard({ projectId, onNavigateToSettings, autoExpandTaskId, o
     setRealRunResults({});
     setRealRunError(null);
     setExecuteError({});
+    setTeamViewTaskId(null);
   }, [projectId]);
 
   if (!projectId) {
@@ -872,8 +878,18 @@ export function TaskBoard({ projectId, onNavigateToSettings, autoExpandTaskId, o
         </div>
       )}
 
+      {/* Team View — replaces task list when active */}
+      {teamViewTaskId && (
+        <TaskTeamView
+          taskId={teamViewTaskId}
+          projectId={projectId || ""}
+          taskStatus={tasks.find(t => t.id === teamViewTaskId)?.status || ""}
+          onBack={() => setTeamViewTaskId(null)}
+        />
+      )}
+
       {/* Task list */}
-      {!loading && tasks.length > 0 && (
+      {!loading && tasks.length > 0 && !teamViewTaskId && (
         <div className="task-list" data-testid="task-list">
           {tasks.map((task) => (
             <div key={task.id} className="task-item" data-testid="task-item">
@@ -1054,6 +1070,27 @@ export function TaskBoard({ projectId, onNavigateToSettings, autoExpandTaskId, o
               <TokenSummaryRow
                 taskId={task.id}
                 visible={expandedTask === task.id && task.status !== "pending"}
+              />
+
+              {/* View Team button */}
+              {expandedTask === task.id && task.status !== "pending" && (
+                <div style={{ padding: "4px 16px", display: "flex", justifyContent: "flex-end" }}>
+                  <button
+                    className="task-team-view__back"
+                    onClick={() => setTeamViewTaskId(task.id)}
+                  >
+                    {t("teamView.viewTeam", "View Team \u2192")}
+                  </button>
+                </div>
+              )}
+
+              {/* Team Conversation */}
+              <TeamConversation
+                taskId={task.id}
+                taskTitle={task.title}
+                taskStatus={task.status}
+                visible={expandedTask === task.id && task.status !== "pending"}
+                isOrchestrating={orchestrateLoading === task.id}
               />
 
               {/* Execution Proposals (Phase 6E-A) */}

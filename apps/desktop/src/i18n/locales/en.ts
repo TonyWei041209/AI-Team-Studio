@@ -661,6 +661,34 @@ const en = {
     completed: "Completed",
     failed: "Failed",
   },
+
+  // ── Team Conversation timeline ────────────────────
+  conversation: {
+    title: "Team Activity",
+    you: "You",
+    system: "System",
+    roleStarted: "{{role}} started working",
+    roleWorking: "{{role}} is working...",
+    dryRunDone: "Dry-run simulation completed",
+    executeDone: "Execution done: {{success}} ok, {{fail}} failed",
+  },
+
+  // ── Team View role cards ──────────────────────────
+  teamView: {
+    title: "Team Overview",
+    backToTask: "Back to task",
+    viewTeam: "View Team \u2192",
+    loading: "Loading team data...",
+    idle: "Idle",
+    running: "Running",
+    completed: "Done",
+    failed: "Failed",
+    waiting: "Waiting",
+    currentAction: "Status",
+    nextStep: "Next",
+    lastOutput: "Output",
+    model: "Model",
+  },
 } as const;
 
 export default en;
