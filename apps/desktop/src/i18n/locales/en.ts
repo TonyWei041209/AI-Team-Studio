@@ -383,6 +383,7 @@ const en = {
     hideSnapshot: "Hide Snapshot",
     freezeAndView: "Freeze & View Snapshot",
     loadingSnapshot: "Loading...",
+    autoApproveChaining: "Approving and preparing dry-run...",
   },
 
   // ── Execution pipeline ─────────────────────────────

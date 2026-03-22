@@ -375,6 +375,7 @@ const zhCN = {
     hideSnapshot: "隐藏快照",
     freezeAndView: "冻结并查看快照",
     loadingSnapshot: "加载中...",
+    autoApproveChaining: "审批并准备模拟运行...",
   },
 
   // ── Execution pipeline ─────────────────────────────

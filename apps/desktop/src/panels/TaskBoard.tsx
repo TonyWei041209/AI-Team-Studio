@@ -200,6 +200,7 @@ export function TaskBoard({ projectId, onNavigateToSettings }: TaskBoardProps) {
           ]);
         }
         // Phase 10-1: Auto-freeze + create execution request on approval
+        // Phase Chat-First Step 3: Auto-chain confirm + dry-run after approval
         // Inline API calls to avoid declaration-order dependency on later useCallbacks
         if (status === "approved" && proposalId) {
           try {
@@ -210,19 +211,56 @@ export function TaskBoard({ projectId, onNavigateToSettings }: TaskBoardProps) {
             );
             setSnapshots((prev) => ({ ...prev, [proposalId]: snap }));
             // Auto-create execution request
+            let req: ExecutionRequestResponse | null = null;
             try {
               setExecReqLoading(snap.id);
               setExecReqError(null);
-              const req = await api.post<ExecutionRequestResponse>(
+              req = await api.post<ExecutionRequestResponse>(
                 `/api/snapshots/${snap.id}/request-execution`,
               );
-              setExecRequests((prev) => ({ ...prev, [snap.id]: req }));
+              setExecRequests((prev) => ({ ...prev, [snap.id]: req! }));
             } catch (reqErr) {
               setExecReqError(
                 reqErr instanceof Error ? reqErr.message : "Failed to auto-create execution request",
               );
             } finally {
               setExecReqLoading(null);
+            }
+            // Auto-confirm + dry-run (irreversible confirm, then simulation)
+            if (req) {
+              try {
+                setExecReqLoading(snap.id);
+                setExecReqError(null);
+                const confirmed = await api.patch<ExecutionRequestResponse>(
+                  `/api/execution-requests/${req.id}`,
+                  { status: "confirmed" },
+                );
+                setExecRequests((prev) => ({ ...prev, [snap.id]: confirmed }));
+              } catch (confirmErr) {
+                setExecReqError(
+                  confirmErr instanceof Error ? confirmErr.message : "Failed to auto-confirm execution request",
+                );
+                setExecReqLoading(null);
+                // Don't proceed to dry-run if confirm failed
+                req = null;
+              }
+              setExecReqLoading(null);
+              if (req) {
+                try {
+                  setDryRunLoading(req.id);
+                  setDryRunError(null);
+                  const dryResult = await api.post<DryRunResult>(
+                    `/api/execution-requests/${req.id}/dry-run`,
+                  );
+                  setDryRunResults((prev) => ({ ...prev, [req!.id]: dryResult }));
+                } catch (drErr) {
+                  setDryRunError(
+                    drErr instanceof Error ? drErr.message : "Failed to auto-run dry-run",
+                  );
+                } finally {
+                  setDryRunLoading(null);
+                }
+              }
             }
           } catch (freezeErr) {
             setSnapshotError(

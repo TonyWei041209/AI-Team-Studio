@@ -264,7 +264,7 @@ export function ProposalCard({
                 disabled={approvalLoading === linked.id}
                 onClick={() => onResolveApproval(linked.id, "approved", p.id)}
               >
-                {approvalLoading === linked.id ? "..." : t("approvals.approve")}
+                {approvalLoading === linked.id ? t("proposal.autoApproveChaining") : t("approvals.approve")}
               </button>
               <button
                 className="btn btn-sm"
