@@ -203,6 +203,93 @@
   text-align: center;
 }
 
+/* ── Workspace Quick Composer ─────────────────────────── */
+.workspace-composer {
+  padding: 10px 14px 12px;
+  border-top: 1px solid var(--border-color);
+  margin-top: 8px;
+}
+
+.workspace-composer__label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 8px;
+}
+
+.workspace-composer__project {
+  width: 100%;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 5px 8px;
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  margin-bottom: 6px;
+  outline: none;
+}
+
+.workspace-composer__project:focus {
+  border-color: var(--accent-green);
+}
+
+.workspace-composer__row {
+  display: flex;
+  gap: 4px;
+}
+
+.workspace-composer__input {
+  flex: 1;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 7px 10px;
+  color: var(--text-primary);
+  font-size: 0.78rem;
+  outline: none;
+  min-width: 0;
+  transition: border-color 0.2s;
+}
+
+.workspace-composer__input:focus {
+  border-color: var(--accent-green);
+}
+
+.workspace-composer__input:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.workspace-composer__input::placeholder {
+  color: var(--text-muted);
+  font-size: 0.72rem;
+}
+
+.workspace-composer__send {
+  background: var(--accent-green);
+  color: #000;
+  border: none;
+  border-radius: 6px;
+  padding: 0 10px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.2s;
+  min-width: 32px;
+}
+
+.workspace-composer__send:hover:not(:disabled) {
+  opacity: 0.85;
+}
+
+.workspace-composer__send:disabled {
+  background: var(--bg-tertiary);
+  color: var(--text-muted);
+  cursor: not-allowed;
+}
+
 /* ── Content Area ─────────────────────────────────────── */
 .content-area {
   flex: 1;

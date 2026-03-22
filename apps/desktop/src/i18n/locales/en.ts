@@ -40,6 +40,8 @@ const en = {
     approvals: "Approvals",
     logs: "Logs",
     settings: "Settings",
+    quickComposerLabel: "Quick Start",
+    selectProject: "Project...",
   },
 
   // ── Connection status ──────────────────────────────

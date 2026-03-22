@@ -38,9 +38,11 @@ import { TokenSummaryRow } from "./taskboard/TokenSummaryRow";
 interface TaskBoardProps {
   projectId: string | null;
   onNavigateToSettings?: () => void;
+  autoExpandTaskId?: string | null;
+  onAutoExpandConsumed?: () => void;
 }
 
-export function TaskBoard({ projectId, onNavigateToSettings }: TaskBoardProps) {
+export function TaskBoard({ projectId, onNavigateToSettings, autoExpandTaskId, onAutoExpandConsumed }: TaskBoardProps) {
   const { t } = useTranslation();
   const { tasks, loading, error, refresh, createTask, orchestrateTask } = useTasks(projectId);
   const [showForm, setShowForm] = useState(false);
@@ -119,6 +121,15 @@ export function TaskBoard({ projectId, onNavigateToSettings }: TaskBoardProps) {
       setIsGodotProject(info.is_godot);
     }).catch(() => setIsGodotProject(false));
   }, [projectId]);
+
+  // Auto-expand task from sidebar composer
+  useEffect(() => {
+    if (autoExpandTaskId && tasks.some((t) => t.id === autoExpandTaskId)) {
+      setExpandedTask(autoExpandTaskId);
+      void handleOrchestrate(autoExpandTaskId);
+      onAutoExpandConsumed?.();
+    }
+  }, [autoExpandTaskId, tasks]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Confirm modal state (Phase 13-4 — replaces window.confirm)
   const [confirmModal, setConfirmModal] = useState<{

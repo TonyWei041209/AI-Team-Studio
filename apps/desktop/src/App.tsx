@@ -12,6 +12,7 @@ import { SettingsPanel } from "./panels/SettingsPanel";
 import { SkillsPanel } from "./panels/SkillsPanel";
 import { RolesPanel } from "./panels/RolesPanel";
 import { approvalsApi } from "./api/approvals";
+import { WorkspaceQuickComposer } from "./components/WorkspaceQuickComposer";
 import "./App.css";
 
 const RUNTIME_URL = "http://127.0.0.1:9800";
@@ -42,6 +43,7 @@ function App() {
     null,
   );
   const [pendingCount, setPendingCount] = useState(0);
+  const [autoExpandTaskId, setAutoExpandTaskId] = useState<string | null>(null);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [theme, setTheme] = useState<"dark" | "light">(() => {
     return (localStorage.getItem("theme") as "dark" | "light") || "dark";
@@ -114,6 +116,16 @@ function App() {
     setSelectedProjectId(id);
   }, []);
 
+  // ── Quick composer task created handler ────────────
+  const handleComposerTaskCreated = useCallback(
+    (projectId: string, taskId: string) => {
+      setSelectedProjectId(projectId);
+      setAutoExpandTaskId(taskId);
+      setActiveTab("tasks");
+    },
+    [],
+  );
+
   // ── Render active panel ─────────────────────────────
   const renderPanel = () => {
     switch (activeTab) {
@@ -144,7 +156,14 @@ function App() {
           />
         );
       case "tasks":
-        return <TaskBoard projectId={selectedProjectId} onNavigateToSettings={() => setActiveTab("settings")} />;
+        return (
+          <TaskBoard
+            projectId={selectedProjectId}
+            onNavigateToSettings={() => setActiveTab("settings")}
+            autoExpandTaskId={autoExpandTaskId}
+            onAutoExpandConsumed={() => setAutoExpandTaskId(null)}
+          />
+        );
       case "skills":
         return <SkillsPanel />;
       case "roles":
@@ -204,6 +223,10 @@ function App() {
                 <span>{t(tab.labelKey)}</span>
               </div>
             ))}
+            <WorkspaceQuickComposer
+              selectedProjectId={selectedProjectId}
+              onTaskCreated={handleComposerTaskCreated}
+            />
           </div>
           <div className="sidebar-section">
             <div className="sidebar-label">{t("sidebar.system")}</div>

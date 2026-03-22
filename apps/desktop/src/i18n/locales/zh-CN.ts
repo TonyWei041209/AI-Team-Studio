@@ -32,6 +32,8 @@ const zhCN = {
     approvals: "审批",
     logs: "日志",
     settings: "设置",
+    quickComposerLabel: "快速开始",
+    selectProject: "选择项目...",
   },
 
   // ── Connection status ──────────────────────────────
