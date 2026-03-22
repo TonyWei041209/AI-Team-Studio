@@ -537,7 +537,7 @@ class ModelAgentExecutor:
             model=model_name,
             messages=[Message(role=MessageRole.user, content=user_msg)],
             system_prompt=build_enhanced_system_prompt(defn.system_prompt, defn.role),
-            max_tokens=8192,
+            max_tokens=16384,
             temperature=0.3,
         )
         response = await provider.complete(request)

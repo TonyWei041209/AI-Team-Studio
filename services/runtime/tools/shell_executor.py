@@ -34,9 +34,9 @@ COMMAND_WHITELIST: frozenset[str] = frozenset({
     "tsc", "eslint", "prettier",
     "cargo", "rustc",
     "make", "cmake",
-    # Inspection
+    # Inspection & filesystem
     "ls", "dir", "cat", "head", "tail", "wc", "find", "grep", "rg",
-    "tree", "file", "stat", "du", "df",
+    "tree", "file", "stat", "du", "df", "mkdir",
     "echo", "printf", "type",
     # Git (read-only subset; dangerous args caught by RiskClassifier)
     "git",

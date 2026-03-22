@@ -92,7 +92,7 @@ Required JSON schema:
 {
   "change_summary": "<string: one-line summary of the proposed changes>",
   "proposed_files": [
-    {"path": "<string: file path>", "action": "<string: create|modify|delete>", "reason": "<string: why this file needs this change>"}
+    {"path": "<string: file path>", "action": "<string: create|modify|delete>", "reason": "<string: why this file needs this change>", "content": "<string: full file content to write — required for create/modify>"}
   ],
   "change_steps": [
     {"step": <int>, "description": "<string: specific action to take>", "target_file": "<string: optional file path>"}
@@ -118,7 +118,7 @@ Extended fields (optional but recommended for execution planning):
 
 Rules:
 - change_summary must be a non-empty string
-- proposed_files must have at least 1 item; each needs path (str), action (create|modify|delete), reason (str)
+- proposed_files must have at least 1 item; each needs path (str), action (create|modify|delete), reason (str), content (str — the full file content to write for create/modify actions)
 - change_steps must have at least 1 item; each needs step (int), description (str); target_file is optional
 - reasoning_summary must be a non-empty string
 - validation_plan must have at least 1 item (string)

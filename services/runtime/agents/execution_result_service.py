@@ -119,7 +119,7 @@ def run_dry_execution(execution_request_id: str) -> dict:
         for f in proposed_files:
             action = {
                 "path": f.get("path", "<unknown>"),
-                "operation": f.get("operation", "unknown"),
+                "operation": f.get("operation") or f.get("action") or "unknown",
                 "dry_run": True,
                 "executed": False,
             }

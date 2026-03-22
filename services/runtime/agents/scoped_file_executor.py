@@ -194,7 +194,8 @@ def execute_scoped_files(
 
         for i, f in enumerate(proposed_files):
             path = f.get("path", "")
-            operation = f.get("operation", "")
+            # Builder may use "action" or "operation" for the file operation field
+            operation = f.get("operation") or f.get("action") or ""
             content = f.get("content")
 
             # Skip non-file actions (e.g., delete, unsupported)
@@ -264,16 +265,35 @@ def execute_scoped_files(
                 fail_count += 1
                 break
 
-            # f. Parent directory check
+            # f. Parent directory — auto-create if within workspace
             parent_dir = os.path.dirname(full_path)
             if not os.path.isdir(parent_dir):
-                result_entry["status"] = "failed"
-                result_entry["error"] = "Parent directory does not exist"
-                file_results.append(result_entry)
-                stopped_at = i
-                stop_reason = f"Parent directory missing for '{path}'"
-                fail_count += 1
-                break
+                # Only auto-create if parent resolves inside workspace
+                real_parent_candidate = os.path.realpath(
+                    os.path.normpath(parent_dir)
+                )
+                if (
+                    real_parent_candidate == real_workspace
+                    or real_parent_candidate.startswith(real_workspace + os.sep)
+                ):
+                    try:
+                        os.makedirs(parent_dir, exist_ok=True)
+                    except OSError as exc:
+                        result_entry["status"] = "failed"
+                        result_entry["error"] = f"Cannot create parent dir: {exc}"
+                        file_results.append(result_entry)
+                        stopped_at = i
+                        stop_reason = f"Parent dir creation failed for '{path}'"
+                        fail_count += 1
+                        break
+                else:
+                    result_entry["status"] = "failed"
+                    result_entry["error"] = "Parent directory outside workspace"
+                    file_results.append(result_entry)
+                    stopped_at = i
+                    stop_reason = f"Parent dir outside workspace for '{path}'"
+                    fail_count += 1
+                    break
 
             # g. Parent directory symlink check
             real_parent = os.path.realpath(parent_dir)
