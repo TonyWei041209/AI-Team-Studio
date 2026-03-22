@@ -1060,20 +1060,20 @@ export function TaskBoard({ projectId, onNavigateToSettings, autoExpandTaskId, o
                 />
               )}
 
-              {/* Role Status Cards (Chat-First UX Step 2) */}
+              {/* Role Status Cards (Chat-First UX Step 2) — visible for all non-pending tasks */}
               <RoleStatusCards
                 roles={deriveRoleStatuses(task.id)}
-                visible={expandedTask === task.id && (!!orchestrateLoading || task.status !== "pending")}
+                visible={!!orchestrateLoading || task.status !== "pending"}
               />
 
               {/* Token Usage Summary (Chat-First UX Step 4) */}
               <TokenSummaryRow
                 taskId={task.id}
-                visible={expandedTask === task.id && task.status !== "pending"}
+                visible={task.status !== "pending"}
               />
 
-              {/* View Team button */}
-              {expandedTask === task.id && task.status !== "pending" && (
+              {/* View Team button — always visible for non-pending tasks */}
+              {task.status !== "pending" && (
                 <div style={{ padding: "4px 16px", display: "flex", justifyContent: "flex-end" }}>
                   <button
                     className="task-team-view__back"
@@ -1084,12 +1084,12 @@ export function TaskBoard({ projectId, onNavigateToSettings, autoExpandTaskId, o
                 </div>
               )}
 
-              {/* Team Conversation */}
+              {/* Team Conversation — always visible for non-pending tasks */}
               <TeamConversation
                 taskId={task.id}
                 taskTitle={task.title}
                 taskStatus={task.status}
-                visible={expandedTask === task.id && task.status !== "pending"}
+                visible={task.status !== "pending"}
                 isOrchestrating={orchestrateLoading === task.id}
               />
 
