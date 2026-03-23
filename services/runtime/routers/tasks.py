@@ -111,7 +111,7 @@ async def list_task_runs(task_id: str):
         if not row:
             raise HTTPException(status_code=404, detail="Task not found")
         runs = conn.execute(
-            "SELECT id, role, status, started_at, ended_at, created_at FROM agent_runs WHERE task_id = ? ORDER BY created_at ASC",
+            "SELECT id, role, status, model_provider, model_name, output_summary, started_at, ended_at, created_at FROM agent_runs WHERE task_id = ? ORDER BY created_at ASC",
             (task_id,),
         ).fetchall()
         return [dict(r) for r in runs]
