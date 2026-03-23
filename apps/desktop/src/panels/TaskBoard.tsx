@@ -32,7 +32,7 @@ import { OrchestrationErrorGuide } from "./taskboard/OrchestrationErrorGuide";
 import { TaskStateSummary, derivePhase } from "./taskboard/TaskStateSummary";
 import { NextStepHint } from "./taskboard/NextStepHint";
 import { QuickTaskInput } from "./taskboard/QuickTaskInput";
-import { RoleStatusCards } from "./taskboard/RoleStatusCards";
+import { RoleStatusCards, type RoleStatus } from "./taskboard/RoleStatusCards";
 import { TokenSummaryRow } from "./taskboard/TokenSummaryRow";
 import { TeamConversation } from "./taskboard/TeamConversation";
 import { TaskTeamView } from "./taskboard/TaskTeamView";
@@ -74,6 +74,9 @@ export function TaskBoard({ projectId, onNavigateToSettings, autoExpandTaskId, o
   const [execRequests, setExecRequests] = useState<Record<string, ExecutionRequestResponse>>({});
   const [execReqLoading, setExecReqLoading] = useState<string | null>(null);
   const [execReqError, setExecReqError] = useState<string | null>(null);
+
+  // Cached runs per task (for role status cards)
+  const [taskRunsCache, setTaskRunsCache] = useState<Record<string, Array<{role: string, status: string, output_summary: string, started_at: string | null, ended_at: string | null}>>>({});
 
   // Audit trail (Phase 6E-E)
   const [auditTrailTaskId, setAuditTrailTaskId] = useState<string | null>(null);
@@ -126,6 +129,17 @@ export function TaskBoard({ projectId, onNavigateToSettings, autoExpandTaskId, o
       setIsGodotProject(info.is_godot);
     }).catch(() => setIsGodotProject(false));
   }, [projectId]);
+
+  // Load runs for non-pending tasks (for role status cards output summaries)
+  useEffect(() => {
+    const nonPending = tasks.filter(t => t.status !== "pending");
+    for (const t of nonPending) {
+      if (taskRunsCache[t.id]) continue;
+      tasksApi.getRuns(t.id).then((runs: Array<{role: string, status: string, output_summary: string, started_at: string | null, ended_at: string | null}>) => {
+        setTaskRunsCache(prev => ({ ...prev, [t.id]: runs }));
+      }).catch(() => { /* ignore */ });
+    }
+  }, [tasks]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Auto-expand task from sidebar composer
   useEffect(() => {
@@ -716,43 +730,77 @@ export function TaskBoard({ projectId, onNavigateToSettings, autoExpandTaskId, o
     }
   };
 
-  const deriveRoleStatuses = useCallback((taskId: string): Array<{role: string, status: "idle" | "running" | "completed" | "failed"}> => {
+  const deriveRoleStatuses = useCallback((taskId: string): RoleStatus[] => {
     const isOrchestrating = orchestrateLoading === taskId;
     const task = tasks.find(t => t.id === taskId);
+    const cachedRuns = taskRunsCache[taskId] || [];
 
-    const roles = ["planner", "builder", "qa", "reviewer"];
-    const phaseMap: Record<string, number> = {
-      planning: 0,
-      in_progress: 1,
-      reviewing: 2,
+    const roleNames = ["planner", "builder", "qa", "reviewer"];
+    const phaseMap: Record<string, number> = { planning: 0, in_progress: 1, reviewing: 2 };
+
+    // Helper: extract short output summary from a run
+    const getRunSummary = (role: string): { outputSummary?: string; duration?: string } => {
+      const run = cachedRuns.find(r => r.role === role && (r.status === "completed" || r.status === "failed"));
+      if (!run || !run.output_summary) return {};
+      let summary = "";
+      try {
+        const parsed = JSON.parse(run.output_summary);
+        const data = parsed?.output && typeof parsed.output === "object" ? parsed.output : parsed;
+        if (role === "planner") {
+          const goal = data?.goal_summary || data?.goal || "";
+          const steps = Array.isArray(data?.task_breakdown) ? data.task_breakdown.length : 0;
+          summary = goal ? `${String(goal).slice(0, 80)}${steps ? ` (${steps} steps)` : ""}` : "";
+        } else if (role === "builder") {
+          const cs = data?.change_summary || "";
+          const fc = Array.isArray(data?.proposed_files || data?.changed_files) ? (data.proposed_files || data.changed_files).length : 0;
+          summary = cs ? `${String(cs).slice(0, 80)}${fc ? ` · ${fc} file(s)` : ""}` : "";
+        } else if (role === "qa") {
+          const result = data?.result || "";
+          summary = result ? `${String(result)}` : "";
+        } else if (role === "reviewer") {
+          const decision = data?.decision || "";
+          const reason = data?.reason || "";
+          summary = decision ? `${String(decision)}${reason ? ": " + String(reason).slice(0, 60) : ""}` : "";
+        }
+      } catch { /* fallback */ }
+      let duration = "";
+      if (run.started_at && run.ended_at) {
+        const ms = new Date(run.ended_at).getTime() - new Date(run.started_at).getTime();
+        duration = ms < 1000 ? "<1s" : ms < 60000 ? `${Math.round(ms/1000)}s` : `${Math.floor(ms/60000)}m ${Math.round((ms%60000)/1000)}s`;
+      }
+      return { outputSummary: summary || undefined, duration: duration || undefined };
     };
 
     if (!isOrchestrating && (!task || task.status === "pending")) {
-      return roles.map(r => ({ role: r, status: "idle" as const }));
+      return roleNames.map(r => ({ role: r, status: "idle" as const }));
     }
 
     if (task?.status === "done") {
-      return roles.map(r => ({ role: r, status: "completed" as const }));
+      return roleNames.map(r => ({ role: r, status: "completed" as const, ...getRunSummary(r) }));
     }
 
     if (task?.status === "failed") {
-      return roles.map(r => ({ role: r, status: "idle" as const }));
+      return roleNames.map(r => {
+        const run = cachedRuns.find(cr => cr.role === r);
+        if (run?.status === "completed") return { role: r, status: "completed" as const, ...getRunSummary(r) };
+        if (run?.status === "failed") return { role: r, status: "failed" as const, ...getRunSummary(r) };
+        return { role: r, status: "idle" as const };
+      });
     }
 
     const taskStatus = task?.status ?? "";
     const currentPhaseIdx = phaseMap[taskStatus] ?? -1;
 
-    return roles.map((r, i) => {
+    return roleNames.map((r, i) => {
       if (taskStatus === "reviewing") {
-        if (i < 2) return { role: r, status: "completed" as const };
-        if (i === 2) return { role: r, status: "completed" as const };
+        if (i < 3) return { role: r, status: "completed" as const, ...getRunSummary(r) };
         if (i === 3) return { role: r, status: "running" as const };
       }
-      if (i < currentPhaseIdx) return { role: r, status: "completed" as const };
+      if (i < currentPhaseIdx) return { role: r, status: "completed" as const, ...getRunSummary(r) };
       if (i === currentPhaseIdx) return { role: r, status: "running" as const };
       return { role: r, status: "idle" as const };
     });
-  }, [orchestrateLoading, tasks]);
+  }, [orchestrateLoading, tasks, taskRunsCache]);
 
   const handleOrchestrate = useCallback(async (taskId: string) => {
     setOrchestrateLoading(taskId);

@@ -32,6 +32,7 @@ interface ConversationMessage {
   content: string
   detail?: string
   status?: string
+  duration?: string
 }
 
 interface TeamConversationProps {
@@ -48,7 +49,7 @@ const ROLE_ICONS: Record<string, string> = {
   planner: "📋",
   builder: "🔨",
   qa: "🔍",
-  reviewer: "✓",
+  reviewer: "✅",
 }
 
 const ROLE_COLORS: Record<string, string> = {
@@ -65,41 +66,83 @@ function parseOutputSummary(raw: string): Record<string, unknown> | null {
     const parsed = JSON.parse(raw)
     if (typeof parsed === "object" && parsed !== null) return parsed as Record<string, unknown>
   } catch { /* ignore */ }
+  // Try nested JSON (output_summary wraps { output: {...} })
+  try {
+    const outer = JSON.parse(raw)
+    if (outer?.output && typeof outer.output === "object") return outer.output as Record<string, unknown>
+  } catch { /* ignore */ }
   return null
 }
 
-function extractSummaryText(output: string, role: string): string {
+function formatDuration(start: string | null, end: string | null): string {
+  if (!start || !end) return ""
+  const ms = new Date(end).getTime() - new Date(start).getTime()
+  if (ms < 1000) return "<1s"
+  const s = Math.round(ms / 1000)
+  if (s < 60) return `${s}s`
+  return `${Math.floor(s / 60)}m ${s % 60}s`
+}
+
+/** Extract rich content lines from a role's output */
+function extractRoleReport(output: string, role: string): { headline: string; details: string[] } {
   const parsed = parseOutputSummary(output)
-  if (!parsed) return output.slice(0, 200)
+  if (!parsed) return { headline: output.slice(0, 200), details: [] }
 
   if (role === "planner") {
-    const goal = parsed.goal_summary || parsed.goal || ""
-    const breakdown = parsed.task_breakdown
-    if (goal && Array.isArray(breakdown)) {
-      return `${String(goal)} (${breakdown.length} steps)`
-    }
-    return String(goal || JSON.stringify(parsed).slice(0, 150))
+    const goal = String(parsed.goal_summary || parsed.goal || "")
+    const breakdown = parsed.task_breakdown as unknown[]
+    const criteria = parsed.acceptance_criteria as unknown[]
+    const risks = parsed.risks as unknown[]
+    const headline = goal || "Task plan ready"
+    const details: string[] = []
+    if (Array.isArray(breakdown)) details.push(`${breakdown.length} steps planned`)
+    if (Array.isArray(criteria)) details.push(`${criteria.length} acceptance criteria`)
+    if (Array.isArray(risks) && risks.length > 0) details.push(`${risks.length} risk(s) identified`)
+    return { headline, details }
   }
+
   if (role === "builder") {
-    const summary = parsed.change_summary || ""
-    const files = parsed.proposed_files
+    const summary = String(parsed.change_summary || "")
+    const files = parsed.proposed_files || parsed.changed_files
     const cmds = parsed.proposed_commands
-    const parts = [String(summary)]
-    if (Array.isArray(files)) parts.push(`${files.length} file(s)`)
-    if (Array.isArray(cmds)) parts.push(`${cmds.length} command(s)`)
-    return parts.filter(Boolean).join(" · ")
+    const headline = summary || "Execution proposal ready"
+    const details: string[] = []
+    if (Array.isArray(files)) {
+      const createCount = files.filter((f: Record<string, unknown>) => f.action === "create").length
+      const modifyCount = files.filter((f: Record<string, unknown>) => f.action === "modify").length
+      const parts: string[] = []
+      if (createCount) parts.push(`${createCount} file(s) to create`)
+      if (modifyCount) parts.push(`${modifyCount} file(s) to modify`)
+      if (parts.length) details.push(parts.join(", "))
+      else details.push(`${files.length} file(s) proposed`)
+    }
+    if (Array.isArray(cmds)) details.push(`${cmds.length} command(s) planned`)
+    return { headline, details }
   }
+
   if (role === "qa") {
-    const result = parsed.result || ""
-    const scope = parsed.validation_scope || ""
-    return `${String(result)}${scope ? " — " + String(scope) : ""}`
+    const result = String(parsed.result || "")
+    const scope = String(parsed.validation_scope || "")
+    const findings = parsed.findings as unknown[]
+    const headline = result ? `Quality check: ${result}` : "Quality check complete"
+    const details: string[] = []
+    if (scope) details.push(scope.slice(0, 120))
+    if (Array.isArray(findings) && findings.length > 0) details.push(`${findings.length} finding(s)`)
+    return { headline, details }
   }
+
   if (role === "reviewer") {
-    const decision = parsed.decision || ""
-    const reason = parsed.reason || ""
-    return `${String(decision)}${reason ? ": " + String(reason).slice(0, 150) : ""}`
+    const decision = String(parsed.decision || "")
+    const reason = String(parsed.reason || "")
+    const headline = decision
+      ? `Decision: ${decision}`
+      : "Review complete"
+    const details: string[] = []
+    if (reason) details.push(reason.slice(0, 200))
+    return { headline, details }
   }
-  return JSON.stringify(parsed).slice(0, 150)
+
+  return { headline: JSON.stringify(parsed).slice(0, 150), details: [] }
 }
 
 export function TeamConversation({ taskId, taskTitle, taskStatus: _taskStatus, visible, isOrchestrating }: TeamConversationProps) {
@@ -121,31 +164,37 @@ export function TeamConversation({ taskId, taskTitle, taskStatus: _taskStatus, v
     })
 
     try {
-      // 2. Fetch runs
+      // 2. Fetch runs → one rich message per completed role
       const runs = await tasksApi.getRuns(taskId) as AgentRun[]
 
       for (const run of runs) {
+        const dur = formatDuration(run.started_at, run.ended_at)
+
         if (run.status === "completed" || run.status === "failed") {
-          // Role started
-          if (run.started_at) {
-            msgs.push({
-              id: `run-start-${run.id}`,
-              timestamp: run.started_at,
-              role: run.role as ConversationMessage["role"],
-              type: "event",
-              content: t("conversation.roleStarted", { role: run.role, defaultValue: `${run.role} started working` }),
-            })
-          }
-          // Role output
           if (run.output_summary) {
-            const summary = extractSummaryText(run.output_summary, run.role)
+            const report = extractRoleReport(run.output_summary, run.role)
             msgs.push({
               id: `run-output-${run.id}`,
               timestamp: run.ended_at || run.created_at,
               role: run.role as ConversationMessage["role"],
               type: run.role === "reviewer" ? "decision" : "output",
-              content: summary,
+              content: report.headline,
+              detail: report.details.length > 0 ? report.details.join(" · ") : undefined,
               status: run.status,
+              duration: dur,
+            })
+          } else {
+            // No output — show completion/failure status
+            msgs.push({
+              id: `run-status-${run.id}`,
+              timestamp: run.ended_at || run.created_at,
+              role: run.role as ConversationMessage["role"],
+              type: "event",
+              content: run.status === "completed"
+                ? t("conversation.roleCompleted", { role: run.role, defaultValue: `${run.role} finished` })
+                : t("conversation.roleFailed", { role: run.role, defaultValue: `${run.role} encountered an error` }),
+              status: run.status,
+              duration: dur,
             })
           }
         } else if (run.status === "running") {
@@ -159,7 +208,7 @@ export function TeamConversation({ taskId, taskTitle, taskStatus: _taskStatus, v
         }
       }
 
-      // 3. Fetch audit trail for system events
+      // 3. Audit trail → system events
       const trail = await api.getOrNull<{ events: AuditEvent[] }>(`/api/tasks/${taskId}/audit-trail`)
       if (trail?.events) {
         for (const ev of trail.events) {
@@ -191,7 +240,6 @@ export function TeamConversation({ taskId, taskTitle, taskStatus: _taskStatus, v
       }
     } catch { /* network error — show what we have */ }
 
-    // Sort by timestamp (keep user-0 first)
     msgs.sort((a, b) => {
       if (!a.timestamp) return -1
       if (!b.timestamp) return 1
@@ -235,15 +283,21 @@ export function TeamConversation({ taskId, taskTitle, taskStatus: _taskStatus, v
                 <span className="team-msg__role" style={{ color: ROLE_COLORS[msg.role] }}>
                   {msg.role === "user" ? t("conversation.you", "You") :
                    msg.role === "system" ? t("conversation.system", "System") :
-                   t(`pipeline.role_${msg.role}`, msg.role)}
+                   t(`pipeline.role_${msg.role}`, msg.role.charAt(0).toUpperCase() + msg.role.slice(1))}
                 </span>
                 {msg.timestamp && (
                   <span className="team-msg__time">
                     {new Date(msg.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
                   </span>
                 )}
+                {msg.duration && (
+                  <span className="team-msg__duration">{msg.duration}</span>
+                )}
               </div>
               <div className="team-msg__content">{msg.content}</div>
+              {msg.detail && (
+                <div className="team-msg__detail">{msg.detail}</div>
+              )}
             </div>
           </div>
         ))}

@@ -1,15 +1,23 @@
 import React from "react"
 import { useTranslation } from "react-i18next"
 
-interface RoleStatus {
+export interface RoleStatus {
   role: string
   status: "idle" | "running" | "completed" | "failed"
   duration?: string
+  outputSummary?: string
 }
 
 interface RoleStatusCardsProps {
   roles: RoleStatus[]
   visible: boolean
+}
+
+const ROLE_ICONS: Record<string, string> = {
+  planner: "📋",
+  builder: "🔨",
+  qa: "🔍",
+  reviewer: "✅",
 }
 
 export function RoleStatusCards({ roles, visible }: RoleStatusCardsProps) {
@@ -28,21 +36,12 @@ export function RoleStatusCards({ roles, visible }: RoleStatusCardsProps) {
     return found || dr
   })
 
-  const statusIcon = (s: string) => {
-    switch (s) {
-      case "running": return "◐"
-      case "completed": return "✓"
-      case "failed": return "✗"
-      default: return "○"
-    }
-  }
-
   const statusLabel = (s: string) => {
     switch (s) {
-      case "running": return t("tasks.roleRunning", "Running...")
+      case "running": return t("tasks.roleRunning", "Working...")
       case "completed": return t("tasks.roleCompleted", "Done")
       case "failed": return t("tasks.roleFailed", "Failed")
-      default: return t("tasks.roleIdle", "Idle")
+      default: return t("tasks.roleIdle", "Standby")
     }
   }
 
@@ -50,11 +49,21 @@ export function RoleStatusCards({ roles, visible }: RoleStatusCardsProps) {
     <div className="role-status-cards">
       {displayRoles.map(r => (
         <div key={r.role} className={`role-status-card role-status-card--${r.status}`}>
-          <span className="role-status-card__icon">{statusIcon(r.status)}</span>
-          <span className="role-status-card__name">
-            {t(`pipeline.role_${r.role}`, r.role.charAt(0).toUpperCase() + r.role.slice(1))}
-          </span>
-          <span className="role-status-card__label">{statusLabel(r.status)}</span>
+          <div className="role-status-card__header">
+            <span className="role-status-card__icon">{ROLE_ICONS[r.role] || "●"}</span>
+            <span className="role-status-card__name">
+              {t(`pipeline.role_${r.role}`, r.role.charAt(0).toUpperCase() + r.role.slice(1))}
+            </span>
+            <span className={`role-status-card__badge role-status-card__badge--${r.status}`}>
+              {statusLabel(r.status)}
+            </span>
+          </div>
+          {r.outputSummary && (
+            <div className="role-status-card__output">{r.outputSummary}</div>
+          )}
+          {r.duration && (
+            <div className="role-status-card__footer">{r.duration}</div>
+          )}
         </div>
       ))}
     </div>

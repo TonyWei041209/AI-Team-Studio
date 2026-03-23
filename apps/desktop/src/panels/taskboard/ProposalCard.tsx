@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { ApprovalRequest as ApprovalRequestType } from "../../types/api";
 import type {
@@ -106,47 +107,67 @@ export function ProposalCard({
   formatDate,
 }: ProposalCardProps) {
   const { t } = useTranslation();
+  const [detailsExpanded, setDetailsExpanded] = useState(false);
   const pd = p.proposal_data_parsed;
 
   // Extract linkedApproval so it can be used both in JSX and in ExecutionChainStepper props
   const linkedApproval = taskApprovals.find((a) => a.proposal_id === p.id);
 
+  const fileCount = Array.isArray(pd.proposed_files || pd.changed_files)
+    ? (pd.proposed_files || pd.changed_files).length : 0;
+  const cmdCount = Array.isArray(pd.proposed_commands)
+    ? pd.proposed_commands.length : 0;
+  const approvalStatus = linkedApproval?.status || p.status;
+
   return (
     <div key={p.id} className="proposal-card">
+      {/* Compact summary bar — always visible */}
+      <div className="proposal-summary-bar" onClick={() => setDetailsExpanded(!detailsExpanded)} style={{ cursor: "pointer" }}>
+        <span className="proposal-summary-bar__icon">📎</span>
+        <span className="proposal-summary-bar__text">
+          {fileCount > 0 && `${fileCount} file(s)`}
+          {fileCount > 0 && cmdCount > 0 && " · "}
+          {cmdCount > 0 && `${cmdCount} cmd(s)`}
+          {(fileCount > 0 || cmdCount > 0) && " · "}
+          <span className={`proposal-summary-bar__risk proposal-summary-bar__risk--${p.risk_level}`}>
+            {p.risk_level}
+          </span>
+        </span>
+        <span className={`proposal-summary-bar__status proposal-summary-bar__status--${approvalStatus}`}>
+          {approvalStatus === "approved" ? "Approved" :
+           approvalStatus === "rejected" ? "Rejected" :
+           approvalStatus === "consumed" ? "Approved" : "Pending"}
+        </span>
+        {/* Inline approve in summary bar */}
+        {approvalStatus === "pending" && linkedApproval && linkedApproval.status === "pending" && (
+          <button
+            className="btn btn-xs btn-success proposal-summary-bar__approve"
+            disabled={!!approvalLoading}
+            onClick={(e) => { e.stopPropagation(); onResolveApproval(linkedApproval.id, "approved", p.id); }}
+          >
+            {approvalLoading === linkedApproval.id ? "..." : t("approvals.approve", "Approve")}
+          </button>
+        )}
+        <span className="proposal-summary-bar__toggle">
+          {detailsExpanded ? "▴" : "▾"}
+        </span>
+      </div>
+
+      {/* Expanded details — hidden by default */}
+      {detailsExpanded && <>
       <div className="proposal-header">
         <span className="proposal-summary">
           {pd.change_summary || t("proposal.executionProposal")}
         </span>
-        <span
-          className="badge"
-          style={{
-            color: RISK_COLORS[p.risk_level] || "#888",
-            borderColor: RISK_COLORS[p.risk_level] || "#888",
-            fontSize: 10,
-          }}
-        >
+        <span className="badge" style={{ color: RISK_COLORS[p.risk_level] || "#888", borderColor: RISK_COLORS[p.risk_level] || "#888", fontSize: 10 }}>
           {p.risk_level}
         </span>
         {p.requires_approval && (
-          <span
-            className="badge"
-            style={{
-              color: "var(--accent-yellow)",
-              borderColor: "var(--accent-yellow)",
-              fontSize: 10,
-            }}
-          >
+          <span className="badge" style={{ color: "var(--accent-yellow)", borderColor: "var(--accent-yellow)", fontSize: 10 }}>
             {t("proposal.approvalRequired")}
           </span>
         )}
-        <span
-          className="badge"
-          style={{
-            color: "var(--text-muted)",
-            borderColor: "var(--text-muted)",
-            fontSize: 10,
-          }}
-        >
+        <span className="badge" style={{ color: "var(--text-muted)", borderColor: "var(--text-muted)", fontSize: 10 }}>
           {p.status}
         </span>
       </div>
@@ -385,6 +406,7 @@ export function ProposalCard({
       {snapshotError && !snapshotLoading && (
         <div className="snapshot-error">{snapshotError}</div>
       )}
+      </>}
     </div>
   );
 }
