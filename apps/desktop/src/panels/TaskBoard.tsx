@@ -953,7 +953,11 @@ export function TaskBoard({ projectId, onNavigateToSettings, autoExpandTaskId, o
                 <span className="task-date">{formatDate(task.updated_at)}</span>
               </div>
               {task.description && (
-                <div className="task-desc">{task.description}</div>
+                <div className="task-desc task-desc--truncated">
+                  {task.description.length > 120
+                    ? task.description.slice(0, 120) + "…"
+                    : task.description}
+                </div>
               )}
               <div className="task-badges">
                 {(() => {
@@ -1044,46 +1048,7 @@ export function TaskBoard({ projectId, onNavigateToSettings, autoExpandTaskId, o
                 </button>
               </div>
 
-              {/* Current Status Strip — expanded task gets a prominent status bar (readability enhancement) */}
-              {expandedTask === task.id && (() => {
-                const firstP = proposals.length > 0 ? proposals[0] : undefined;
-                const snap = firstP ? snapshots[firstP.id] : undefined;
-                const eReq = snap ? execRequests[snap.id] : undefined;
-                const dRun = eReq ? dryRunResults[eReq.id] : undefined;
-                const rRun = eReq ? realRunResults[eReq.id] : undefined;
-                const rbk = eReq ? rollbackResults[eReq.id] : undefined;
-                const phase = derivePhase({
-                  taskStatus: task.status,
-                  hasProposals: proposals.length > 0,
-                  hasPendingApproval: taskApprovals.some((a) => a.status === "pending"),
-                  hasApprovedProposal: taskApprovals.some((a) => a.status === "approved"),
-                  hasSnapshot: !!snap,
-                  hasConfirmedRequest: !!eReq && eReq.status === "confirmed",
-                  hasDryRunResult: !!dRun,
-                  hasRealRunResult: !!rRun && rRun !== "empty",
-                  hasExecutionError: Object.values(executeError).some((e) => e != null),
-                  hasRollbackResult: !!rbk && rbk !== "empty",
-                  isOrchestrating: orchestrateLoading === task.id,
-                });
-                return (
-                  <div className="task-current-status-strip">
-                    <TaskStateSummary
-                      taskStatus={task.status}
-                      hasProposals={proposals.length > 0}
-                      hasPendingApproval={taskApprovals.some((a) => a.status === "pending")}
-                      hasApprovedProposal={taskApprovals.some((a) => a.status === "approved")}
-                      hasSnapshot={!!snap}
-                      hasConfirmedRequest={!!eReq && eReq.status === "confirmed"}
-                      hasDryRunResult={!!dRun}
-                      hasRealRunResult={!!rRun && rRun !== "empty"}
-                      hasExecutionError={Object.values(executeError).some((e) => e != null)}
-                      hasRollbackResult={!!rbk && rbk !== "empty"}
-                      isOrchestrating={orchestrateLoading === task.id}
-                    />
-                    <NextStepHint phase={phase} />
-                  </div>
-                );
-              })()}
+              {/* Current Status Strip removed — redundant with proposal summary row and RoleStatusCards */}
 
               {/* Pipeline Stepper (Phase 16-1) — hidden: RoleStatusCards shows same info */}
               {false && task.status !== "pending" && projectId && (
@@ -1105,21 +1070,30 @@ export function TaskBoard({ projectId, onNavigateToSettings, autoExpandTaskId, o
                 />
               )}
 
-              {/* Role Status Cards — PRIMARY: agent team focus, visible for all non-pending tasks */}
+              {/* ═══ PRIMARY ZONE: Agent Collaboration ═══ */}
+
+              {/* Team Conversation — FIRST: the main visual protagonist */}
+              <TeamConversation
+                taskId={task.id}
+                taskTitle={task.title}
+                taskStatus={task.status}
+                visible={task.status !== "pending"}
+                isOrchestrating={orchestrateLoading === task.id}
+              />
+
+              {/* Role Status Cards — SECOND: agent workstation cards */}
               <RoleStatusCards
                 roles={deriveRoleStatuses(task.id)}
                 visible={!!orchestrateLoading || task.status !== "pending"}
               />
 
-              {/* Token Usage Summary */}
-              <TokenSummaryRow
-                taskId={task.id}
-                visible={task.status !== "pending"}
-              />
-
-              {/* View Team button — always visible for non-pending tasks */}
+              {/* View Team + Token — compact secondary info row */}
               {task.status !== "pending" && (
-                <div style={{ padding: "4px 16px", display: "flex", justifyContent: "flex-end" }}>
+                <div style={{ padding: "4px 16px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                  <TokenSummaryRow
+                    taskId={task.id}
+                    visible={true}
+                  />
                   <button
                     className="task-team-view__back"
                     onClick={() => setTeamViewTaskId(task.id)}
@@ -1128,15 +1102,6 @@ export function TaskBoard({ projectId, onNavigateToSettings, autoExpandTaskId, o
                   </button>
                 </div>
               )}
-
-              {/* Team Conversation — PRIMARY: agent collaboration, always visible for non-pending tasks */}
-              <TeamConversation
-                taskId={task.id}
-                taskTitle={task.title}
-                taskStatus={task.status}
-                visible={task.status !== "pending"}
-                isOrchestrating={orchestrateLoading === task.id}
-              />
 
               {/* Audit Trail (Phase 6E-E) — toggled, shown after conversation */}
               {auditTrailTaskId === task.id && (
