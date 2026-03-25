@@ -1439,15 +1439,31 @@
   color: #ef4444;
 }
 
+.role-status-card__header-right {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.role-status-card__duration {
+  font-size: 0.6rem;
+  color: rgba(255, 255, 255, 0.3);
+}
+
 .role-status-card__output {
   font-size: 0.72rem;
   color: rgba(255, 255, 255, 0.55);
   line-height: 1.35;
   overflow: hidden;
   text-overflow: ellipsis;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
+  white-space: nowrap;
+}
+
+.role-status-card__model {
+  font-size: 0.6rem;
+  color: rgba(255, 255, 255, 0.25);
+  font-style: italic;
 }
 
 .role-status-card__footer {
@@ -1555,52 +1571,60 @@
 
 /* ── Team Conversation ────────────────────────────── */
 .team-conversation {
-  padding: 8px 16px 12px;
+  padding: 10px 16px 14px;
   border-top: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 .team-conversation__header {
-  font-size: 0.75rem;
+  font-size: 0.78rem;
   font-weight: 600;
-  color: rgba(255, 255, 255, 0.5);
+  color: rgba(255, 255, 255, 0.55);
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  margin-bottom: 8px;
+  margin-bottom: 10px;
 }
 
 .team-conversation__messages {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  max-height: 320px;
+  gap: 8px;
+  max-height: 400px;
   overflow-y: auto;
   padding-right: 4px;
 }
 
 .team-msg {
   display: flex;
-  gap: 8px;
-  padding: 6px 10px;
+  gap: 10px;
+  padding: 8px 12px;
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.02);
-  transition: background 0.2s;
+  transition: background 0.15s;
+  border-left: 3px solid transparent;
 }
 
 .team-msg:hover {
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(255, 255, 255, 0.05);
 }
 
 .team-msg--user {
-  background: rgba(34, 197, 94, 0.06);
+  background: rgba(34, 197, 94, 0.08);
+  border-left-color: #22c55e;
 }
 
 .team-msg__avatar {
-  font-size: 1rem;
-  width: 24px;
-  text-align: center;
+  font-size: 0.9rem;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   flex-shrink: 0;
-  padding-top: 2px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.06);
 }
+
+.team-msg--user .team-msg__avatar { background: rgba(34, 197, 94, 0.15); }
 
 .team-msg__body {
   flex: 1;
@@ -1611,54 +1635,128 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 2px;
+  margin-bottom: 3px;
 }
 
 .team-msg__role {
-  font-size: 0.72rem;
+  font-size: 0.74rem;
   font-weight: 600;
   text-transform: capitalize;
 }
 
 .team-msg__time {
-  font-size: 0.65rem;
+  font-size: 0.66rem;
   color: rgba(255, 255, 255, 0.3);
 }
 
 .team-msg__content {
-  font-size: 0.8rem;
-  color: rgba(255, 255, 255, 0.75);
-  line-height: 1.4;
+  font-size: 0.82rem;
+  color: rgba(255, 255, 255, 0.78);
+  line-height: 1.45;
   word-break: break-word;
 }
 
 .team-msg--decision .team-msg__content {
-  color: #22c55e;
-  font-weight: 500;
+  color: #34d399;
+  font-weight: 600;
 }
 
 .team-msg--event .team-msg__content {
-  color: rgba(255, 255, 255, 0.55);
+  color: rgba(255, 255, 255, 0.5);
   font-style: italic;
-  font-size: 0.75rem;
+  font-size: 0.76rem;
 }
 
 .team-msg--output .team-msg__content {
-  color: rgba(255, 255, 255, 0.88);
+  color: rgba(255, 255, 255, 0.9);
   font-weight: 500;
 }
 
+/* Role-specific output message styling */
+.team-msg--output.team-msg--planner {
+  background: rgba(96, 165, 250, 0.06);
+  border-left-color: #60a5fa;
+}
+.team-msg--output.team-msg--planner .team-msg__avatar { background: rgba(96, 165, 250, 0.15); }
+
+.team-msg--output.team-msg--builder {
+  background: rgba(245, 158, 11, 0.06);
+  border-left-color: #f59e0b;
+}
+.team-msg--output.team-msg--builder .team-msg__avatar { background: rgba(245, 158, 11, 0.15); }
+
+.team-msg--output.team-msg--qa,
+.team-msg--decision.team-msg--qa {
+  background: rgba(167, 139, 250, 0.06);
+  border-left-color: #a78bfa;
+}
+.team-msg--output.team-msg--qa .team-msg__avatar,
+.team-msg--decision.team-msg--qa .team-msg__avatar { background: rgba(167, 139, 250, 0.15); }
+
+.team-msg--output.team-msg--reviewer,
+.team-msg--decision.team-msg--reviewer {
+  background: rgba(52, 211, 153, 0.06);
+  border-left-color: #34d399;
+}
+.team-msg--output.team-msg--reviewer .team-msg__avatar,
+.team-msg--decision.team-msg--reviewer .team-msg__avatar { background: rgba(52, 211, 153, 0.15); }
+
 .team-msg__detail {
-  font-size: 0.72rem;
-  color: rgba(255, 255, 255, 0.45);
-  margin-top: 2px;
-  line-height: 1.3;
+  font-size: 0.74rem;
+  color: rgba(255, 255, 255, 0.48);
+  margin-top: 3px;
+  line-height: 1.35;
 }
 
 .team-msg__duration {
-  font-size: 0.65rem;
+  font-size: 0.66rem;
   color: rgba(255, 255, 255, 0.3);
   margin-left: 6px;
+}
+
+/* ── Proposal Summary (collapsed view) ───────────── */
+.proposal-summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  margin: 4px 16px;
+  cursor: default;
+}
+
+.proposal-summary__text {
+  flex: 1;
+  font-size: 0.8rem;
+  color: rgba(255, 255, 255, 0.7);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.proposal-summary__meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.proposal-summary__toggle {
+  font-size: 0.72rem;
+  color: rgba(255, 255, 255, 0.4);
+  background: none;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  padding: 2px 8px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.proposal-summary__toggle:hover {
+  color: rgba(255, 255, 255, 0.7);
+  border-color: rgba(255, 255, 255, 0.2);
 }
 
 /* ── Team View ────────────────────────────────────── */

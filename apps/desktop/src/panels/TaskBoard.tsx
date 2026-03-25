@@ -65,6 +65,9 @@ export function TaskBoard({ projectId, onNavigateToSettings, autoExpandTaskId, o
   const [proposals, setProposals] = useState<ExecutionProposal[]>([]);
   const [proposalLoading, setProposalLoading] = useState(false);
 
+  // Proposal detail expansion — collapsed by default, shows full ProposalCard when set to proposal id
+  const [proposalDetailExpanded, setProposalDetailExpanded] = useState<string | null>(null);
+
   // Snapshot viewer (Phase 6E-B)
   const [snapshots, setSnapshots] = useState<Record<string, ExecutionSnapshotResponse>>({});
   const [snapshotLoading, setSnapshotLoading] = useState<string | null>(null);
@@ -135,7 +138,7 @@ export function TaskBoard({ projectId, onNavigateToSettings, autoExpandTaskId, o
     const nonPending = tasks.filter(t => t.status !== "pending");
     for (const t of nonPending) {
       if (taskRunsCache[t.id]) continue;
-      tasksApi.getRuns(t.id).then((runs: Array<{role: string, status: string, output_summary: string, started_at: string | null, ended_at: string | null}>) => {
+      tasksApi.getRuns(t.id).then((runs: Array<{role: string, status: string, output_summary: string, started_at: string | null, ended_at: string | null, model_provider?: string | null, model_name?: string | null}>) => {
         setTaskRunsCache(prev => ({ ...prev, [t.id]: runs }));
       }).catch(() => { /* ignore */ });
     }
@@ -742,7 +745,7 @@ export function TaskBoard({ projectId, onNavigateToSettings, autoExpandTaskId, o
     const phaseMap: Record<string, number> = { planning: 0, in_progress: 1, reviewing: 2 };
 
     // Helper: extract short output summary from a run
-    const getRunSummary = (role: string): { outputSummary?: string; duration?: string } => {
+    const getRunSummary = (role: string): { outputSummary?: string; duration?: string; model?: string } => {
       const run = cachedRuns.find(r => r.role === role && (r.status === "completed" || r.status === "failed"));
       if (!run || !run.output_summary) return {};
       let summary = "";
@@ -771,7 +774,8 @@ export function TaskBoard({ projectId, onNavigateToSettings, autoExpandTaskId, o
         const ms = new Date(run.ended_at).getTime() - new Date(run.started_at).getTime();
         duration = ms < 1000 ? "<1s" : ms < 60000 ? `${Math.round(ms/1000)}s` : `${Math.floor(ms/60000)}m ${Math.round((ms%60000)/1000)}s`;
       }
-      return { outputSummary: summary || undefined, duration: duration || undefined };
+      const model = run.model_provider && run.model_name ? `${run.model_provider}/${run.model_name}` : run.model_provider || undefined;
+      return { outputSummary: summary || undefined, duration: duration || undefined, model: model || undefined };
     };
 
     if (!isOrchestrating && (!task || task.status === "pending")) {
@@ -1081,8 +1085,8 @@ export function TaskBoard({ projectId, onNavigateToSettings, autoExpandTaskId, o
                 );
               })()}
 
-              {/* Pipeline Stepper (Phase 16-1) */}
-              {task.status !== "pending" && projectId && (
+              {/* Pipeline Stepper (Phase 16-1) — hidden: RoleStatusCards shows same info */}
+              {false && task.status !== "pending" && projectId && (
                 <>
                   <div className="task-section-label">{t("tasks.sectionOrchestration")}</div>
                   <PipelineStepper
@@ -1101,23 +1105,13 @@ export function TaskBoard({ projectId, onNavigateToSettings, autoExpandTaskId, o
                 />
               )}
 
-              {/* Audit Trail (Phase 6E-E) */}
-              {auditTrailTaskId === task.id && (
-                <AuditTrailSection
-                  events={auditTrailEvents}
-                  count={auditTrailCount}
-                  loading={auditTrailLoading}
-                  error={auditTrailError}
-                />
-              )}
-
-              {/* Role Status Cards (Chat-First UX Step 2) — visible for all non-pending tasks */}
+              {/* Role Status Cards — PRIMARY: agent team focus, visible for all non-pending tasks */}
               <RoleStatusCards
                 roles={deriveRoleStatuses(task.id)}
                 visible={!!orchestrateLoading || task.status !== "pending"}
               />
 
-              {/* Token Usage Summary (Chat-First UX Step 4) */}
+              {/* Token Usage Summary */}
               <TokenSummaryRow
                 taskId={task.id}
                 visible={task.status !== "pending"}
@@ -1135,7 +1129,7 @@ export function TaskBoard({ projectId, onNavigateToSettings, autoExpandTaskId, o
                 </div>
               )}
 
-              {/* Team Conversation — always visible for non-pending tasks */}
+              {/* Team Conversation — PRIMARY: agent collaboration, always visible for non-pending tasks */}
               <TeamConversation
                 taskId={task.id}
                 taskTitle={task.title}
@@ -1144,14 +1138,21 @@ export function TaskBoard({ projectId, onNavigateToSettings, autoExpandTaskId, o
                 isOrchestrating={orchestrateLoading === task.id}
               />
 
-              {/* Execution Proposals (Phase 6E-A) */}
-              {expandedTask === task.id && proposals.length > 0 && (
-                <div className="task-section-label">{t("tasks.sectionProposals")}</div>
+              {/* Audit Trail (Phase 6E-E) — toggled, shown after conversation */}
+              {auditTrailTaskId === task.id && (
+                <AuditTrailSection
+                  events={auditTrailEvents}
+                  count={auditTrailCount}
+                  loading={auditTrailLoading}
+                  error={auditTrailError}
+                />
               )}
+
+              {/* Execution Proposals (Phase 6E-A) — SECONDARY: collapsed summary by default */}
               {expandedTask === task.id && (
                 <div className="proposal-section">
                   {proposalLoading && (
-                    <div style={{ fontSize: 12, color: "var(--text-muted)" }}>
+                    <div style={{ fontSize: 12, color: "var(--text-muted)", padding: "8px 16px" }}>
                       {t("tasks.loadingProposals")}
                     </div>
                   )}
@@ -1181,6 +1182,21 @@ export function TaskBoard({ projectId, onNavigateToSettings, autoExpandTaskId, o
                       const rollback = execReq ? rollbackResults[execReq.id] : undefined;
                       const isLatest = proposalIdx === 0 && proposals.length > 1;
                       const isHistory = proposalIdx > 0;
+                      const isDetailOpen = proposalDetailExpanded === p.id;
+
+                      // Parse proposal_data for summary
+                      const pd = (() => { try { return JSON.parse(p.proposal_data); } catch { return {}; } })();
+                      const summary = (pd.change_summary as string) || "Execution proposal";
+                      const fileCount = Array.isArray(pd.proposed_files) ? (pd.proposed_files as unknown[]).length : 0;
+                      const cmdCount = Array.isArray(pd.proposed_commands) ? (pd.proposed_commands as unknown[]).length : 0;
+                      const riskLevel = (pd.risk_level as string) || "";
+
+                      // Find the pending approval for this proposal (if any)
+                      const pendingApproval = taskApprovals.find(
+                        (a) => a.proposal_id === p.id && a.status === "pending"
+                      );
+                      const approvalStatus = taskApprovals.find((a) => a.proposal_id === p.id)?.status;
+
                       return (
                         <div key={p.id} className={isHistory ? "proposal-card-historical" : ""}>
                           {proposals.length > 1 && (
@@ -1190,52 +1206,111 @@ export function TaskBoard({ projectId, onNavigateToSettings, autoExpandTaskId, o
                                 : t("tasks.historyProposal", { n: proposals.length - proposalIdx })}
                             </span>
                           )}
-                          <ProposalCard
-                            proposal={p}
-                            taskApprovals={taskApprovals}
-                            approvalLoading={approvalLoading}
-                            approvalError={approvalError}
-                            onResolveApproval={resolveApproval}
-                            snapshot={snap}
-                            snapshotLoading={snapshotLoading === p.id}
-                            snapshotError={snapshotError}
-                            onFreezeAndView={freezeAndViewWithReqCheck}
-                            onHideSnapshot={(proposalId) => setSnapshots((prev) => {
-                              const next = { ...prev };
-                              delete next[proposalId];
-                              return next;
-                            })}
-                            execRequest={execReq}
-                            execReqLoading={snap ? execReqLoading === snap.id : false}
-                            execReqError={execReqError}
-                            onRequestExecution={requestExecution}
-                            onUpdateExecRequestStatus={updateExecRequestStatus}
-                            onConfirmAndDryRun={confirmAndDryRun}
-                            dryRunResult={dryRun}
-                            dryRunLoading={execReq ? dryRunLoading === execReq.id : false}
-                            dryRunError={dryRunError}
-                            onTriggerDryRun={triggerDryRun}
-                            onLoadDryRunResult={loadDryRunResult}
-                            actionPlan={actionPlan}
-                            actionPlanLoading={execReq ? actionPlanLoading === execReq.id : false}
-                            actionPlanError={actionPlanError}
-                            onLoadActionPlan={loadActionPlan}
-                            realRunResult={realRun}
-                            realRunLoading={execReq ? realRunLoading === execReq.id : false}
-                            realRunError={realRunError}
-                            executeLoading={execReq ? executeLoading === execReq.id : false}
-                            executeError={execReq ? (executeError[execReq.id] ?? null) : null}
-                            onTriggerExecution={requestExecConfirm}
-                            onLoadRealRunResult={loadRealRunResult}
-                            rollbackResult={rollback}
-                            rollbackLoading={execReq ? rollbackLoading === execReq.id : false}
-                            rollbackError={rollbackError}
-                            rollbackTriggerLoading={execReq ? rollbackTriggerLoading === execReq.id : false}
-                            rollbackTriggerError={execReq ? (rollbackTriggerError[execReq.id] ?? null) : null}
-                            onTriggerRollback={requestRollbackConfirm}
-                            onLoadRollbackResult={loadRollbackResult}
-                            formatDate={formatDate}
-                          />
+
+                          {/* Collapsed summary row */}
+                          <div className="proposal-summary">
+                            <span className="proposal-summary__text" title={summary}>
+                              {summary.length > 60 ? summary.slice(0, 60) + "…" : summary}
+                            </span>
+                            <div className="proposal-summary__meta">
+                              {riskLevel && (
+                                <span className={`badge badge-risk badge-risk--${riskLevel}`}>
+                                  {riskLevel}
+                                </span>
+                              )}
+                              {approvalStatus && (
+                                <span className={`badge badge-approval badge-approval--${approvalStatus}`}>
+                                  {approvalStatus}
+                                </span>
+                              )}
+                              {fileCount > 0 && (
+                                <span style={{ fontSize: "0.7rem", color: "rgba(255,255,255,0.4)" }}>
+                                  {fileCount}f
+                                </span>
+                              )}
+                              {cmdCount > 0 && (
+                                <span style={{ fontSize: "0.7rem", color: "rgba(255,255,255,0.4)" }}>
+                                  {cmdCount}c
+                                </span>
+                              )}
+                              {pendingApproval && (
+                                <>
+                                  <button
+                                    className="btn btn-sm"
+                                    style={{ fontSize: 11, color: "#22c55e", borderColor: "#22c55e" }}
+                                    disabled={approvalLoading === pendingApproval.id}
+                                    onClick={() => void resolveApproval(pendingApproval.id, "approved")}
+                                  >
+                                    {approvalLoading === pendingApproval.id ? "…" : t("approvals.approve", "Approve")}
+                                  </button>
+                                  <button
+                                    className="btn btn-sm"
+                                    style={{ fontSize: 11, color: "#ef4444", borderColor: "#ef4444" }}
+                                    disabled={approvalLoading === pendingApproval.id}
+                                    onClick={() => void resolveApproval(pendingApproval.id, "rejected")}
+                                  >
+                                    {t("approvals.reject", "Reject")}
+                                  </button>
+                                </>
+                              )}
+                              <button
+                                className="proposal-summary__toggle"
+                                onClick={() => setProposalDetailExpanded(isDetailOpen ? null : p.id)}
+                              >
+                                {isDetailOpen ? "Hide Details \u25be" : "Show Details \u25b8"}
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Full proposal detail — only when expanded */}
+                          {isDetailOpen && (
+                            <ProposalCard
+                              proposal={p}
+                              taskApprovals={taskApprovals}
+                              approvalLoading={approvalLoading}
+                              approvalError={approvalError}
+                              onResolveApproval={resolveApproval}
+                              snapshot={snap}
+                              snapshotLoading={snapshotLoading === p.id}
+                              snapshotError={snapshotError}
+                              onFreezeAndView={freezeAndViewWithReqCheck}
+                              onHideSnapshot={(proposalId) => setSnapshots((prev) => {
+                                const next = { ...prev };
+                                delete next[proposalId];
+                                return next;
+                              })}
+                              execRequest={execReq}
+                              execReqLoading={snap ? execReqLoading === snap.id : false}
+                              execReqError={execReqError}
+                              onRequestExecution={requestExecution}
+                              onUpdateExecRequestStatus={updateExecRequestStatus}
+                              onConfirmAndDryRun={confirmAndDryRun}
+                              dryRunResult={dryRun}
+                              dryRunLoading={execReq ? dryRunLoading === execReq.id : false}
+                              dryRunError={dryRunError}
+                              onTriggerDryRun={triggerDryRun}
+                              onLoadDryRunResult={loadDryRunResult}
+                              actionPlan={actionPlan}
+                              actionPlanLoading={execReq ? actionPlanLoading === execReq.id : false}
+                              actionPlanError={actionPlanError}
+                              onLoadActionPlan={loadActionPlan}
+                              realRunResult={realRun}
+                              realRunLoading={execReq ? realRunLoading === execReq.id : false}
+                              realRunError={realRunError}
+                              executeLoading={execReq ? executeLoading === execReq.id : false}
+                              executeError={execReq ? (executeError[execReq.id] ?? null) : null}
+                              onTriggerExecution={requestExecConfirm}
+                              onLoadRealRunResult={loadRealRunResult}
+                              rollbackResult={rollback}
+                              rollbackLoading={execReq ? rollbackLoading === execReq.id : false}
+                              rollbackError={rollbackError}
+                              rollbackTriggerLoading={execReq ? rollbackTriggerLoading === execReq.id : false}
+                              rollbackTriggerError={execReq ? (rollbackTriggerError[execReq.id] ?? null) : null}
+                              onTriggerRollback={requestRollbackConfirm}
+                              onLoadRollbackResult={loadRollbackResult}
+                              formatDate={formatDate}
+                            />
+                          )}
                         </div>
                       );
                     })}

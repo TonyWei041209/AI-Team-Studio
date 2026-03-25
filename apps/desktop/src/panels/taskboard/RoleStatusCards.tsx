@@ -6,6 +6,7 @@ export interface RoleStatus {
   status: "idle" | "running" | "completed" | "failed"
   duration?: string
   outputSummary?: string
+  model?: string
 }
 
 interface RoleStatusCardsProps {
@@ -54,15 +55,22 @@ export function RoleStatusCards({ roles, visible }: RoleStatusCardsProps) {
             <span className="role-status-card__name">
               {t(`pipeline.role_${r.role}`, r.role.charAt(0).toUpperCase() + r.role.slice(1))}
             </span>
-            <span className={`role-status-card__badge role-status-card__badge--${r.status}`}>
-              {statusLabel(r.status)}
-            </span>
+            <div className="role-status-card__header-right">
+              {r.duration && (
+                <span className="role-status-card__duration">{r.duration}</span>
+              )}
+              <span className={`role-status-card__badge role-status-card__badge--${r.status}`}>
+                {statusLabel(r.status)}
+              </span>
+            </div>
           </div>
           {r.outputSummary && (
-            <div className="role-status-card__output">{r.outputSummary}</div>
+            <div className="role-status-card__output">
+              {r.outputSummary.length > 80 ? r.outputSummary.slice(0, 80) + "…" : r.outputSummary}
+            </div>
           )}
-          {r.duration && (
-            <div className="role-status-card__footer">{r.duration}</div>
+          {r.model && (
+            <div className="role-status-card__model">{r.model}</div>
           )}
         </div>
       ))}
