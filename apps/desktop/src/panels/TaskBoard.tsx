@@ -758,7 +758,14 @@ export function TaskBoard({ projectId, onNavigateToSettings, autoExpandTaskId, o
     const phaseMap: Record<string, number> = { planning: 0, in_progress: 1, reviewing: 2 };
 
     // Helper: extract short output summary from a run
-    const getRunSummary = (role: string): { outputSummary?: string; duration?: string; model?: string } => {
+    // Parse "[N items]" string format from truncated output
+    const parseCount = (val: unknown): number => {
+      if (Array.isArray(val)) return val.length;
+      if (typeof val === "string") { const m = val.match(/^\[(\d+)\s*items?\]$/i); return m ? parseInt(m[1], 10) : 0; }
+      return 0;
+    };
+
+    const getRunSummary = (role: string): { outputSummary?: string; duration?: string; model?: string; nextStep?: string } => {
       const run = cachedRuns.find(r => r.role === role && (r.status === "completed" || r.status === "failed"));
       if (!run || !run.output_summary) return {};
       let summary = "";
@@ -767,19 +774,27 @@ export function TaskBoard({ projectId, onNavigateToSettings, autoExpandTaskId, o
         const data = parsed?.output && typeof parsed.output === "object" ? parsed.output : parsed;
         if (role === "planner") {
           const goal = data?.goal_summary || data?.goal || "";
-          const steps = Array.isArray(data?.task_breakdown) ? data.task_breakdown.length : 0;
-          summary = goal ? `${String(goal).slice(0, 80)}${steps ? ` (${steps} steps)` : ""}` : "";
+          const stepCount = parseCount(data?.task_breakdown);
+          const criteriaCount = parseCount(data?.acceptance_criteria);
+          summary = goal ? `${String(goal).slice(0, 90)}` : "";
+          if (stepCount) summary += ` · ${stepCount} steps`;
+          if (criteriaCount) summary += ` · ${criteriaCount} criteria`;
         } else if (role === "builder") {
           const cs = data?.change_summary || "";
-          const fc = Array.isArray(data?.proposed_files || data?.changed_files) ? (data.proposed_files || data.changed_files).length : 0;
-          summary = cs ? `${String(cs).slice(0, 80)}${fc ? ` · ${fc} file(s)` : ""}` : "";
+          const fc = parseCount(data?.proposed_files || data?.changed_files);
+          const cc = parseCount(data?.proposed_commands);
+          summary = cs ? `${String(cs).slice(0, 90)}` : "";
+          if (fc) summary += ` · ${fc} file(s)`;
+          if (cc) summary += ` · ${cc} cmd(s)`;
         } else if (role === "qa") {
           const result = data?.result || "";
+          const scope = data?.validation_scope || "";
           summary = result ? `${String(result)}` : "";
+          if (scope) summary += ` — ${String(scope).slice(0, 60)}`;
         } else if (role === "reviewer") {
           const decision = data?.decision || "";
           const reason = data?.reason || "";
-          summary = decision ? `${String(decision)}${reason ? ": " + String(reason).slice(0, 60) : ""}` : "";
+          summary = decision ? `${String(decision).toUpperCase()}${reason ? ": " + String(reason).slice(0, 80) : ""}` : "";
         }
       } catch { /* fallback */ }
       let duration = "";
@@ -788,7 +803,18 @@ export function TaskBoard({ projectId, onNavigateToSettings, autoExpandTaskId, o
         duration = ms < 1000 ? "<1s" : ms < 60000 ? `${Math.round(ms/1000)}s` : `${Math.floor(ms/60000)}m ${Math.round((ms%60000)/1000)}s`;
       }
       const model = run.model_provider && run.model_name ? `${run.model_provider}/${run.model_name}` : run.model_provider || undefined;
-      return { outputSummary: summary || undefined, duration: duration || undefined, model: model || undefined };
+      // Infer nextStep based on task state and role completion
+      let nextStep: string | undefined;
+      const taskStatus = task?.status || "";
+      if (run.status === "completed") {
+        if (role === "planner" && (taskStatus === "planning" || taskStatus === "in_progress")) nextStep = "Waiting for Builder";
+        if (role === "builder" && taskStatus === "reviewing") nextStep = "Waiting for review";
+        if (role === "qa" && taskStatus === "reviewing") nextStep = "Waiting for Reviewer";
+        if (role === "reviewer" && taskStatus === "done") nextStep = "Idle — task complete";
+      } else if (run.status === "failed") {
+        nextStep = "Encountered error";
+      }
+      return { outputSummary: summary || undefined, duration: duration || undefined, model: model || undefined, nextStep };
     };
 
     if (!isOrchestrating && (!task || task.status === "pending")) {

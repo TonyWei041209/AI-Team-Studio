@@ -7,6 +7,7 @@ export interface RoleStatus {
   duration?: string
   outputSummary?: string
   model?: string
+  nextStep?: string
 }
 
 interface RoleStatusCardsProps {
@@ -66,8 +67,11 @@ export function RoleStatusCards({ roles, visible }: RoleStatusCardsProps) {
           </div>
           {r.outputSummary && (
             <div className="role-status-card__output">
-              {r.outputSummary.length > 80 ? r.outputSummary.slice(0, 80) + "…" : r.outputSummary}
+              {r.outputSummary.length > 100 ? r.outputSummary.slice(0, 100) + "…" : r.outputSummary}
             </div>
+          )}
+          {r.nextStep && (
+            <div className="role-status-card__next">{r.nextStep}</div>
           )}
           {r.model && (
             <div className="role-status-card__model">{r.model}</div>

@@ -30,7 +30,7 @@ interface ConversationMessage {
   role: "system" | "user" | "planner" | "builder" | "qa" | "reviewer"
   type: "event" | "output" | "decision"
   content: string
-  detail?: string
+  details?: string[]
   status?: string
   duration?: string
 }
@@ -83,6 +83,16 @@ function formatDuration(start: string | null, end: string | null): string {
   return `${Math.floor(s / 60)}m ${s % 60}s`
 }
 
+/** Parse "[N items]" string format from truncated output_summary */
+function parseItemCount(val: unknown): number {
+  if (Array.isArray(val)) return val.length
+  if (typeof val === "string") {
+    const m = val.match(/^\[(\d+)\s*items?\]$/i)
+    if (m) return parseInt(m[1], 10)
+  }
+  return 0
+}
+
 /** Extract rich content lines from a role's output */
 function extractRoleReport(output: string, role: string): { headline: string; details: string[] } {
   const parsed = parseOutputSummary(output)
@@ -90,55 +100,55 @@ function extractRoleReport(output: string, role: string): { headline: string; de
 
   if (role === "planner") {
     const goal = String(parsed.goal_summary || parsed.goal || "")
-    const breakdown = parsed.task_breakdown as unknown[]
-    const criteria = parsed.acceptance_criteria as unknown[]
-    const risks = parsed.risks as unknown[]
+    const stepCount = parseItemCount(parsed.task_breakdown)
+    const criteriaCount = parseItemCount(parsed.acceptance_criteria)
+    const riskCount = parseItemCount(parsed.risks)
     const headline = goal || "Task plan ready"
     const details: string[] = []
-    if (Array.isArray(breakdown)) details.push(`${breakdown.length} steps planned`)
-    if (Array.isArray(criteria)) details.push(`${criteria.length} acceptance criteria`)
-    if (Array.isArray(risks) && risks.length > 0) details.push(`${risks.length} risk(s) identified`)
+    if (stepCount > 0) details.push(`Broke down into ${stepCount} steps`)
+    if (criteriaCount > 0) details.push(`${criteriaCount} acceptance criteria defined`)
+    if (riskCount > 0) details.push(`${riskCount} risk(s) flagged`)
     return { headline, details }
   }
 
   if (role === "builder") {
     const summary = String(parsed.change_summary || "")
-    const files = parsed.proposed_files || parsed.changed_files
-    const cmds = parsed.proposed_commands
+    const fileCount = parseItemCount(parsed.proposed_files || parsed.changed_files)
+    const cmdCount = parseItemCount(parsed.proposed_commands)
+    const reasoning = String(parsed.reasoning_summary || "")
+    const riskLevel = String(parsed.risk_level || "")
     const headline = summary || "Execution proposal ready"
     const details: string[] = []
-    if (Array.isArray(files)) {
-      const createCount = files.filter((f: Record<string, unknown>) => f.action === "create").length
-      const modifyCount = files.filter((f: Record<string, unknown>) => f.action === "modify").length
-      const parts: string[] = []
-      if (createCount) parts.push(`${createCount} file(s) to create`)
-      if (modifyCount) parts.push(`${modifyCount} file(s) to modify`)
-      if (parts.length) details.push(parts.join(", "))
-      else details.push(`${files.length} file(s) proposed`)
-    }
-    if (Array.isArray(cmds)) details.push(`${cmds.length} command(s) planned`)
+    if (fileCount > 0) details.push(`${fileCount} file(s) proposed`)
+    if (cmdCount > 0) details.push(`${cmdCount} command(s) planned`)
+    if (riskLevel) details.push(`Risk: ${riskLevel}`)
+    if (reasoning) details.push(reasoning.slice(0, 150))
     return { headline, details }
   }
 
   if (role === "qa") {
     const result = String(parsed.result || "")
     const scope = String(parsed.validation_scope || "")
+    const testActions = parsed.test_actions as unknown[]
     const findings = parsed.findings as unknown[]
     const headline = result ? `Quality check: ${result}` : "Quality check complete"
     const details: string[] = []
-    if (scope) details.push(scope.slice(0, 120))
+    if (scope) details.push(scope.slice(0, 150))
+    if (Array.isArray(testActions) && testActions.length > 0) {
+      details.push(testActions.map(a => String(a)).join(" · "))
+    }
     if (Array.isArray(findings) && findings.length > 0) details.push(`${findings.length} finding(s)`)
     return { headline, details }
   }
 
   if (role === "reviewer") {
-    const decision = String(parsed.decision || "")
+    const decision = String(parsed.decision || "").toUpperCase()
     const reason = String(parsed.reason || "")
     const headline = decision
       ? `Decision: ${decision}`
       : "Review complete"
     const details: string[] = []
-    if (reason) details.push(reason.slice(0, 200))
+    if (reason) details.push(reason.slice(0, 300))
     return { headline, details }
   }
 
@@ -179,7 +189,7 @@ export function TeamConversation({ taskId, taskTitle, taskStatus: _taskStatus, v
               role: run.role as ConversationMessage["role"],
               type: run.role === "reviewer" ? "decision" : "output",
               content: report.headline,
-              detail: report.details.length > 0 ? report.details.join(" · ") : undefined,
+              details: report.details.length > 0 ? report.details : undefined,
               status: run.status,
               duration: dur,
             })
@@ -295,8 +305,12 @@ export function TeamConversation({ taskId, taskTitle, taskStatus: _taskStatus, v
                 )}
               </div>
               <div className="team-msg__content">{msg.content}</div>
-              {msg.detail && (
-                <div className="team-msg__detail">{msg.detail}</div>
+              {msg.details && msg.details.length > 0 && (
+                <div className="team-msg__details">
+                  {msg.details.map((d, i) => (
+                    <div key={i} className="team-msg__detail-line">{d}</div>
+                  ))}
+                </div>
               )}
             </div>
           </div>

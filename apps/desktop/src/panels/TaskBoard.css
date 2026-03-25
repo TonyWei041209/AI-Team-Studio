@@ -1471,6 +1471,12 @@
   white-space: nowrap;
 }
 
+.role-status-card__next {
+  font-size: 0.65rem;
+  color: rgba(245, 158, 11, 0.7);
+  margin-top: 2px;
+}
+
 .role-status-card__model {
   font-size: 0.6rem;
   color: rgba(255, 255, 255, 0.25);
@@ -1712,11 +1718,23 @@
 .team-msg--output.team-msg--reviewer .team-msg__avatar,
 .team-msg--decision.team-msg--reviewer .team-msg__avatar { background: rgba(52, 211, 153, 0.15); }
 
-.team-msg__detail {
+.team-msg__details {
+  margin-top: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.team-msg__detail-line {
   font-size: 0.74rem;
-  color: rgba(255, 255, 255, 0.48);
-  margin-top: 3px;
-  line-height: 1.35;
+  color: rgba(255, 255, 255, 0.52);
+  line-height: 1.4;
+  padding-left: 10px;
+  border-left: 2px solid rgba(255, 255, 255, 0.08);
+}
+
+.team-msg__detail-line:first-child {
+  padding-top: 0;
 }
 
 .team-msg__duration {
