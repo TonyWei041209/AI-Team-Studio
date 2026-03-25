@@ -119,6 +119,9 @@ export function TaskBoard({ projectId, onNavigateToSettings, autoExpandTaskId, o
   // Team view mode — shows TaskTeamView instead of task list
   const [teamViewTaskId, setTeamViewTaskId] = useState<string | null>(null);
 
+  // Single-flow workspace: which task is currently focused
+  const [focusedTaskId, setFocusedTaskId] = useState<string | null>(null);
+
   // Inline approval actions (Phase 9-4)
   const [taskApprovals, setTaskApprovals] = useState<ApprovalRequestType[]>([]);
   const [approvalLoading, setApprovalLoading] = useState<string | null>(null);
@@ -132,6 +135,14 @@ export function TaskBoard({ projectId, onNavigateToSettings, autoExpandTaskId, o
       setIsGodotProject(info.is_godot);
     }).catch(() => setIsGodotProject(false));
   }, [projectId]);
+
+  // Auto-focus the most recent non-pending task, or first task, when tasks load
+  useEffect(() => {
+    if (!focusedTaskId && tasks.length > 0) {
+      const recent = tasks.find(t => t.status !== "pending") || tasks[0];
+      setFocusedTaskId(recent.id);
+    }
+  }, [tasks, focusedTaskId]);
 
   // Load runs for non-pending tasks (for role status cards output summaries)
   useEffect(() => {
@@ -148,6 +159,7 @@ export function TaskBoard({ projectId, onNavigateToSettings, autoExpandTaskId, o
   useEffect(() => {
     if (autoExpandTaskId && tasks.some((t) => t.id === autoExpandTaskId)) {
       setExpandedTask(autoExpandTaskId);
+      setFocusedTaskId(autoExpandTaskId);
       const targetTask = tasks.find((t) => t.id === autoExpandTaskId);
       if (targetTask && targetTask.status === "pending") {
         void handleOrchestrate(autoExpandTaskId);
@@ -687,6 +699,7 @@ export function TaskBoard({ projectId, onNavigateToSettings, autoExpandTaskId, o
     setRealRunError(null);
     setExecuteError({});
     setTeamViewTaskId(null);
+    setFocusedTaskId(null);
   }, [projectId]);
 
   if (!projectId) {
@@ -859,6 +872,7 @@ export function TaskBoard({ projectId, onNavigateToSettings, autoExpandTaskId, o
     if (!projectId) return;
     const created = await createTask({ title: text, description: text, priority: "medium" });
     setExpandedTask(created.id);
+    setFocusedTaskId(created.id);
     void handleOrchestrate(created.id);
   }, [projectId, createTask, handleOrchestrate]);
 
@@ -943,23 +957,48 @@ export function TaskBoard({ projectId, onNavigateToSettings, autoExpandTaskId, o
         />
       )}
 
-      {/* Task list */}
+      {/* Single-flow workspace */}
       {!loading && tasks.length > 0 && !teamViewTaskId && (
-        <div className="task-list" data-testid="task-list">
-          {tasks.map((task) => (
-            <div key={task.id} className="task-item" data-testid="task-item">
-              <div className="task-item-header">
-                <span className="task-title">{task.title}</span>
-                <span className="task-date">{formatDate(task.updated_at)}</span>
-              </div>
-              {task.description && (
-                <div className="task-desc task-desc--truncated">
-                  {task.description.length > 120
-                    ? task.description.slice(0, 120) + "…"
-                    : task.description}
-                </div>
-              )}
-              <div className="task-badges">
+        <div className="task-workspace" data-testid="task-list">
+          {/* Task switcher strip */}
+          <div className="task-switcher">
+            {tasks.map((task) => (
+              <button
+                key={task.id}
+                className={`task-switcher__item ${focusedTaskId === task.id ? "task-switcher__item--active" : ""}`}
+                onClick={() => {
+                  setFocusedTaskId(task.id);
+                  setExpandedTask(null);
+                  setProposalDetailExpanded(null);
+                }}
+                title={task.title}
+              >
+                <span className="task-switcher__dot" style={{
+                  background: STATUS_COLORS[task.status] || "#666"
+                }} />
+                <span className="task-switcher__label">
+                  {task.title.length > 30 ? task.title.slice(0, 30) + "\u2026" : task.title}
+                </span>
+              </button>
+            ))}
+          </div>
+
+          {/* Focused task workspace */}
+          {(() => {
+            const task = tasks.find(t => t.id === focusedTaskId);
+            if (!task) return null;
+            return (
+              <div className="task-focused" data-testid="task-item">
+                <div className="task-focused__header">
+                  <div className="task-focused__title">{task.title}</div>
+                  {task.description && (
+                    <div className="task-desc task-desc--truncated" style={{ marginTop: 4 }}>
+                      {task.description.length > 120
+                        ? task.description.slice(0, 120) + "\u2026"
+                        : task.description}
+                    </div>
+                  )}
+                  <div className="task-focused__meta task-badges">
                 {(() => {
                   // Derive pipeline state for this task (richer when expanded)
                   const isExpanded = expandedTask === task.id;
@@ -1046,7 +1085,8 @@ export function TaskBoard({ projectId, onNavigateToSettings, autoExpandTaskId, o
                     ? t("tasks.hideAuditTrail")
                     : t("tasks.auditTrail")}
                 </button>
-              </div>
+                  </div>
+                </div>
 
               {/* Current Status Strip removed — redundant with proposal summary row and RoleStatusCards */}
 
@@ -1281,8 +1321,9 @@ export function TaskBoard({ projectId, onNavigateToSettings, autoExpandTaskId, o
                     })}
                 </div>
               )}
-            </div>
-          ))}
+              </div>
+            );
+          })()}
         </div>
       )}
 
