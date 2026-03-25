@@ -141,11 +141,14 @@ export function TaskBoard({ projectId, onNavigateToSettings, autoExpandTaskId, o
     }
   }, [tasks]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Auto-expand task from sidebar composer
+  // Auto-expand task from sidebar composer — orchestrate only if still pending
   useEffect(() => {
     if (autoExpandTaskId && tasks.some((t) => t.id === autoExpandTaskId)) {
       setExpandedTask(autoExpandTaskId);
-      void handleOrchestrate(autoExpandTaskId);
+      const targetTask = tasks.find((t) => t.id === autoExpandTaskId);
+      if (targetTask && targetTask.status === "pending") {
+        void handleOrchestrate(autoExpandTaskId);
+      }
       onAutoExpandConsumed?.();
     }
   }, [autoExpandTaskId, tasks]); // eslint-disable-line react-hooks/exhaustive-deps

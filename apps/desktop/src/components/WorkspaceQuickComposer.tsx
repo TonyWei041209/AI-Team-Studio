@@ -42,8 +42,7 @@ export function WorkspaceQuickComposer({
         description: value,
         priority: "medium",
       })
-      // Auto-orchestrate (fire and forget — TaskBoard will pick it up)
-      void tasksApi.orchestrate(task.id).catch(() => {})
+      // TaskBoard's autoExpandTaskId effect handles orchestrate — don't call here
       onTaskCreated(projectId, task.id)
     } catch {
       // Restore text on failure
