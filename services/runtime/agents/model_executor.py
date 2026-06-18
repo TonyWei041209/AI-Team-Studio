@@ -11,10 +11,11 @@ from __future__ import annotations
 
 import json
 import re
+from dataclasses import replace
 from typing import Any
 
 from models import AgentRole, ReviewDecision
-from agents.definitions import get_definition
+from agents.definitions import get_definition, QA_SYSTEM_PROMPT
 from agents.skill_loader import build_enhanced_system_prompt
 from agents.executor import ExecutionResult
 from providers.base import CompletionRequest, Message, MessageRole
@@ -378,14 +379,14 @@ class QaOutputSchema:
             if not isinstance(item, dict):
                 return False, f"acceptance_criteria_assessment[{i}] must be an object"
             criterion = item.get("criterion")
-            if not isinstance(criterion, str):
-                return False, f"acceptance_criteria_assessment[{i}].criterion must be a string"
+            if not isinstance(criterion, str) or not criterion.strip():
+                return False, f"acceptance_criteria_assessment[{i}].criterion must be a non-empty string"
             met = item.get("met")
             if not isinstance(met, bool):
                 return False, f"acceptance_criteria_assessment[{i}].met must be a boolean"
             rationale = item.get("rationale")
-            if not isinstance(rationale, str):
-                return False, f"acceptance_criteria_assessment[{i}].rationale must be a string"
+            if not isinstance(rationale, str) or not rationale.strip():
+                return False, f"acceptance_criteria_assessment[{i}].rationale must be a non-empty string"
 
         # result: required, must be "pass", "concerns", or "fail"
         result = data.get("result")
@@ -792,4 +793,52 @@ class ModelAgentExecutor:
                 f"\nPrevious rejection(s):\n{json.dumps(rejection_history, ensure_ascii=False, separators=(',',':'))}"
             )
 
+        return "\n".join(parts)
+
+    # ── QA execution (static review, NOT yet pipeline-wired) ──
+
+    async def _execute_qa(self, task_context: dict) -> ExecutionResult:
+        """Call a real LLM to produce a structured QA static-review verdict.
+
+        Mirrors _execute_planner / _execute_reviewer: resolve provider/model,
+        build the user message, call the model, parse-and-validate the JSON.
+        QA statically reviews the Builder's proposal against the Planner's
+        acceptance criteria — no tool execution.
+
+        NOTE: the QA AgentRoleDefinition intentionally leaves system_prompt
+        unset until pipeline activation (Step 1), so QA_SYSTEM_PROMPT is
+        injected here via dataclasses.replace (a fresh copy — the shared
+        definition is not mutated). This method is not wired into execute()
+        or the orchestrator yet (Step 3).
+        """
+        defn, provider, model_name = self._resolve_provider(AgentRole.QA)
+        defn = replace(defn, system_prompt=QA_SYSTEM_PROMPT)
+        user_msg = self._build_qa_user_message(task_context)
+        raw_content, usage = await self._call_model(defn, provider, model_name, user_msg)
+
+        result = self._parse_and_validate(raw_content, "QA", QaOutputSchema)
+        if isinstance(result, ExecutionResult):
+            result.token_usage = usage  # preserve actual provider/model for logging
+            return result  # validation failed
+
+        return ExecutionResult(success=True, output=result, token_usage=usage)
+
+    @staticmethod
+    def _build_qa_user_message(ctx: dict) -> str:
+        """Assemble the user-facing prompt from task context for QA.
+
+        QA reviews the Builder's proposal against the Planner's acceptance
+        criteria. Degrades gracefully — only includes previous outputs that
+        are present, never crashes on a missing one.
+        """
+        parts = [
+            f"Task: {ctx.get('title', 'Untitled')}",
+            f"Description: {ctx.get('description', 'No description provided')}",
+            f"Priority: {ctx.get('priority', 'medium')}",
+        ]
+        prev = ctx.get("previous_outputs", {})
+        if prev.get("planner"):
+            parts.append(f"\nPlanner plan:\n{json.dumps(prev['planner'], ensure_ascii=False, separators=(',',':'))}")
+        if prev.get("builder"):
+            parts.append(f"\nBuilder proposal:\n{json.dumps(prev['builder'], ensure_ascii=False, separators=(',',':'))}")
         return "\n".join(parts)

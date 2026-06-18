@@ -206,7 +206,7 @@ Rules:
 - validation_scope must be a non-empty string
 - result must be exactly "pass", "concerns", or "fail"
 - review_findings is a list (can be empty); each item needs severity (one of: critical, major, minor, info) and description (non-empty string)
-- acceptance_criteria_assessment is a list (can be empty); each item needs criterion (string), met (boolean), and rationale (string)
+- acceptance_criteria_assessment is a list (can be empty); each item needs criterion (non-empty string), met (boolean), and rationale (non-empty string)
 - summary must be a non-empty string
 - Base every finding on the proposal text; do NOT claim to have executed or observed anything
 - Do NOT wrap the JSON in markdown code fences
