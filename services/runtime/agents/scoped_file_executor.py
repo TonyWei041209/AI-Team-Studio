@@ -117,6 +117,7 @@ def _file_sha256(path: str) -> str | None:
 def execute_scoped_files(
     execution_request_id: str,
     workspace_root: str,
+    strict_parent: bool = True,
 ) -> dict:
     """Execute file_create / file_modify actions from a confirmed request.
 
@@ -126,6 +127,14 @@ def execute_scoped_files(
         Must pass eligibility check.
     workspace_root : str
         Explicit project workspace path. Must be an existing directory.
+    strict_parent : bool, default True
+        Missing-parent-directory policy (route-3).
+        - True  (default, safe): a file action whose parent directory does
+          not exist FAILS fast — the parent is NOT created. Restores the
+          original pre-5a07ecd6 contract.
+        - False (explicit opt-in): a missing parent directory is auto-created
+          (via os.makedirs) as long as it resolves inside the workspace.
+        The effective value is stamped into result_data["strict_parent"].
 
     Returns
     -------
@@ -265,10 +274,23 @@ def execute_scoped_files(
                 fail_count += 1
                 break
 
-            # f. Parent directory — auto-create if within workspace
+            # f. Parent directory — fail-fast (default) or opt-in auto-create
             parent_dir = os.path.dirname(full_path)
             if not os.path.isdir(parent_dir):
-                # Only auto-create if parent resolves inside workspace
+                if strict_parent:
+                    # Default (route-3): restore pre-5a07ecd6 fail-fast.
+                    # A missing parent directory is a hard failure; the
+                    # parent is NOT created. The word "parent" in the error
+                    # is part of the contract (consumed by acceptance tests).
+                    result_entry["status"] = "failed"
+                    result_entry["error"] = "Parent directory does not exist"
+                    file_results.append(result_entry)
+                    stopped_at = i
+                    stop_reason = f"Parent directory missing for '{path}'"
+                    fail_count += 1
+                    break
+                # strict_parent is False → explicit opt-in auto-create,
+                # but only if the parent resolves inside the workspace.
                 real_parent_candidate = os.path.realpath(
                     os.path.normpath(parent_dir)
                 )
@@ -471,6 +493,7 @@ def execute_scoped_files(
             "snapshot_id": snap["id"],
             "snapshot_content_hash": snap["content_hash"],
             "summary": summary,
+            "strict_parent": strict_parent,
             "file_results": file_results,
             "command_results": command_results,
             "stopped_at": stopped_at,
