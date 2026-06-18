@@ -429,7 +429,7 @@ const zhCN = {
     strictParentLabel: "严格父目录（快速失败）",
     strictParentHint: "当文件的父目录不存在时，直接失败而非自动创建。推荐开启。",
     strictParentLocked: "策略已锁定——该请求已有预览或执行结果。",
-    executeBlockedDryRunFailed: "执行已被拦截：模拟预览显示父目录不存在。请修正提案中的文件路径，或取消勾选「严格父目录」后重新运行模拟。",
+    executeBlockedDryRunFailed: "执行已被拦截：模拟预览显示该文件的父目录不存在。请修正提案中的文件路径，使其父目录存在。（若「严格父目录」选项仍可编辑，也可取消勾选后重新运行模拟。）",
     executeNotEligible: "执行已被拦截：{{reasons}}。",
     executeFailed: "执行失败，请重试。",
     executionResult: "执行结果",

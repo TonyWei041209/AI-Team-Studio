@@ -437,7 +437,7 @@ const en = {
     strictParentLabel: "Strict parent directory (fail-fast)",
     strictParentHint: "If a file's parent directory doesn't exist, fail instead of auto-creating it. Recommended.",
     strictParentLocked: "Policy locked — a preview or run already exists for this request.",
-    executeBlockedDryRunFailed: "Execution blocked: the dry-run preview predicts a missing parent directory. Fix the file path in the proposal, or uncheck Strict parent directory and run the dry-run again.",
+    executeBlockedDryRunFailed: "Execution blocked: the dry-run preview predicts the file's parent directory doesn't exist. Fix the file path in the proposal so its parent directory exists. (If the Strict parent directory option is still editable, you can instead uncheck it and re-run the dry-run.)",
     executeNotEligible: "Execution blocked: {{reasons}}.",
     executeFailed: "Execution failed. Please try again.",
     executionResult: "Execution Result",
