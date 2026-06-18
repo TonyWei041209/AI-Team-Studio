@@ -713,6 +713,53 @@ def _apply_v16(conn: sqlite3.Connection) -> None:
     conn.execute("INSERT INTO schema_version (version) VALUES (16)")
 
 
+def _apply_v17(conn: sqlite3.Connection) -> None:
+    """V17: Extend skills.agent_role CHECK to include 'security_reviewer' (SR-2).
+
+    SQLite cannot ALTER a CHECK constraint, so the skills table is rebuilt with
+    the extended agent_role allow-list (mirrors the V3 approval_requests rebuild
+    style): create skills_v17 with the new CHECK, copy ALL rows, drop the old
+    table, rename, and recreate the scope index. Every column, default, the
+    scope_type CHECK, and the idx_skills_scope index are preserved exactly; the
+    only change is adding 'security_reviewer' to the agent_role allow-list.
+
+    Schema change only — the role_model_settings and roles rows for
+    'security_reviewer' are intentionally DEFERRED to SR-3 so they appear
+    atomically with the AgentRole enum member (avoids an orphaned middle-state
+    role and a premature break of the "4 system roles" registry assertion).
+    """
+    conn.execute("""
+        CREATE TABLE skills_v17 (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            description TEXT NOT NULL DEFAULT '',
+            content TEXT NOT NULL DEFAULT '',
+            scope_type TEXT NOT NULL DEFAULT 'global' CHECK(scope_type IN ('global', 'agent')),
+            agent_role TEXT,
+            is_enabled INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+            CHECK(
+                (scope_type = 'global' AND agent_role IS NULL) OR
+                (scope_type = 'agent' AND agent_role IN ('planner', 'builder', 'qa', 'reviewer', 'security_reviewer'))
+            )
+        )
+    """)
+    conn.execute("""
+        INSERT INTO skills_v17
+        SELECT id, name, description, content, scope_type, agent_role,
+               is_enabled, created_at, updated_at
+        FROM skills
+    """)
+    conn.execute("DROP TABLE skills")
+    conn.execute("ALTER TABLE skills_v17 RENAME TO skills")
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_skills_scope "
+        "ON skills(scope_type, agent_role)"
+    )
+    conn.execute("INSERT INTO schema_version (version) VALUES (17)")
+
+
 # Ordered list of migrations
 _MIGRATIONS = [
     (1, _apply_v1),
@@ -731,6 +778,7 @@ _MIGRATIONS = [
     (14, _apply_v14),
     (15, _apply_v15),
     (16, _apply_v16),
+    (17, _apply_v17),
 ]
 
 
