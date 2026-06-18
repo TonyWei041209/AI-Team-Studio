@@ -11,10 +11,11 @@ from __future__ import annotations
 
 import json
 import re
+from dataclasses import replace
 from typing import Any
 
 from models import AgentRole, ReviewDecision
-from agents.definitions import get_definition
+from agents.definitions import get_definition, SECURITY_REVIEWER_SYSTEM_PROMPT
 from agents.skill_loader import build_enhanced_system_prompt
 from agents.executor import ExecutionResult
 from providers.base import CompletionRequest, Message, MessageRole
@@ -393,6 +394,78 @@ class QaOutputSchema:
             return False, (
                 f"result must be one of {sorted(_VALID_QA_RESULTS)}, "
                 f"got: {result!r}"
+            )
+
+        # summary: required, non-empty string
+        summary = data.get("summary")
+        if not isinstance(summary, str) or not summary.strip():
+            return False, "summary must be a non-empty string"
+
+        return True, ""
+
+
+# ── Security Reviewer output schema validation (static security review) ──
+
+_VALID_SEC_SEVERITIES = {"critical", "high", "medium", "low", "info"}
+_VALID_SEC_RISK = {"none", "low", "medium", "high", "critical"}
+_VALID_SEC_VERDICTS = {"pass", "concerns", "fail"}
+
+
+class SecurityReviewerOutputSchema:
+    """Validates Security Reviewer JSON output against the static security-review schema.
+
+    The Security Reviewer statically reviews the Builder's proposal for SEMANTIC
+    security risks (no execution), complementing the rule-based RiskClassifier.
+    """
+
+    @staticmethod
+    def validate(data: Any) -> tuple[bool, str]:
+        """Check *data* conforms to the Security Reviewer output schema.
+
+        Returns ``(True, "")`` on success or ``(False, "<reason>")`` on failure.
+        """
+        if not isinstance(data, dict):
+            return False, "Output must be a JSON object"
+
+        # review_scope: required, non-empty string
+        rs = data.get("review_scope")
+        if not isinstance(rs, str) or not rs.strip():
+            return False, "review_scope must be a non-empty string"
+
+        # findings: required, list (can be empty)
+        findings = data.get("findings")
+        if not isinstance(findings, list):
+            return False, "findings must be a list"
+        for i, item in enumerate(findings):
+            if not isinstance(item, dict):
+                return False, f"findings[{i}] must be an object"
+            sev = item.get("severity")
+            if not isinstance(sev, str) or sev not in _VALID_SEC_SEVERITIES:
+                return False, (
+                    f"findings[{i}].severity must be one of "
+                    f"{sorted(_VALID_SEC_SEVERITIES)}, got: {sev!r}"
+                )
+            category = item.get("category")
+            if not isinstance(category, str) or not category.strip():
+                return False, f"findings[{i}].category must be a non-empty string"
+            desc = item.get("description")
+            if not isinstance(desc, str) or not desc.strip():
+                return False, f"findings[{i}].description must be a non-empty string"
+
+        # overall_risk: required, must be in _VALID_SEC_RISK
+        overall_risk = data.get("overall_risk")
+        if not isinstance(overall_risk, str) or overall_risk not in _VALID_SEC_RISK:
+            return False, (
+                f"overall_risk must be one of {sorted(_VALID_SEC_RISK)}, "
+                f"got: {overall_risk!r}"
+            )
+
+        # verdict: required, must be in _VALID_SEC_VERDICTS
+        verdict = data.get("verdict")
+        if not isinstance(verdict, str) or verdict not in _VALID_SEC_VERDICTS:
+            return False, (
+                f"verdict must be one of {sorted(_VALID_SEC_VERDICTS)}, "
+                f"got: {verdict!r}"
             )
 
         # summary: required, non-empty string
@@ -867,6 +940,95 @@ class ModelAgentExecutor:
         QA reviews the Builder's proposal against the Planner's acceptance
         criteria. Degrades gracefully — only includes previous outputs that
         are present, never crashes on a missing one.
+        """
+        parts = [
+            f"Task: {ctx.get('title', 'Untitled')}",
+            f"Description: {ctx.get('description', 'No description provided')}",
+            f"Priority: {ctx.get('priority', 'medium')}",
+        ]
+        prev = ctx.get("previous_outputs", {})
+        if prev.get("planner"):
+            parts.append(f"\nPlanner plan:\n{json.dumps(prev['planner'], ensure_ascii=False, separators=(',',':'))}")
+        if prev.get("builder"):
+            parts.append(f"\nBuilder proposal:\n{json.dumps(prev['builder'], ensure_ascii=False, separators=(',',':'))}")
+        return "\n".join(parts)
+
+    # ── Security Reviewer execution (static security review, NOT yet pipeline-wired) ──
+
+    async def _execute_security_reviewer(self, task_context: dict, role=None) -> ExecutionResult:
+        """Call a real LLM to produce a structured security-review verdict.
+
+        Mirrors _execute_qa (resolve -> build -> call -> parse/validate). The
+        Security Reviewer statically reviews the Builder's proposal for SEMANTIC
+        security risks (no tool execution), complementing the rule-based
+        tools/safety.py RiskClassifier.
+
+        VETO INVARIANT — like QA, it INFORMS the Reviewer and does NOT veto: this
+        method ALWAYS returns success=True. A provider error or a malformed/
+        schema-invalid response degrades to a Reviewer-weighable verdict="concerns"
+        instead of an error that would fail the task.
+
+        SR-1 scope note: SECURITY_REVIEWER is NOT yet in the AgentRole enum or
+        AGENT_PIPELINE (that is SR-3), so this method is wired to nothing and is
+        reachable only by its unit test. The *role* to resolve is supplied by the
+        caller (the future SR-3 execute() dispatch will pass
+        AgentRole.SECURITY_REVIEWER; the unit test stubs _resolve_provider), so
+        this method never names the not-yet-existing enum member.
+        SECURITY_REVIEWER_SYSTEM_PROMPT is injected here via dataclasses.replace
+        until the SR-3 pipeline entry carries it (mirrors QA's pre-activation step).
+        """
+        try:
+            defn, provider, model_name = self._resolve_provider(role)
+            defn = replace(defn, system_prompt=SECURITY_REVIEWER_SYSTEM_PROMPT)
+            user_msg = self._build_security_reviewer_user_message(task_context)
+            raw_content, usage = await self._call_model(defn, provider, model_name, user_msg)
+        except Exception as exc:
+            # Provider/config/runtime error — degrade to concerns, never veto.
+            return ExecutionResult(
+                success=True,
+                output=self._sec_concerns_fallback(
+                    f"Security review could not be completed ({exc}); "
+                    f"flagged as concerns for the Reviewer to weigh."
+                ),
+            )
+
+        result = self._parse_and_validate(raw_content, "Security Reviewer", SecurityReviewerOutputSchema)
+        if isinstance(result, ExecutionResult):
+            # Malformed JSON / schema validation failed. Degrade to concerns
+            # rather than success=False, so it informs and does not veto.
+            return ExecutionResult(
+                success=True,
+                output=self._sec_concerns_fallback(
+                    f"Security-review output was malformed or failed schema validation "
+                    f"({result.error_message}); flagged as concerns for the Reviewer to weigh."
+                ),
+                token_usage=result.token_usage,
+            )
+
+        return ExecutionResult(success=True, output=result, token_usage=usage)
+
+    @staticmethod
+    def _sec_concerns_fallback(note: str) -> dict:
+        """A schema-valid security verdict flagging 'concerns' with one finding.
+
+        Used when the security review cannot produce a valid verdict (provider
+        error or malformed output). Returned with success=True so it informs the
+        Reviewer rather than vetoing the task (see the VETO INVARIANT).
+        """
+        return {
+            "review_scope": "Security static review could not be completed normally.",
+            "findings": [{"severity": "medium", "category": "other", "description": note}],
+            "overall_risk": "medium",
+            "verdict": "concerns",
+            "summary": note,
+        }
+
+    @staticmethod
+    def _build_security_reviewer_user_message(ctx: dict) -> str:
+        """Assemble the user-facing prompt from task context for the Security Reviewer.
+
+        Reviews the Builder's proposal (and the Planner plan) for security risks.
+        Degrades gracefully — only includes previous outputs that are present.
         """
         parts = [
             f"Task: {ctx.get('title', 'Untitled')}",
