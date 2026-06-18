@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import uuid
 from datetime import datetime, timezone
 
@@ -27,7 +28,10 @@ def _verify_content_hash(snapshot_data: str, expected_hash: str) -> bool:
     return actual == expected_hash
 
 
-def run_dry_execution(execution_request_id: str) -> dict:
+def run_dry_execution(
+    execution_request_id: str,
+    strict_parent: bool = True,
+) -> dict:
     """Run a dry-run execution for a confirmed execution request.
 
     Rules:
@@ -40,6 +44,14 @@ def run_dry_execution(execution_request_id: str) -> dict:
       dry-run step — no real operations.
     - Creates an execution_results record (status 'completed' or 'failed').
     - Writes audit log.
+
+    strict_parent (route-3, default True): when True the dry-run PREDICTS the
+    real executor's fail-fast on a missing parent directory — a planned file
+    whose parent dir does not exist is marked 'failed' and subsequent
+    file/command actions 'skipped', so the preview matches real execution.
+    When False, a missing-but-in-workspace parent is treated as auto-created
+    (action stays ok). This is a PURE SIMULATION: parent existence is only
+    INSPECTED (os.path.isdir) — no directories are ever created.
 
     Returns:
         dict with execution result fields.
@@ -112,17 +124,66 @@ def run_dry_execution(execution_request_id: str) -> dict:
         proposed_commands = plan.get("proposed_commands", [])
         summary = plan.get("summary", "No summary in snapshot")
 
-        # ── Build dry-run report ────────────────────────────────────
+        # ── Resolve workspace (read-only) for parent prediction ─────
+        # Only predict parent-directory outcomes when a REAL workspace dir
+        # is visible; otherwise fall back to a pure listing so callers with
+        # placeholder / non-existent workspaces are unaffected.
+        real_workspace = None
+        proj_row = conn.execute(
+            """SELECT p.local_repo_path
+               FROM tasks t JOIN projects p ON p.id = t.project_id
+               WHERE t.id = ?""",
+            (req["task_id"],),
+        ).fetchone()
+        if proj_row and proj_row[0] and os.path.isdir(proj_row[0]):
+            real_workspace = os.path.realpath(proj_row[0])
+
+        # ── Build dry-run report (honors strict_parent; pure simulation) ──
         warnings: list[str] = []
+        predicted_failure = False
+        stop_reason = None
 
         planned_file_actions: list[dict] = []
         for f in proposed_files:
+            path = f.get("path", "<unknown>")
+            operation = f.get("operation") or f.get("action") or "unknown"
             action = {
-                "path": f.get("path", "<unknown>"),
-                "operation": f.get("operation") or f.get("action") or "unknown",
+                "path": path,
+                "operation": operation,
                 "dry_run": True,
                 "executed": False,
+                "status": "ok",
             }
+
+            if predicted_failure:
+                # Fail-fast: a prior predicted failure stops the batch.
+                action["status"] = "skipped"
+                action["reason"] = "Would be skipped due to earlier predicted failure"
+                planned_file_actions.append(action)
+                continue
+
+            # Parent-directory prediction — READ-ONLY (never creates dirs).
+            if real_workspace and operation in ("create", "modify"):
+                full_path = os.path.normpath(os.path.join(real_workspace, path))
+                parent_dir = os.path.dirname(full_path)
+                if not os.path.isdir(parent_dir):
+                    real_parent = os.path.realpath(os.path.normpath(parent_dir))
+                    within = (
+                        real_parent == real_workspace
+                        or real_parent.startswith(real_workspace + os.sep)
+                    )
+                    if strict_parent or not within:
+                        # strict_parent → fail-fast; out-of-workspace always fails.
+                        action["status"] = "failed"
+                        action["reason"] = (
+                            "Parent directory does not exist"
+                            if within else "Parent directory outside workspace"
+                        )
+                        predicted_failure = True
+                        stop_reason = f"Parent directory missing for '{path}'"
+                    # else (not strict, within workspace): would be auto-created
+                    # by the real executor → action stays "ok".
+
             planned_file_actions.append(action)
 
         planned_command_actions: list[dict] = []
@@ -132,7 +193,12 @@ def run_dry_execution(execution_request_id: str) -> dict:
                 "command": cmd,
                 "dry_run": True,
                 "executed": False,
+                "status": "skipped" if predicted_failure else "ok",
             }
+            if predicted_failure:
+                action["reason"] = (
+                    "Would be skipped due to predicted file execution failure"
+                )
             planned_command_actions.append(action)
 
         if not proposed_files and not proposed_commands:
@@ -144,15 +210,17 @@ def run_dry_execution(execution_request_id: str) -> dict:
             "snapshot_id": snap["id"],
             "snapshot_content_hash": snap["content_hash"],
             "summary": summary,
+            "strict_parent": strict_parent,
             "planned_file_actions": planned_file_actions,
             "planned_command_actions": planned_command_actions,
+            "stop_reason": stop_reason,
             "warnings": warnings,
         }
 
         # ── Create execution_results record ─────────────────────────
         result_id = str(uuid.uuid4())
         now = datetime.now(timezone.utc).isoformat()
-        status = "completed"
+        status = "failed" if predicted_failure else "completed"
 
         conn.execute(
             """INSERT INTO execution_results
@@ -187,7 +255,7 @@ def run_dry_execution(execution_request_id: str) -> dict:
                 None,
                 "info",
                 "execution_result_service",
-                f"Dry-run execution completed for request {execution_request_id}",
+                f"Dry-run execution {status} for request {execution_request_id}",
                 json.dumps({
                     "event_type": "execution_result:dry_run",
                     "execution_request_id": execution_request_id,

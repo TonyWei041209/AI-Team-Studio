@@ -675,8 +675,11 @@ async def update_execution_request(request_id: str, body: _StatusUpdate):
 
 
 @router.post("/execution-requests/{request_id}/dry-run")
-async def dry_run_execution(request_id: str):
+async def dry_run_execution(request_id: str, body: Optional[_ExecuteOptions] = None):
     """Run a dry-run execution for a confirmed execution request.
+
+    Optional JSON body (route-3): {"strict_parent": <bool>} — predicts the
+    real executor's missing-parent fail-fast in the preview. Defaults to True.
 
     Returns 200 with the execution result (idempotent on repeat calls).
     Returns 404 if request not found.
@@ -684,8 +687,9 @@ async def dry_run_execution(request_id: str):
     """
     from agents.execution_result_service import run_dry_execution
 
+    strict_parent = body.strict_parent if body is not None else True
     try:
-        result = run_dry_execution(request_id)
+        result = run_dry_execution(request_id, strict_parent=strict_parent)
     except ValueError as e:
         msg = str(e).lower()
         if "not found" in msg and "execution request" in msg:
