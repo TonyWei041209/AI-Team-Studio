@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Unified cross-phase regression runner.
 
-Sequentially invokes all phase-level regression runners (6E → 6F → 6G → 7 → 8A → 8B)
+Sequentially invokes all phase-level regression runners (6B-D → 6E → 6F → 6G → 7 → 8A → 8B)
 and produces a consolidated summary report.
 
 Each runner is executed as an independent subprocess. This script does not
@@ -21,6 +21,12 @@ PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # Fixed execution order — matches phase progression
 RUNNERS = [
+    {
+        "name": "Phase 6B-D",
+        "script": "scripts/run-6bcd-regression-isolated.py",
+        "expected_suites": 3,
+        "expected_checks": "~172",
+    },
     {
         "name": "Phase 6E",
         "script": "scripts/run-6e-regression-isolated.py",
