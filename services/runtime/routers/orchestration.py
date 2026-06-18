@@ -641,6 +641,17 @@ class _StatusUpdate(BaseModel):
     reason: Optional[str] = None
 
 
+class _ExecuteOptions(BaseModel):
+    """Optional body for execute / dry-run (route-3).
+
+    strict_parent (default True): a file action whose parent directory is
+    missing fails fast instead of auto-creating the parent. The body is
+    optional so existing bodyless POSTs keep working (default = True).
+    """
+
+    strict_parent: bool = True
+
+
 @router.patch("/execution-requests/{request_id}")
 async def update_execution_request(request_id: str, body: _StatusUpdate):
     """Confirm or reject an execution request."""
@@ -831,8 +842,11 @@ async def get_action_plan(request_id: str):
 
 
 @router.post("/execution-requests/{request_id}/execute")
-async def execute_scoped(request_id: str):
+async def execute_scoped(request_id: str, body: Optional[_ExecuteOptions] = None):
     """Trigger real (scoped) execution for a confirmed request.
+
+    Optional JSON body (route-3): {"strict_parent": <bool>}. When omitted,
+    strict_parent defaults to True (missing parent dir → fail-fast).
 
     Pre-conditions checked by API layer:
     1. Execution request exists → 404
@@ -930,8 +944,11 @@ async def execute_scoped(request_id: str):
         return result
 
     # Execute
+    strict_parent = body.strict_parent if body is not None else True
     try:
-        raw_result = execute_scoped_files(request_id, workspace_root)
+        raw_result = execute_scoped_files(
+            request_id, workspace_root, strict_parent=strict_parent
+        )
     except ValueError as e:
         raise HTTPException(
             status_code=409,
