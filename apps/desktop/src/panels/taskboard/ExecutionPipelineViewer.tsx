@@ -41,6 +41,10 @@ interface ExecutionPipelineViewerProps {
   executeLoading: boolean;
   executeError: string | null;
   onTriggerExecution: (requestId: string) => void;
+  // route-3: missing-parent policy toggle (default checked = fail-fast)
+  strictParent: boolean;
+  onStrictParentChange: (value: boolean) => void;
+  strictParentLocked: boolean;
   // Real run
   realRunResult?: RealRunResult | "empty";
   realRunLoading: boolean;
@@ -78,6 +82,9 @@ export function ExecutionPipelineViewer({
   executeLoading,
   executeError,
   onTriggerExecution,
+  strictParent,
+  onStrictParentChange,
+  strictParentLocked,
   realRunResult,
   realRunLoading,
   realRunError,
@@ -475,6 +482,25 @@ export function ExecutionPipelineViewer({
           {er.status === "confirmed" &&
             !(realRunResult && realRunResult !== "empty") && (
             <div className="execute-section">
+              <label className="strict-parent-toggle">
+                <input
+                  type="checkbox"
+                  checked={strictParent}
+                  disabled={strictParentLocked}
+                  onChange={(e) => onStrictParentChange(e.target.checked)}
+                />
+                <span className="strict-parent-label">
+                  {t("execution.strictParentLabel")}
+                </span>
+              </label>
+              <span className="strict-parent-hint">
+                {t("execution.strictParentHint")}
+              </span>
+              {strictParentLocked && (
+                <span className="strict-parent-locked">
+                  {t("execution.strictParentLocked")}
+                </span>
+              )}
               <button
                 className="btn btn-sm execute-btn"
                 disabled={executeLoading}

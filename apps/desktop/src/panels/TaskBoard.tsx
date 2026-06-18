@@ -1337,6 +1337,17 @@ export function TaskBoard({ projectId, onNavigateToSettings, autoExpandTaskId, o
                               executeLoading={execReq ? executeLoading === execReq.id : false}
                               executeError={execReq ? (executeError[execReq.id] ?? null) : null}
                               onTriggerExecution={requestExecConfirm}
+                              strictParent={execReq ? (strictParent[execReq.id] ?? true) : true}
+                              onStrictParentChange={(v) => {
+                                if (execReq) {
+                                  setStrictParent((prev) => ({ ...prev, [execReq.id]: v }));
+                                }
+                              }}
+                              strictParentLocked={
+                                execReq
+                                  ? !!dryRun || (!!realRun && realRun !== "empty")
+                                  : false
+                              }
                               onLoadRealRunResult={loadRealRunResult}
                               rollbackResult={rollback}
                               rollbackLoading={execReq ? rollbackLoading === execReq.id : false}

@@ -53,6 +53,9 @@ interface ProposalCardProps {
   executeLoading: boolean;
   executeError: string | null;
   onTriggerExecution: (requestId: string) => void;
+  strictParent: boolean;
+  onStrictParentChange: (value: boolean) => void;
+  strictParentLocked: boolean;
   onLoadRealRunResult: (requestId: string) => void;
   rollbackResult?: RollbackResult | "empty";
   rollbackLoading: boolean;
@@ -96,6 +99,9 @@ export function ProposalCard({
   executeLoading,
   executeError,
   onTriggerExecution,
+  strictParent,
+  onStrictParentChange,
+  strictParentLocked,
   onLoadRealRunResult,
   rollbackResult,
   rollbackLoading,
@@ -388,6 +394,9 @@ export function ProposalCard({
           executeLoading={executeLoading}
           executeError={executeError}
           onTriggerExecution={onTriggerExecution}
+          strictParent={strictParent}
+          onStrictParentChange={onStrictParentChange}
+          strictParentLocked={strictParentLocked}
           realRunResult={realRunResult}
           realRunLoading={realRunLoading}
           realRunError={realRunError}

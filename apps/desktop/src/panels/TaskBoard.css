@@ -659,6 +659,44 @@
   padding: 4px 8px;
 }
 
+/* ── strict_parent policy toggle (route-3) ──────────────── */
+
+.strict-parent-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  user-select: none;
+}
+
+.strict-parent-toggle input:disabled {
+  cursor: not-allowed;
+}
+
+.strict-parent-toggle:has(input:disabled) {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.strict-parent-label {
+  font-weight: 600;
+}
+
+.strict-parent-hint {
+  width: 100%;
+  font-size: 10px;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.strict-parent-locked {
+  width: 100%;
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
 /* ── Real-Run Execution Result (Phase 7B-1) ─────────────── */
 
 .real-run-section {
