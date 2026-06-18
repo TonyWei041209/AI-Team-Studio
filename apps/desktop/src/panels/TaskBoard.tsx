@@ -106,6 +106,9 @@ export function TaskBoard({ projectId, onNavigateToSettings, autoExpandTaskId, o
   // Execute trigger (Phase 7B-2)
   const [executeLoading, setExecuteLoading] = useState<string | null>(null);
   const [executeError, setExecuteError] = useState<Record<string, string | null>>({});
+  // route-3: per-request missing-parent policy, keyed by execution_request_id.
+  // Effective value is `strictParent[requestId] ?? true` (default = fail-fast).
+  const [strictParent, setStrictParent] = useState<Record<string, boolean>>({});
 
   // Rollback result (Phase 7D-1) — keyed by execution_request_id
   const [rollbackResults, setRollbackResults] = useState<Record<string, RollbackResult | "empty">>({});
@@ -429,6 +432,7 @@ export function TaskBoard({ projectId, onNavigateToSettings, autoExpandTaskId, o
       try {
         const result = await api.post<DryRunResult>(
           `/api/execution-requests/${requestId}/dry-run`,
+          { strict_parent: strictParent[requestId] ?? true },
         );
         setDryRunResults((prev) => ({ ...prev, [requestId]: result }));
       } catch (drErr) {
@@ -439,7 +443,7 @@ export function TaskBoard({ projectId, onNavigateToSettings, autoExpandTaskId, o
         setDryRunLoading(null);
       }
     },
-    [],
+    [strictParent],
   );
 
   // Dry-run: load existing result (Phase 6F-B)
@@ -467,6 +471,7 @@ export function TaskBoard({ projectId, onNavigateToSettings, autoExpandTaskId, o
     try {
       const result = await api.post<DryRunResult>(
         `/api/execution-requests/${requestId}/dry-run`,
+        { strict_parent: strictParent[requestId] ?? true },
       );
       setDryRunResults((prev) => ({ ...prev, [requestId]: result }));
     } catch (err) {
@@ -476,7 +481,7 @@ export function TaskBoard({ projectId, onNavigateToSettings, autoExpandTaskId, o
     } finally {
       setDryRunLoading(null);
     }
-  }, []);
+  }, [strictParent]);
 
   // Action plan: load on demand (Phase 6G-A)
   const loadActionPlan = useCallback(async (requestId: string) => {
@@ -527,6 +532,7 @@ export function TaskBoard({ projectId, onNavigateToSettings, autoExpandTaskId, o
     try {
       const result = await api.post<RealRunResult>(
         `/api/execution-requests/${requestId}/execute`,
+        { strict_parent: strictParent[requestId] ?? true },
       );
       // Auto-populate real-run result → viewer shows immediately, Execute button hides
       setRealRunResults((prev) => ({ ...prev, [requestId]: result }));
@@ -555,7 +561,7 @@ export function TaskBoard({ projectId, onNavigateToSettings, autoExpandTaskId, o
     } finally {
       setExecuteLoading(null);
     }
-  }, []);
+  }, [strictParent]);
 
   // Load rollback result (Phase 7D-1) — on-demand, 404 = empty
   const loadRollbackResult = useCallback(async (requestId: string) => {
