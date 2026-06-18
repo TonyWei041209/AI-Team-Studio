@@ -255,7 +255,8 @@ AGENT_PIPELINE: list[AgentRoleDefinition] = [
         required_task_status=TaskStatus.IN_PROGRESS,
         success_task_status=TaskStatus.REVIEWING,
         allowed_tools=["read", "bash", "grep", "glob"],
-        output_sections=["validation_scope", "test_actions", "result", "findings", "repro_steps"],
+        output_sections=["validation_scope", "review_findings", "acceptance_criteria_assessment", "result", "summary"],
+        system_prompt=QA_SYSTEM_PROMPT,
     ),
     AgentRoleDefinition(
         role=AgentRole.REVIEWER,

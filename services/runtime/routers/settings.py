@@ -254,8 +254,8 @@ async def get_role_model_settings():
 
 # Roles that are allowed to enable real model calls.
 # Phase 6C: planner, reviewer.  Phase 6D: builder added (plan-only mode).
-# QA is explicitly blocked from real model activation.
-_REAL_MODEL_ALLOWED_ROLES = {"planner", "builder", "reviewer"}
+# QA-Real: qa added as a real static-review role (informs the Reviewer, never vetoes).
+_REAL_MODEL_ALLOWED_ROLES = {"planner", "builder", "qa", "reviewer"}
 
 
 @router.patch("/role-models", response_model=RoleModelSettingsResponse)
@@ -265,7 +265,7 @@ async def update_role_model_settings(body: RoleModelSettingsPatch):
     Validation rules:
     - role must be a valid AgentRole
     - When enabled=true: provider and model must be non-empty, provider must exist
-    - QA cannot be enabled for real model calls (Phase 6D)
+    - Only roles in _REAL_MODEL_ALLOWED_ROLES may be enabled for real model calls
     - Only provided fields are updated — omitted fields keep their current value
     """
     registry = get_registry()

@@ -11,11 +11,10 @@ from __future__ import annotations
 
 import json
 import re
-from dataclasses import replace
 from typing import Any
 
 from models import AgentRole, ReviewDecision
-from agents.definitions import get_definition, QA_SYSTEM_PROMPT
+from agents.definitions import get_definition
 from agents.skill_loader import build_enhanced_system_prompt
 from agents.executor import ExecutionResult
 from providers.base import CompletionRequest, Message, MessageRole
@@ -522,15 +521,16 @@ def _risk_rank(level: str) -> int:
 class ModelAgentExecutor:
     """Executes agent roles using real LLM provider calls.
 
-    Currently supports the **Planner**, **Builder** (plan-only), and **Reviewer** roles.
-    QA will raise ``NotImplementedError``.
+    Supports the **Planner**, **Builder** (plan-only), **QA** (static review),
+    and **Reviewer** roles.
 
     Phase 6C: Provider/model are resolved from role_model_settings DB table.
     Phase 6D: Builder added in plan-only mode (outputs change plan, no tool execution).
     Phase 6E-A: Builder output normalized with execution proposal fields.
+    QA-Real: QA added as a real static-review role (informs the Reviewer, never vetoes).
     """
 
-    _SUPPORTED_ROLES = {AgentRole.PLANNER, AgentRole.BUILDER, AgentRole.REVIEWER}
+    _SUPPORTED_ROLES = {AgentRole.PLANNER, AgentRole.BUILDER, AgentRole.QA, AgentRole.REVIEWER}
 
     def __init__(self, registry: ProviderRegistry | None = None):
         self._registry = registry or get_registry()
@@ -545,6 +545,8 @@ class ModelAgentExecutor:
             return await self._execute_planner(task_context)
         if role == AgentRole.BUILDER:
             return await self._execute_builder(task_context)
+        if role == AgentRole.QA:
+            return await self._execute_qa(task_context)
         if role == AgentRole.REVIEWER:
             return await self._execute_reviewer(task_context)
         raise NotImplementedError(
@@ -795,33 +797,68 @@ class ModelAgentExecutor:
 
         return "\n".join(parts)
 
-    # ── QA execution (static review, NOT yet pipeline-wired) ──
+    # ── QA execution (static review) ──────────────────────────
 
     async def _execute_qa(self, task_context: dict) -> ExecutionResult:
         """Call a real LLM to produce a structured QA static-review verdict.
 
         Mirrors _execute_planner / _execute_reviewer: resolve provider/model,
-        build the user message, call the model, parse-and-validate the JSON.
+        build the user message, call the model, parse-and-validate the JSON
+        (system prompt comes from the QA definition, like the other roles).
         QA statically reviews the Builder's proposal against the Planner's
         acceptance criteria — no tool execution.
 
-        NOTE: the QA AgentRoleDefinition intentionally leaves system_prompt
-        unset until pipeline activation (Step 1), so QA_SYSTEM_PROMPT is
-        injected here via dataclasses.replace (a fresh copy — the shared
-        definition is not mutated). This method is not wired into execute()
-        or the orchestrator yet (Step 3).
+        VETO INVARIANT — QA INFORMS the Reviewer, it does NOT veto. The
+        orchestrator fails a task on any step success=False (see
+        orchestrator._execute_step / the run loop). To avoid QA unilaterally
+        failing the task and bypassing the Reviewer gate, this method ALWAYS
+        returns success=True: a malformed/failed QA response is degraded to a
+        Reviewer-weighable result="concerns" verdict instead of an error.
         """
-        defn, provider, model_name = self._resolve_provider(AgentRole.QA)
-        defn = replace(defn, system_prompt=QA_SYSTEM_PROMPT)
-        user_msg = self._build_qa_user_message(task_context)
-        raw_content, usage = await self._call_model(defn, provider, model_name, user_msg)
+        try:
+            defn, provider, model_name = self._resolve_provider(AgentRole.QA)
+            user_msg = self._build_qa_user_message(task_context)
+            raw_content, usage = await self._call_model(defn, provider, model_name, user_msg)
+        except Exception as exc:
+            # Provider/config/runtime error — degrade to concerns, never veto.
+            return ExecutionResult(
+                success=True,
+                output=self._qa_concerns_fallback(
+                    f"QA could not complete a real-model review ({exc}); "
+                    f"flagged as concerns for the Reviewer to weigh."
+                ),
+            )
 
         result = self._parse_and_validate(raw_content, "QA", QaOutputSchema)
         if isinstance(result, ExecutionResult):
-            result.token_usage = usage  # preserve actual provider/model for logging
-            return result  # validation failed
+            # Malformed JSON / schema validation failed. Degrade to concerns
+            # rather than success=False, so QA informs and does not veto.
+            return ExecutionResult(
+                success=True,
+                output=self._qa_concerns_fallback(
+                    f"QA model output was malformed or failed schema validation "
+                    f"({result.error_message}); flagged as concerns for the Reviewer to weigh."
+                ),
+                token_usage=result.token_usage,
+            )
 
         return ExecutionResult(success=True, output=result, token_usage=usage)
+
+    @staticmethod
+    def _qa_concerns_fallback(note: str) -> dict:
+        """A schema-valid QA verdict flagging 'concerns' with a single finding.
+
+        Used when QA cannot produce a valid verdict (provider error or malformed
+        output). Returned with success=True so QA informs the Reviewer rather
+        than vetoing the task (see the VETO INVARIANT in _execute_qa).
+        """
+        return {
+            "validation_scope": "QA static review could not be completed normally.",
+            "review_findings": [{"severity": "major", "description": note}],
+            "acceptance_criteria_assessment": [],
+            "result": "concerns",
+            "summary": note,
+        }
 
     @staticmethod
     def _build_qa_user_message(ctx: dict) -> str:

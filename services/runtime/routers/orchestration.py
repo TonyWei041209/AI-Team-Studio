@@ -116,7 +116,7 @@ async def orchestrate_task(
     executors: dict[AgentRole, AgentExecutor] = {}
     registry = get_registry()
     role_configs = load_role_model_settings()
-    for role_enum in (AgentRole.PLANNER, AgentRole.BUILDER, AgentRole.REVIEWER):
+    for role_enum in (AgentRole.PLANNER, AgentRole.BUILDER, AgentRole.QA, AgentRole.REVIEWER):
         cfg = role_configs.get(role_enum.value, {})
         if cfg.get("enabled") and cfg.get("provider", "mock") != "mock":
             provider = registry.get(cfg["provider"])
