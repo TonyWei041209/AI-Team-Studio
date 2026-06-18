@@ -326,6 +326,83 @@ class BuilderOutputSchema:
         return True, ""
 
 
+# ── QA output schema validation (static review) ──────────────
+
+_VALID_QA_RESULTS = {"pass", "concerns", "fail"}
+_VALID_QA_SEVERITIES = {"critical", "major", "minor", "info"}
+
+
+class QaOutputSchema:
+    """Validates QA JSON output against the static-review schema.
+
+    QA performs static review of the Builder's proposal (no execution), so the
+    schema captures findings, a per-criterion assessment, and an overall verdict.
+    """
+
+    @staticmethod
+    def validate(data: Any) -> tuple[bool, str]:
+        """Check *data* conforms to the QA static-review output schema.
+
+        Returns ``(True, "")`` on success or ``(False, "<reason>")`` on failure.
+        """
+        if not isinstance(data, dict):
+            return False, "Output must be a JSON object"
+
+        # validation_scope: required, non-empty string
+        vs = data.get("validation_scope")
+        if not isinstance(vs, str) or not vs.strip():
+            return False, "validation_scope must be a non-empty string"
+
+        # review_findings: required, list (can be empty)
+        findings = data.get("review_findings")
+        if not isinstance(findings, list):
+            return False, "review_findings must be a list"
+        for i, item in enumerate(findings):
+            if not isinstance(item, dict):
+                return False, f"review_findings[{i}] must be an object"
+            sev = item.get("severity")
+            if not isinstance(sev, str) or sev not in _VALID_QA_SEVERITIES:
+                return False, (
+                    f"review_findings[{i}].severity must be one of "
+                    f"{sorted(_VALID_QA_SEVERITIES)}, got: {sev!r}"
+                )
+            desc = item.get("description")
+            if not isinstance(desc, str) or not desc.strip():
+                return False, f"review_findings[{i}].description must be a non-empty string"
+
+        # acceptance_criteria_assessment: required, list (can be empty)
+        assessment = data.get("acceptance_criteria_assessment")
+        if not isinstance(assessment, list):
+            return False, "acceptance_criteria_assessment must be a list"
+        for i, item in enumerate(assessment):
+            if not isinstance(item, dict):
+                return False, f"acceptance_criteria_assessment[{i}] must be an object"
+            criterion = item.get("criterion")
+            if not isinstance(criterion, str):
+                return False, f"acceptance_criteria_assessment[{i}].criterion must be a string"
+            met = item.get("met")
+            if not isinstance(met, bool):
+                return False, f"acceptance_criteria_assessment[{i}].met must be a boolean"
+            rationale = item.get("rationale")
+            if not isinstance(rationale, str):
+                return False, f"acceptance_criteria_assessment[{i}].rationale must be a string"
+
+        # result: required, must be "pass", "concerns", or "fail"
+        result = data.get("result")
+        if not isinstance(result, str) or result not in _VALID_QA_RESULTS:
+            return False, (
+                f"result must be one of {sorted(_VALID_QA_RESULTS)}, "
+                f"got: {result!r}"
+            )
+
+        # summary: required, non-empty string
+        summary = data.get("summary")
+        if not isinstance(summary, str) or not summary.strip():
+            return False, "summary must be a non-empty string"
+
+        return True, ""
+
+
 # ── Code-fence stripping ──────────────────────────────────────
 
 _FENCE_RE = re.compile(
