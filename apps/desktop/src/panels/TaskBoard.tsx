@@ -537,31 +537,60 @@ export function TaskBoard({ projectId, onNavigateToSettings, autoExpandTaskId, o
       // Auto-populate real-run result → viewer shows immediately, Execute button hides
       setRealRunResults((prev) => ({ ...prev, [requestId]: result }));
     } catch (err: unknown) {
-      // Extract blocked_reasons from ApiError detail (409 case)
-      let msg = "Execution failed";
-      if (err && typeof err === "object" && "detail" in err) {
-        const detail = (err as { detail: string }).detail;
-        // ApiError.detail may be JSON string of { message, blocked_reasons }
+      // Build a clear, translated message. ALWAYS store a string — never an
+      // object. The eligibility-gate 409 returns an OBJECT detail
+      // ({ message, blocked_reasons, summary }); the executor ValueError path
+      // returns a STRING detail. Handle both shapes so the UI never renders an
+      // object (which would crash with "Objects are not valid as a React child").
+      let blockedReasons: string[] = [];
+      let backendMessage = "";
+
+      const rawDetail =
+        err && typeof err === "object" && "detail" in err
+          ? (err as { detail: unknown }).detail
+          : undefined;
+
+      if (rawDetail && typeof rawDetail === "object") {
+        // Object detail (eligibility gate)
+        const d = rawDetail as { blocked_reasons?: unknown; message?: unknown };
+        if (Array.isArray(d.blocked_reasons)) {
+          blockedReasons = d.blocked_reasons.map((r) => String(r));
+        }
+        if (typeof d.message === "string") backendMessage = d.message;
+      } else if (typeof rawDetail === "string") {
+        // String detail — may be JSON (defensive) or a plain message.
         try {
-          const parsed = JSON.parse(detail);
-          if (parsed.blocked_reasons && Array.isArray(parsed.blocked_reasons)) {
-            msg = `Not eligible: ${parsed.blocked_reasons.join(", ")}`;
-          } else if (parsed.message) {
-            msg = parsed.message;
-          } else {
-            msg = detail;
+          const parsed = JSON.parse(rawDetail);
+          if (parsed && Array.isArray(parsed.blocked_reasons)) {
+            blockedReasons = parsed.blocked_reasons.map((r: unknown) => String(r));
           }
+          if (parsed && typeof parsed.message === "string") backendMessage = parsed.message;
+          if (blockedReasons.length === 0 && !backendMessage) backendMessage = rawDetail;
         } catch {
-          msg = detail;
+          backendMessage = rawDetail;
         }
       } else if (err instanceof Error) {
-        msg = err.message;
+        backendMessage = err.message;
       }
+
+      let msg: string;
+      if (blockedReasons.includes("dry_run_not_completed")) {
+        // Route-3: a strict-parent dry-run predicted a missing parent dir,
+        // so eligibility blocks execute. Give an actionable, translated message.
+        msg = t("execution.executeBlockedDryRunFailed");
+      } else if (blockedReasons.length > 0) {
+        msg = t("execution.executeNotEligible", { reasons: blockedReasons.join(", ") });
+      } else if (backendMessage) {
+        msg = backendMessage;
+      } else {
+        msg = t("execution.executeFailed");
+      }
+
       setExecuteError((prev) => ({ ...prev, [requestId]: msg }));
     } finally {
       setExecuteLoading(null);
     }
-  }, [strictParent]);
+  }, [strictParent, t]);
 
   // Load rollback result (Phase 7D-1) — on-demand, 404 = empty
   const loadRollbackResult = useCallback(async (requestId: string) => {
