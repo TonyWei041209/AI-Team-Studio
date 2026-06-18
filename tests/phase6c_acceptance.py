@@ -187,7 +187,7 @@ check("Error mentions provider not registered", "not registered" in data.get("de
 # ==============================================================
 # Section 5: Builder allowed (plan-only), QA still blocked
 # ==============================================================
-print("\n=== Section 5: Builder allowed (plan-only), QA blocked ===")
+print("\n=== Section 5: Builder + QA allowed (real model config) ===")
 
 # Phase 6D: Builder is allowed for real model config (plan-only mode —
 # outputs structured change plans but does NOT execute tools/files/git).
@@ -200,12 +200,20 @@ check("Builder provider updated", updated_builder.get("provider") == "anthropic"
 check("Builder model updated", updated_builder.get("model") == "claude-sonnet-4-20250514")
 check("Builder enabled", updated_builder.get("enabled") is True)
 
-# QA remains blocked from real model activation
+# QA-Real: QA is now allowed for real model config (static-review mode)
 code, data = PATCH("/settings/role-models", {
     "role_models": [{"role": "qa", "provider": "anthropic", "model": "claude-sonnet-4-20250514", "enabled": True}]
 })
-check("QA enable real -> 400", code == 400)
-check("Error mentions qa cannot be enabled", "qa" in data.get("detail", "").lower())
+check("QA enable real -> 200 (static-review allowed)", code == 200)
+updated_qa = data.get("role_models", {}).get("qa", {})
+check("QA provider updated", updated_qa.get("provider") == "anthropic")
+check("QA enabled", updated_qa.get("enabled") is True)
+
+# Reset QA back to mock for subsequent sections (seed default stays disabled)
+code, data = PATCH("/settings/role-models", {
+    "role_models": [{"role": "qa", "provider": "mock", "model": "", "enabled": False}]
+})
+check("QA mock reset -> 200", code == 200)
 
 # Reset builder back to mock for subsequent sections
 code, data = PATCH("/settings/role-models", {

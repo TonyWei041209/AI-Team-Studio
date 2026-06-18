@@ -196,13 +196,11 @@ check("Reviewer output_sections includes decision",
 check("Reviewer output_sections includes confidence",
       "confidence" in reviewer_def.output_sections)
 
-# Builder and QA still mock
+# Builder and QA are now real roles (system prompts wired)
 for role_enum in (AgentRole.BUILDER, AgentRole.QA):
     defn = get_definition(role_enum)
-    check(f"{defn.display_name} still uses mock provider",
-          defn.model_provider == "mock")
-    check(f"{defn.display_name} system_prompt is empty",
-          defn.system_prompt == "")
+    check(f"{defn.display_name} has a system_prompt (real role)",
+          len(defn.system_prompt) > 100)
 
 # Planner still has anthropic (from Round 1)
 planner_def = get_definition(AgentRole.PLANNER)
@@ -229,28 +227,11 @@ check("REVIEWER in supported roles",
 check("PLANNER in supported roles",
       AgentRole.PLANNER in ModelAgentExecutor._SUPPORTED_ROLES)
 
-# BUILDER should raise NotImplementedError
-import asyncio
-try:
-    asyncio.get_event_loop().run_until_complete(
-        executor.execute(AgentRole.BUILDER, {"title": "test"})
-    )
-    check("BUILDER raises NotImplementedError", False, "no error raised")
-except NotImplementedError:
-    check("BUILDER raises NotImplementedError", True)
-except Exception as e:
-    check("BUILDER raises NotImplementedError", False, f"wrong error: {e}")
-
-# QA should raise NotImplementedError
-try:
-    asyncio.get_event_loop().run_until_complete(
-        executor.execute(AgentRole.QA, {"title": "test"})
-    )
-    check("QA raises NotImplementedError", False, "no error raised")
-except NotImplementedError:
-    check("QA raises NotImplementedError", True)
-except Exception as e:
-    check("QA raises NotImplementedError", False, f"wrong error: {e}")
+# BUILDER and QA are now supported real roles (no longer raise NotImplementedError)
+check("BUILDER in supported roles",
+      AgentRole.BUILDER in ModelAgentExecutor._SUPPORTED_ROLES)
+check("QA in supported roles",
+      AgentRole.QA in ModelAgentExecutor._SUPPORTED_ROLES)
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -299,11 +280,14 @@ planner_run = [r for r in runs if r["role"] == "planner"][0]
 check("Planner run model_provider is 'anthropic' (from definition)",
       planner_run["model_provider"] == "anthropic")
 
-# Builder/QA should be mock
-for role_name in ("builder", "qa"):
-    role_run = [r for r in runs if r["role"] == role_name][0]
-    check(f"{role_name} run model_provider is 'mock'",
-          role_run["model_provider"] == "mock")
+# Builder run shows 'anthropic' from its definition (executor was mock — no key).
+# QA run shows 'mock' (QA keeps the mock seed provider; runtime truth is the DB).
+builder_run = [r for r in runs if r["role"] == "builder"][0]
+check("builder run model_provider is 'anthropic' (from definition)",
+      builder_run["model_provider"] == "anthropic")
+qa_run = [r for r in runs if r["role"] == "qa"][0]
+check("qa run model_provider is 'mock' (from definition)",
+      qa_run["model_provider"] == "mock")
 
 # Reviewer run should show anthropic (from definition) even though executor was mock
 reviewer_run = [r for r in runs if r["role"] == "reviewer"][0]

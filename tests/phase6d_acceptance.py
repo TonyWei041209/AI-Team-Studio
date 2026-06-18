@@ -203,10 +203,11 @@ check("Builder output_sections has at least 6 core items", len(builder_def.outpu
     f in builder_def.output_sections for f in ["change_summary", "proposed_files", "change_steps", "reasoning_summary", "validation_plan", "risk_notes"]
 ))
 
-# QA should still be mock
+# QA-Real: QA is now a real role (system_prompt wired). Its seed model_provider
+# stays "mock" — runtime provider/model come from role_model_settings (DB).
 qa_def = get_definition(AgentRole.QA)
-check("QA still uses mock provider", qa_def.model_provider == "mock")
-check("QA system_prompt is empty", qa_def.system_prompt == "")
+check("QA seed model_provider is still mock (DB is runtime truth)", qa_def.model_provider == "mock")
+check("QA now has a system_prompt (real role)", len(qa_def.system_prompt) > 100)
 
 # Planner/Reviewer unchanged
 planner_def = get_definition(AgentRole.PLANNER)
@@ -242,15 +243,20 @@ PATCH("/settings/role-models", {
 
 
 # ==============================================================
-# Section 4: Builder role-model PATCH -- QA still blocked
+# Section 4: Builder role-model PATCH -- QA allowed (static review)
 # ==============================================================
-print("\n=== Section 4: QA still blocked ===")
+print("\n=== Section 4: QA allowed (static review) ===")
 
 code, data = PATCH("/settings/role-models", {
     "role_models": [{"role": "qa", "provider": "anthropic", "model": "claude-sonnet-4-20250514", "enabled": True}]
 })
-check("QA enable real -> 400", code == 400)
-check("Error mentions qa", "qa" in data.get("detail", "").lower())
+check("QA enable real -> 200 (static-review allowed)", code == 200)
+check("QA now enabled with real provider",
+      data.get("role_models", {}).get("qa", {}).get("enabled") is True)
+# Reset QA to mock so later sections see the disabled seed default
+PATCH("/settings/role-models", {
+    "role_models": [{"role": "qa", "provider": "mock", "model": "", "enabled": False}]
+})
 
 
 # ==============================================================
@@ -352,18 +358,9 @@ check("ModelAgentExecutor._SUPPORTED_ROLES includes PLANNER",
 check("ModelAgentExecutor._SUPPORTED_ROLES includes REVIEWER",
       AgentRole.REVIEWER in ModelAgentExecutor._SUPPORTED_ROLES)
 
-# QA should still raise NotImplementedError
-import asyncio
-executor = ModelAgentExecutor()
-try:
-    asyncio.get_event_loop().run_until_complete(
-        executor.execute(AgentRole.QA, {"title": "test"})
-    )
-    check("QA raises NotImplementedError", False, "no exception raised")
-except NotImplementedError:
-    check("QA raises NotImplementedError", True)
-except Exception as e:
-    check("QA raises NotImplementedError", False, f"got {type(e).__name__}: {e}")
+# QA-Real: QA is now a supported real role (no longer raises NotImplementedError)
+check("ModelAgentExecutor._SUPPORTED_ROLES includes QA",
+      AgentRole.QA in ModelAgentExecutor._SUPPORTED_ROLES)
 
 
 # ==============================================================
