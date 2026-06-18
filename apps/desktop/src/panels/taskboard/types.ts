@@ -30,6 +30,8 @@ export interface ProposedCommand {
 export interface ProposalData {
   change_summary?: string;
   proposed_files?: ProposedFile[];
+  /** Legacy/alternate Builder output field; some outputs use this instead of proposed_files. */
+  changed_files?: ProposedFile[];
   proposed_commands?: ProposedCommand[];
   risk_level?: string;
   requires_approval?: boolean;
@@ -44,6 +46,8 @@ export interface ExecutionProposal {
   risk_level: string;
   requires_approval: boolean;
   status: string;
+  /** Raw JSON string of the Builder output (the API returns both this and the parsed form). */
+  proposal_data: string;
   proposal_data_parsed: ProposalData;
   approval_reasons_parsed: string[];
   created_at: string;

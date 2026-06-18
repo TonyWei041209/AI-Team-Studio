@@ -6,9 +6,6 @@ import type {
   DashboardSummary,
   ProjectHealth,
   DashboardAttention,
-  AttentionFailedTask,
-  AttentionPendingApproval,
-  AttentionStalledRequest,
   RecentTask,
   RecentRun,
 } from "../api/dashboard";
@@ -63,7 +60,7 @@ export function DashboardPanel({
   const [error, setError] = useState<string | null>(null);
 
   const [attention, setAttention] = useState<DashboardAttention | null>(null);
-  const [attentionError, setAttentionError] = useState<string | null>(null);
+  const [, setAttentionError] = useState<string | null>(null);
 
   const [readiness, setReadiness] = useState<ReadinessSummary | null>(null);
 

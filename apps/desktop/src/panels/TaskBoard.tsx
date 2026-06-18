@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import type { TaskCreate } from "../types/api";
 import { useTasks } from "../hooks/useTasks";
 import { tasksApi } from "../api/tasks";
+import type { TaskAgentRun } from "../api/tasks";
 import { projectsApi } from "../api/projects";
 import { api } from "../api/client";
 import { approvalsApi } from "../api/approvals";
@@ -29,13 +30,17 @@ import { AuditTrailSection } from "./taskboard/AuditTrailSection";
 import { ProposalCard } from "./taskboard/ProposalCard";
 import { PipelineStepper } from "./taskboard/PipelineStepper";
 import { OrchestrationErrorGuide } from "./taskboard/OrchestrationErrorGuide";
-import { TaskStateSummary, derivePhase } from "./taskboard/TaskStateSummary";
-import { NextStepHint } from "./taskboard/NextStepHint";
+import { TaskStateSummary } from "./taskboard/TaskStateSummary";
 import { QuickTaskInput } from "./taskboard/QuickTaskInput";
 import { RoleStatusCards, type RoleStatus } from "./taskboard/RoleStatusCards";
 import { TokenSummaryRow } from "./taskboard/TokenSummaryRow";
 import { TeamConversation } from "./taskboard/TeamConversation";
 import { TaskTeamView } from "./taskboard/TaskTeamView";
+
+// Phase 16-1: the inline PipelineStepper is hidden because RoleStatusCards
+// surfaces the same information. Kept behind a flag for easy re-enable.
+// Typed as `boolean` (not the literal `false`) so the gated JSX stays type-checked.
+const SHOW_PIPELINE_STEPPER: boolean = false;
 
 interface TaskBoardProps {
   projectId: string | null;
@@ -79,7 +84,7 @@ export function TaskBoard({ projectId, onNavigateToSettings, autoExpandTaskId, o
   const [execReqError, setExecReqError] = useState<string | null>(null);
 
   // Cached runs per task (for role status cards)
-  const [taskRunsCache, setTaskRunsCache] = useState<Record<string, Array<{role: string, status: string, output_summary: string, started_at: string | null, ended_at: string | null}>>>({});
+  const [taskRunsCache, setTaskRunsCache] = useState<Record<string, TaskAgentRun[]>>({});
 
   // Audit trail (Phase 6E-E)
   const [auditTrailTaskId, setAuditTrailTaskId] = useState<string | null>(null);
@@ -152,7 +157,7 @@ export function TaskBoard({ projectId, onNavigateToSettings, autoExpandTaskId, o
     const nonPending = tasks.filter(t => t.status !== "pending");
     for (const t of nonPending) {
       if (taskRunsCache[t.id]) continue;
-      tasksApi.getRuns(t.id).then((runs: Array<{role: string, status: string, output_summary: string, started_at: string | null, ended_at: string | null, model_provider?: string | null, model_name?: string | null}>) => {
+      tasksApi.getRuns(t.id).then((runs) => {
         setTaskRunsCache(prev => ({ ...prev, [t.id]: runs }));
       }).catch(() => { /* ignore */ });
     }
@@ -1152,7 +1157,7 @@ export function TaskBoard({ projectId, onNavigateToSettings, autoExpandTaskId, o
               {/* Current Status Strip removed — redundant with proposal summary row and RoleStatusCards */}
 
               {/* Pipeline Stepper (Phase 16-1) — hidden: RoleStatusCards shows same info */}
-              {false && task.status !== "pending" && projectId && (
+              {SHOW_PIPELINE_STEPPER && task.status !== "pending" && projectId && (
                 <>
                   <div className="task-section-label">{t("tasks.sectionOrchestration")}</div>
                   <PipelineStepper

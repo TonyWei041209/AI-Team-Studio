@@ -119,8 +119,8 @@ export function ProposalCard({
   // Extract linkedApproval so it can be used both in JSX and in ExecutionChainStepper props
   const linkedApproval = taskApprovals.find((a) => a.proposal_id === p.id);
 
-  const fileCount = Array.isArray(pd.proposed_files || pd.changed_files)
-    ? (pd.proposed_files || pd.changed_files).length : 0;
+  const proposedFiles = pd.proposed_files || pd.changed_files;
+  const fileCount = Array.isArray(proposedFiles) ? proposedFiles.length : 0;
   const cmdCount = Array.isArray(pd.proposed_commands)
     ? pd.proposed_commands.length : 0;
   const approvalStatus = linkedApproval?.status || p.status;
