@@ -42,8 +42,8 @@ RUNNERS = [
     {
         "name": "Phase 7",
         "script": "scripts/run-7-regression-isolated.py",
-        "expected_suites": 8,
-        "expected_checks": "~191",
+        "expected_suites": 9,
+        "expected_checks": "~219",
     },
     {
         "name": "Phase 8A",

@@ -13,6 +13,7 @@ Covers:
   - 7C-2 rollback service        (~27 checks)
   - 7D-3 rollback audit          (~18 checks)
   - 7 E2E execute→rollback→audit (~12 checks)
+  - 7E strict_parent policy      (~28 checks)  [route-3]
 
   Group B (API, needs server):
   - 7A execute API               (~27 checks)
@@ -21,7 +22,7 @@ Covers:
   - 7C-3 rollback API            (~24 checks)
     python tests/phase7c3_rollback_api_acceptance.py
 
-  Total in runner: ~191 checks (8 suites)
+  Total in runner: ~219 checks (9 suites)
 
 Usage:
     python scripts/run-7-regression-isolated.py
@@ -46,6 +47,8 @@ GROUP_A_SUITES = [
     "tests/phase7c2_rollback_acceptance.py",
     "tests/phase7d3_rollback_audit_acceptance.py",
     "tests/phase7_e2e_execute_rollback.py",
+    # route-3: strict_parent missing-parent policy (executor + dry-run parity)
+    "tests/phase7e_strict_parent_acceptance.py",
 ]
 
 GROUP_B_SUITES = [
