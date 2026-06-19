@@ -454,8 +454,10 @@
 }
 
 .dashboard-team-role-dot--planner { background-color: #22D3EE; }
+.dashboard-team-role-dot--architect { background-color: #2DD4BF; }
 .dashboard-team-role-dot--builder { background-color: #FB7185; }
 .dashboard-team-role-dot--qa      { background-color: #A78BFA; }
+.dashboard-team-role-dot--security_reviewer { background-color: #F87171; }
 .dashboard-team-role-dot--reviewer { background-color: #FBBF24; }
 
 .dashboard-team-role-icon {

@@ -105,6 +105,7 @@ const en = {
     mockOption: "Mock (disabled)",
     providerKeyMissing: "Warning: {{provider}} API key is not configured. Go to Provider Settings below.",
     roleName_planner: "Planner",
+    roleName_architect: "Architect",
     roleName_builder: "Builder",
     roleName_qa: "QA",
     roleName_security_reviewer: "Security Reviewer",
@@ -548,6 +549,7 @@ const en = {
   pipeline: {
     title: "Pipeline",
     role_planner: "Planner",
+    role_architect: "Architect",
     role_builder: "Builder",
     role_qa: "QA",
     role_security_reviewer: "Security Reviewer",

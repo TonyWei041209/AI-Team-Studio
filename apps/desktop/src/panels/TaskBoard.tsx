@@ -794,8 +794,10 @@ export function TaskBoard({ projectId, onNavigateToSettings, autoExpandTaskId, o
     const task = tasks.find(t => t.id === taskId);
     const cachedRuns = taskRunsCache[taskId] || [];
 
-    const roleNames = ["planner", "builder", "qa", "security_reviewer", "reviewer"];
-    const phaseMap: Record<string, number> = { planning: 0, in_progress: 1, reviewing: 2 };
+    const roleNames = ["planner", "architect", "builder", "qa", "security_reviewer", "reviewer"];
+    // Active-role index per task status (architect at index 1 shifts builder->2, qa->3).
+    // "reviewing" is also special-cased below (everything before the final Reviewer = completed).
+    const phaseMap: Record<string, number> = { planning: 0, in_progress: 2, reviewing: 3 };
 
     // Helper: extract short output summary from a run
     // Parse "[N items]" string format from truncated output
@@ -819,6 +821,13 @@ export function TaskBoard({ projectId, onNavigateToSettings, autoExpandTaskId, o
           summary = goal ? `${String(goal).slice(0, 90)}` : "";
           if (stepCount) summary += ` · ${stepCount} steps`;
           if (criteriaCount) summary += ` · ${criteriaCount} criteria`;
+        } else if (role === "architect") {
+          const ds = data?.design_summary || "";
+          const compCount = parseCount(data?.components);
+          const decisionCount = parseCount(data?.key_decisions);
+          summary = ds ? `${String(ds).slice(0, 90)}` : "";
+          if (compCount) summary += ` · ${compCount} component(s)`;
+          if (decisionCount) summary += ` · ${decisionCount} decision(s)`;
         } else if (role === "builder") {
           const cs = data?.change_summary || "";
           const fc = parseCount(data?.proposed_files || data?.changed_files);
@@ -847,7 +856,8 @@ export function TaskBoard({ projectId, onNavigateToSettings, autoExpandTaskId, o
       let nextStep: string | undefined;
       const taskStatus = task?.status || "";
       if (run.status === "completed") {
-        if (role === "planner" && (taskStatus === "planning" || taskStatus === "in_progress")) nextStep = "Waiting for Builder";
+        if (role === "planner" && (taskStatus === "planning" || taskStatus === "in_progress")) nextStep = "Waiting for Architect";
+        if (role === "architect" && (taskStatus === "planning" || taskStatus === "in_progress")) nextStep = "Waiting for Builder";
         if (role === "builder" && taskStatus === "reviewing") nextStep = "Waiting for review";
         if (role === "qa" && taskStatus === "reviewing") nextStep = "Waiting for Reviewer";
         if (role === "reviewer" && taskStatus === "done") nextStep = "Idle — task complete";

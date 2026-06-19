@@ -97,6 +97,7 @@ const zhCN = {
     mockOption: "模拟模式（已禁用）",
     providerKeyMissing: "警告：{{provider}} 的 API 密钥未配置。请前往下方提供方设置配置。",
     roleName_planner: "策划师",
+    roleName_architect: "架构师",
     roleName_builder: "开发工程师",
     roleName_qa: "测试工程师",
     roleName_security_reviewer: "安全审查员",
@@ -540,6 +541,7 @@ const zhCN = {
   pipeline: {
     title: "流水线",
     role_planner: "策划师",
+    role_architect: "架构师",
     role_builder: "开发工程师",
     role_qa: "测试工程师",
     role_security_reviewer: "安全审查员",

@@ -11,6 +11,7 @@ const MANDATORY_ROLES = new Set(["planner", "builder"]);
 /** Map system role names to i18n keys */
 const ROLE_I18N: Record<string, string> = {
   planner: "settings.roleName_planner",
+  architect: "settings.roleName_architect",
   builder: "settings.roleName_builder",
   qa: "settings.roleName_qa",
   security_reviewer: "settings.roleName_security_reviewer",

@@ -16,6 +16,7 @@ interface RoleStatusCardsProps {
 
 const ROLE_ICONS: Record<string, string> = {
   planner: "📋",
+  architect: "📐",
   builder: "🔨",
   qa: "🔍",
   security_reviewer: "🛡️",
@@ -28,6 +29,7 @@ export function RoleStatusCards({ roles, visible }: RoleStatusCardsProps) {
 
   const defaultRoles: RoleStatus[] = [
     { role: "planner", status: "idle" },
+    { role: "architect", status: "idle" },
     { role: "builder", status: "idle" },
     { role: "qa", status: "idle" },
     { role: "security_reviewer", status: "idle" },

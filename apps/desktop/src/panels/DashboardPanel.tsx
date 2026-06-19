@@ -14,6 +14,7 @@ import type { ReadinessSummary } from "../api/settings";
 /** Map role keys to i18n keys */
 const ROLE_I18N: Record<string, string> = {
   planner: "settings.roleName_planner",
+  architect: "settings.roleName_architect",
   builder: "settings.roleName_builder",
   qa: "settings.roleName_qa",
   security_reviewer: "settings.roleName_security_reviewer",
@@ -386,12 +387,13 @@ export function DashboardPanel({
                 {(() => {
                   const ROLE_ICONS: Record<string, string> = {
                     planner: "🎯",
+                    architect: "📐",
                     builder: "🔨",
                     qa: "✅",
                     security_reviewer: "🛡️",
                     reviewer: "📋",
                   };
-                  return (["planner", "builder", "qa", "security_reviewer", "reviewer"] as const).map((role) => {
+                  return (["planner", "architect", "builder", "qa", "security_reviewer", "reviewer"] as const).map((role) => {
                     const detail = readiness?.roles.details.find((d) => d.role === role);
                     const isActive = detail?.is_real ?? false;
                     return (

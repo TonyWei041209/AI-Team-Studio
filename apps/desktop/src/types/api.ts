@@ -15,7 +15,7 @@ export type TaskStatus =
 
 export type TaskPriority = "low" | "medium" | "high" | "critical";
 
-export type AgentRole = "planner" | "builder" | "qa" | "security_reviewer" | "reviewer";
+export type AgentRole = "planner" | "architect" | "builder" | "qa" | "security_reviewer" | "reviewer";
 
 export type RunStatus = "pending" | "running" | "completed" | "failed";
 
