@@ -6,8 +6,9 @@ and need no network, API key, or DB (a throwaway RUNTIME_DB is set defensively).
 Folds both model_executor unit tests into the unified regression gate (they
 previously had no CI runner).
 
-Covers: qa_real_step2 (_execute_qa), sr_step1 (_execute_security_reviewer).
-Total: 2 suites.
+Covers: qa_real_step2 (_execute_qa), sr_step1 (_execute_security_reviewer),
+ar_step1 (_execute_architect).
+Total: 3 suites.
 
 Usage:
     python scripts/run-unit-regression.py
@@ -23,6 +24,7 @@ PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TEST_SUITES = [
     "tests/qa_real_step2_execute_qa_test.py",
     "tests/sr_step1_execute_security_reviewer_test.py",
+    "tests/ar_step1_execute_architect_test.py",
 ]
 
 
@@ -74,7 +76,7 @@ def main():
         sys.exit(1)
     else:
         print()
-        print("  Unit baseline: ALL PASS (2 suites)")
+        print("  Unit baseline: ALL PASS (3 suites)")
         sys.exit(0)
 
 
