@@ -11,10 +11,11 @@ from __future__ import annotations
 
 import json
 import re
+from dataclasses import replace
 from typing import Any
 
 from models import AgentRole, ReviewDecision
-from agents.definitions import get_definition
+from agents.definitions import get_definition, ARCHITECT_SYSTEM_PROMPT
 from agents.skill_loader import build_enhanced_system_prompt
 from agents.executor import ExecutionResult
 from providers.base import CompletionRequest, Message, MessageRole
@@ -466,6 +467,89 @@ class SecurityReviewerOutputSchema:
                 f"verdict must be one of {sorted(_VALID_SEC_VERDICTS)}, "
                 f"got: {verdict!r}"
             )
+
+        # summary: required, non-empty string
+        summary = data.get("summary")
+        if not isinstance(summary, str) or not summary.strip():
+            return False, "summary must be a non-empty string"
+
+        return True, ""
+
+
+# ── Architect output schema validation (technical design) ──
+
+# No enumerated fields in the Architect schema -> no _VALID_* constant sets needed.
+
+class ArchitectOutputSchema:
+    """Validates Architect JSON output against the technical-design schema.
+
+    The Architect turns the Planner's plan into a technical design for the Builder
+    (component boundaries, interfaces, key decisions, tradeoffs) — no code/files.
+    """
+
+    @staticmethod
+    def validate(data: Any) -> tuple[bool, str]:
+        """Check *data* conforms to the Architect output schema.
+
+        Returns ``(True, "")`` on success or ``(False, "<reason>")`` on failure.
+        """
+        if not isinstance(data, dict):
+            return False, "Output must be a JSON object"
+
+        # design_summary: required, non-empty string
+        ds = data.get("design_summary")
+        if not isinstance(ds, str) or not ds.strip():
+            return False, "design_summary must be a non-empty string"
+
+        # components: required, list (can be empty)
+        components = data.get("components")
+        if not isinstance(components, list):
+            return False, "components must be a list"
+        for i, item in enumerate(components):
+            if not isinstance(item, dict):
+                return False, f"components[{i}] must be an object"
+            name = item.get("name")
+            if not isinstance(name, str) or not name.strip():
+                return False, f"components[{i}].name must be a non-empty string"
+            resp = item.get("responsibility")
+            if not isinstance(resp, str) or not resp.strip():
+                return False, f"components[{i}].responsibility must be a non-empty string"
+            interfaces = item.get("interfaces")  # optional
+            if interfaces is not None and not isinstance(interfaces, str):
+                return False, f"components[{i}].interfaces must be a string"
+
+        # key_decisions: required, list (can be empty)
+        decisions = data.get("key_decisions")
+        if not isinstance(decisions, list):
+            return False, "key_decisions must be a list"
+        for i, item in enumerate(decisions):
+            if not isinstance(item, dict):
+                return False, f"key_decisions[{i}] must be an object"
+            decision = item.get("decision")
+            if not isinstance(decision, str) or not decision.strip():
+                return False, f"key_decisions[{i}].decision must be a non-empty string"
+            rationale = item.get("rationale")
+            if not isinstance(rationale, str) or not rationale.strip():
+                return False, f"key_decisions[{i}].rationale must be a non-empty string"
+            alternatives = item.get("alternatives")  # optional
+            if alternatives is not None and not isinstance(alternatives, str):
+                return False, f"key_decisions[{i}].alternatives must be a string"
+
+        # interfaces_or_contracts: required, list of non-empty strings (can be empty)
+        contracts = data.get("interfaces_or_contracts")
+        if not isinstance(contracts, list):
+            return False, "interfaces_or_contracts must be a list"
+        for i, item in enumerate(contracts):
+            if not isinstance(item, str) or not item.strip():
+                return False, f"interfaces_or_contracts[{i}] must be a non-empty string"
+
+        # risks_tradeoffs: required, list of non-empty strings (can be empty)
+        risks = data.get("risks_tradeoffs")
+        if not isinstance(risks, list):
+            return False, "risks_tradeoffs must be a list"
+        for i, item in enumerate(risks):
+            if not isinstance(item, str) or not item.strip():
+                return False, f"risks_tradeoffs[{i}] must be a non-empty string"
 
         # summary: required, non-empty string
         summary = data.get("summary")
@@ -1037,4 +1121,92 @@ class ModelAgentExecutor:
             parts.append(f"\nPlanner plan:\n{json.dumps(prev['planner'], ensure_ascii=False, separators=(',',':'))}")
         if prev.get("builder"):
             parts.append(f"\nBuilder proposal:\n{json.dumps(prev['builder'], ensure_ascii=False, separators=(',',':'))}")
+        return "\n".join(parts)
+
+    # ── Architect execution (technical design, NOT yet pipeline-wired) ──
+
+    async def _execute_architect(self, task_context: dict, role=None) -> ExecutionResult:
+        """Call a real LLM to produce a structured technical design.
+
+        Mirrors _execute_security_reviewer (resolve -> build -> call -> parse/validate).
+        The Architect turns the Planner's plan into a technical design (component
+        boundaries, interfaces, key decisions) that the Builder implements — no tool
+        execution, no code/files.
+
+        VETO INVARIANT — like QA / Security Reviewer, it INFORMS the next role and does
+        NOT veto: this method ALWAYS returns success=True. A provider error or a
+        malformed/schema-invalid response degrades to a minimal valid design instead of
+        an error that would fail the task.
+
+        AR-1 scope note: ARCHITECT is NOT yet in the AgentRole enum or AGENT_PIPELINE
+        (that is AR-3), so this method is wired to nothing and is reachable only by its
+        unit test. The role to resolve is supplied by the caller (the future AR-3
+        execute() dispatch will pass AgentRole.ARCHITECT; the unit test stubs
+        _resolve_provider), so this method never names the not-yet-existing enum member.
+        ARCHITECT_SYSTEM_PROMPT is injected via dataclasses.replace until the AR-3
+        pipeline entry carries it (mirrors SR-1's pre-activation step).
+        """
+        try:
+            defn, provider, model_name = self._resolve_provider(role)
+            defn = replace(defn, system_prompt=ARCHITECT_SYSTEM_PROMPT)
+            user_msg = self._build_architect_user_message(task_context)
+            raw_content, usage = await self._call_model(defn, provider, model_name, user_msg)
+        except Exception as exc:
+            # Provider/config/runtime error — degrade to a minimal valid design, never veto.
+            return ExecutionResult(
+                success=True,
+                output=self._arch_concerns_fallback(
+                    f"Architecture design could not be completed ({exc}); "
+                    f"the Builder should proceed from the Planner's plan with caution."
+                ),
+            )
+
+        result = self._parse_and_validate(raw_content, "Architect", ArchitectOutputSchema)
+        if isinstance(result, ExecutionResult):
+            # Malformed JSON / schema validation failed. Degrade to a minimal valid
+            # design rather than success=False, so it informs the Builder and does not veto.
+            return ExecutionResult(
+                success=True,
+                output=self._arch_concerns_fallback(
+                    f"Architecture design output was malformed or failed schema validation "
+                    f"({result.error_message}); the Builder should proceed from the Planner's plan with caution."
+                ),
+                token_usage=result.token_usage,
+            )
+
+        return ExecutionResult(success=True, output=result, token_usage=usage)
+
+    @staticmethod
+    def _arch_concerns_fallback(note: str) -> dict:
+        """A schema-valid Architect design noting the design step was unavailable.
+
+        Used when the design cannot be produced (provider error or malformed output).
+        Returned with success=True so it informs the Builder rather than vetoing the
+        task (see the VETO INVARIANT in _execute_architect).
+        """
+        return {
+            "design_summary": "Technical design could not be produced normally.",
+            "components": [],
+            "key_decisions": [],
+            "interfaces_or_contracts": [],
+            "risks_tradeoffs": [],
+            "summary": note,
+        }
+
+    @staticmethod
+    def _build_architect_user_message(ctx: dict) -> str:
+        """Assemble the user-facing prompt from task context for the Architect.
+
+        The Architect designs from the Planner's plan; it runs BEFORE the Builder, so
+        it does NOT receive the Builder's proposal. Degrades gracefully — only includes
+        the planner output if present.
+        """
+        parts = [
+            f"Task: {ctx.get('title', 'Untitled')}",
+            f"Description: {ctx.get('description', 'No description provided')}",
+            f"Priority: {ctx.get('priority', 'medium')}",
+        ]
+        prev = ctx.get("previous_outputs", {})
+        if prev.get("planner"):
+            parts.append(f"\nPlanner plan:\n{json.dumps(prev['planner'], ensure_ascii=False, separators=(',',':'))}")
         return "\n".join(parts)
