@@ -790,6 +790,66 @@ def _apply_v18(conn: sqlite3.Connection) -> None:
     conn.execute("INSERT INTO schema_version (version) VALUES (18)")
 
 
+def _apply_v19(conn: sqlite3.Connection) -> None:
+    """V19: Add the 'architect' role — extend skills.agent_role CHECK + seed role_model_settings (AR-2).
+
+    Phase-0 re-confirmed no DB-read path converts a stored role string to the AgentRole
+    enum, so seeding an 'architect' role_model_settings row before the enum member exists
+    (added in AR-3) is safe.
+
+    1. Recreate skills with the agent_role CHECK extended to include 'architect'
+       (mirrors the V17 recreate exactly: create skills_v19 with identical columns/
+       defaults/scope_type CHECK + the extended agent_role CHECK, copy ALL rows, drop,
+       rename, recreate idx_skills_scope). Every column/default/constraint/index and all
+       rows are preserved; the only change is adding 'architect' to the allow-list.
+    2. Seed role_model_settings ('architect','mock','',0) — disabled (mirroring V18's
+       security_reviewer / how qa was seeded); invisible to get_role_model_settings
+       (which iterates the enum-derived _VALID_ROLES) until AR-3 adds the enum member.
+
+    DEFERRED to AR-3: the architect *roles* (registry) system-role row. Unlike SR, the
+    roles seed is NOT done here because phase15_1 already uses "architect" as a
+    custom-role test fixture AND asserts an exact system-role count; seeding the roles
+    row would break that test mid-initiative. The roles row + the phase15_1 re-baseline
+    (count flips + fixture rename) land atomically in AR-3, matching SR's V18 sequencing.
+    Idempotent via INSERT OR IGNORE.
+    """
+    conn.execute("""
+        CREATE TABLE skills_v19 (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            description TEXT NOT NULL DEFAULT '',
+            content TEXT NOT NULL DEFAULT '',
+            scope_type TEXT NOT NULL DEFAULT 'global' CHECK(scope_type IN ('global', 'agent')),
+            agent_role TEXT,
+            is_enabled INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+            CHECK(
+                (scope_type = 'global' AND agent_role IS NULL) OR
+                (scope_type = 'agent' AND agent_role IN ('planner', 'builder', 'qa', 'reviewer', 'security_reviewer', 'architect'))
+            )
+        )
+    """)
+    conn.execute("""
+        INSERT INTO skills_v19
+        SELECT id, name, description, content, scope_type, agent_role,
+               is_enabled, created_at, updated_at
+        FROM skills
+    """)
+    conn.execute("DROP TABLE skills")
+    conn.execute("ALTER TABLE skills_v19 RENAME TO skills")
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_skills_scope "
+        "ON skills(scope_type, agent_role)"
+    )
+    conn.execute(
+        "INSERT OR IGNORE INTO role_model_settings (role, provider, model, enabled) "
+        "VALUES (?, ?, ?, ?)",
+        ("architect", "mock", "", 0),
+    )
+    conn.execute("INSERT INTO schema_version (version) VALUES (19)")
+
+
 # Ordered list of migrations
 _MIGRATIONS = [
     (1, _apply_v1),
@@ -810,6 +870,7 @@ _MIGRATIONS = [
     (16, _apply_v16),
     (17, _apply_v17),
     (18, _apply_v18),
+    (19, _apply_v19),
 ]
 
 
