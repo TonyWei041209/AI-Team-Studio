@@ -28,6 +28,7 @@ class AgentRole(str, Enum):
     PLANNER = "planner"
     BUILDER = "builder"
     QA = "qa"
+    SECURITY_REVIEWER = "security_reviewer"
     REVIEWER = "reviewer"
 
 

@@ -308,6 +308,16 @@ AGENT_PIPELINE: list[AgentRoleDefinition] = [
         system_prompt=QA_SYSTEM_PROMPT,
     ),
     AgentRoleDefinition(
+        role=AgentRole.SECURITY_REVIEWER,
+        display_name="Security Reviewer",
+        description="Statically reviews the Builder's proposal for security risks (informs the Reviewer)",
+        required_task_status=TaskStatus.REVIEWING,
+        success_task_status=TaskStatus.REVIEWING,
+        allowed_tools=["read", "grep", "glob"],
+        output_sections=["review_scope", "findings", "overall_risk", "verdict", "summary"],
+        system_prompt=SECURITY_REVIEWER_SYSTEM_PROMPT,
+    ),
+    AgentRoleDefinition(
         role=AgentRole.REVIEWER,
         display_name="Reviewer",
         description="Final review and approve/reject decision",

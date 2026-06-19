@@ -63,14 +63,15 @@ class FakeProvider:
 def run_sr(canned_content, task_context):
     """Invoke _execute_security_reviewer with a fake provider, bypassing DB/registry.
 
-    SECURITY_REVIEWER has no AgentRole/definition yet (SR-3), so the stub returns
-    the QA definition as a stand-in — QA is non-injectable, so build_enhanced_system_prompt
-    short-circuits to [] with no DB access — and _execute_security_reviewer overrides
-    the system prompt via replace() to SECURITY_REVIEWER_SYSTEM_PROMPT regardless.
+    As of SR-3, SECURITY_REVIEWER is in the AgentRole enum and AGENT_PIPELINE, so
+    the stub returns the real SECURITY_REVIEWER definition (which carries
+    SECURITY_REVIEWER_SYSTEM_PROMPT). SECURITY_REVIEWER is non-injectable, so
+    build_enhanced_system_prompt short-circuits to [] with no DB access, and the
+    system prompt reaches the provider verbatim.
     """
     executor = ModelAgentExecutor()
     fake = FakeProvider(canned_content)
-    executor._resolve_provider = lambda role: (get_definition(AgentRole.QA), fake, "fake-sec-model")
+    executor._resolve_provider = lambda role: (get_definition(AgentRole.SECURITY_REVIEWER), fake, "fake-sec-model")
     result = asyncio.run(executor._execute_security_reviewer(task_context))
     return result, fake
 

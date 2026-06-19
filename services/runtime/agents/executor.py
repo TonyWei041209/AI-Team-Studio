@@ -113,6 +113,7 @@ class MockAgentExecutor:
             AgentRole.PLANNER: self._planner,
             AgentRole.BUILDER: self._builder,
             AgentRole.QA: self._qa,
+            AgentRole.SECURITY_REVIEWER: self._security_reviewer,
             AgentRole.REVIEWER: self._reviewer,
         }
         return generators[role](title, desc, task_context)
@@ -187,6 +188,16 @@ class MockAgentExecutor:
             ],
             "result": "PASS",
             "findings": [],
+        }
+        return ExecutionResult(success=True, output=output)
+
+    def _security_reviewer(self, title: str, desc: str, ctx: dict) -> ExecutionResult:
+        output = {
+            "review_scope": f"Static security review of the proposed changes for: {title}",
+            "findings": [],
+            "overall_risk": "low",
+            "verdict": "pass",
+            "summary": "No semantic security risks identified in the proposal (mock review).",
         }
         return ExecutionResult(success=True, output=output)
 

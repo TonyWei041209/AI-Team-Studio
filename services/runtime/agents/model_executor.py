@@ -11,11 +11,10 @@ from __future__ import annotations
 
 import json
 import re
-from dataclasses import replace
 from typing import Any
 
 from models import AgentRole, ReviewDecision
-from agents.definitions import get_definition, SECURITY_REVIEWER_SYSTEM_PROMPT
+from agents.definitions import get_definition
 from agents.skill_loader import build_enhanced_system_prompt
 from agents.executor import ExecutionResult
 from providers.base import CompletionRequest, Message, MessageRole
@@ -603,7 +602,7 @@ class ModelAgentExecutor:
     QA-Real: QA added as a real static-review role (informs the Reviewer, never vetoes).
     """
 
-    _SUPPORTED_ROLES = {AgentRole.PLANNER, AgentRole.BUILDER, AgentRole.QA, AgentRole.REVIEWER}
+    _SUPPORTED_ROLES = {AgentRole.PLANNER, AgentRole.BUILDER, AgentRole.QA, AgentRole.SECURITY_REVIEWER, AgentRole.REVIEWER}
 
     def __init__(self, registry: ProviderRegistry | None = None):
         self._registry = registry or get_registry()
@@ -620,6 +619,8 @@ class ModelAgentExecutor:
             return await self._execute_builder(task_context)
         if role == AgentRole.QA:
             return await self._execute_qa(task_context)
+        if role == AgentRole.SECURITY_REVIEWER:
+            return await self._execute_security_reviewer(task_context, role)
         if role == AgentRole.REVIEWER:
             return await self._execute_reviewer(task_context)
         raise NotImplementedError(
@@ -860,6 +861,8 @@ class ModelAgentExecutor:
             parts.append(f"\nBuilder output:\n{json.dumps(prev['builder'], ensure_ascii=False, separators=(',',':'))}")
         if prev.get("qa"):
             parts.append(f"\nQA output:\n{json.dumps(prev['qa'], ensure_ascii=False, separators=(',',':'))}")
+        if prev.get("security_reviewer"):
+            parts.append(f"\nSecurity Reviewer output:\n{json.dumps(prev['security_reviewer'], ensure_ascii=False, separators=(',',':'))}")
 
         # Include rejection history if this is a retry
         rejection_history = ctx.get("rejection_history")
@@ -963,23 +966,17 @@ class ModelAgentExecutor:
         security risks (no tool execution), complementing the rule-based
         tools/safety.py RiskClassifier.
 
+        The system prompt comes from the SECURITY_REVIEWER definition (like the
+        other real roles); the execute() dispatch passes the role, and the unit
+        test stubs _resolve_provider.
+
         VETO INVARIANT — like QA, it INFORMS the Reviewer and does NOT veto: this
         method ALWAYS returns success=True. A provider error or a malformed/
         schema-invalid response degrades to a Reviewer-weighable verdict="concerns"
         instead of an error that would fail the task.
-
-        SR-1 scope note: SECURITY_REVIEWER is NOT yet in the AgentRole enum or
-        AGENT_PIPELINE (that is SR-3), so this method is wired to nothing and is
-        reachable only by its unit test. The *role* to resolve is supplied by the
-        caller (the future SR-3 execute() dispatch will pass
-        AgentRole.SECURITY_REVIEWER; the unit test stubs _resolve_provider), so
-        this method never names the not-yet-existing enum member.
-        SECURITY_REVIEWER_SYSTEM_PROMPT is injected here via dataclasses.replace
-        until the SR-3 pipeline entry carries it (mirrors QA's pre-activation step).
         """
         try:
             defn, provider, model_name = self._resolve_provider(role)
-            defn = replace(defn, system_prompt=SECURITY_REVIEWER_SYSTEM_PROMPT)
             user_msg = self._build_security_reviewer_user_message(task_context)
             raw_content, usage = await self._call_model(defn, provider, model_name, user_msg)
         except Exception as exc:
