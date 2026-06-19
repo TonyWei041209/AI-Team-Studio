@@ -11,11 +11,10 @@ from __future__ import annotations
 
 import json
 import re
-from dataclasses import replace
 from typing import Any
 
 from models import AgentRole, ReviewDecision
-from agents.definitions import get_definition, ARCHITECT_SYSTEM_PROMPT
+from agents.definitions import get_definition
 from agents.skill_loader import build_enhanced_system_prompt
 from agents.executor import ExecutionResult
 from providers.base import CompletionRequest, Message, MessageRole
@@ -686,7 +685,7 @@ class ModelAgentExecutor:
     QA-Real: QA added as a real static-review role (informs the Reviewer, never vetoes).
     """
 
-    _SUPPORTED_ROLES = {AgentRole.PLANNER, AgentRole.BUILDER, AgentRole.QA, AgentRole.SECURITY_REVIEWER, AgentRole.REVIEWER}
+    _SUPPORTED_ROLES = {AgentRole.PLANNER, AgentRole.ARCHITECT, AgentRole.BUILDER, AgentRole.QA, AgentRole.SECURITY_REVIEWER, AgentRole.REVIEWER}
 
     def __init__(self, registry: ProviderRegistry | None = None):
         self._registry = registry or get_registry()
@@ -699,6 +698,8 @@ class ModelAgentExecutor:
         """Execute a single agent role via a real model call."""
         if role == AgentRole.PLANNER:
             return await self._execute_planner(task_context)
+        if role == AgentRole.ARCHITECT:
+            return await self._execute_architect(task_context, role)
         if role == AgentRole.BUILDER:
             return await self._execute_builder(task_context)
         if role == AgentRole.QA:
@@ -890,6 +891,8 @@ class ModelAgentExecutor:
         prev = ctx.get("previous_outputs", {})
         if prev.get("planner"):
             parts.append(f"\nPlanner output:\n{json.dumps(prev['planner'], ensure_ascii=False, separators=(',',':'))}")
+        if prev.get("architect"):
+            parts.append(f"\nArchitect design:\n{json.dumps(prev['architect'], ensure_ascii=False, separators=(',',':'))}")
 
         # Include rejection history if this is a retry
         rejection_history = ctx.get("rejection_history")
@@ -1123,32 +1126,25 @@ class ModelAgentExecutor:
             parts.append(f"\nBuilder proposal:\n{json.dumps(prev['builder'], ensure_ascii=False, separators=(',',':'))}")
         return "\n".join(parts)
 
-    # ── Architect execution (technical design, NOT yet pipeline-wired) ──
+    # ── Architect execution (technical design) ──
 
     async def _execute_architect(self, task_context: dict, role=None) -> ExecutionResult:
         """Call a real LLM to produce a structured technical design.
 
         Mirrors _execute_security_reviewer (resolve -> build -> call -> parse/validate).
         The Architect turns the Planner's plan into a technical design (component
-        boundaries, interfaces, key decisions) that the Builder implements — no tool
-        execution, no code/files.
+        boundaries, interfaces, key decisions) that INFORMS the Builder — no tool
+        execution, no code/files. The system prompt comes from the ARCHITECT definition
+        (like the other roles); the execute() dispatch passes the role, and the unit test
+        stubs _resolve_provider.
 
         VETO INVARIANT — like QA / Security Reviewer, it INFORMS the next role and does
         NOT veto: this method ALWAYS returns success=True. A provider error or a
         malformed/schema-invalid response degrades to a minimal valid design instead of
         an error that would fail the task.
-
-        AR-1 scope note: ARCHITECT is NOT yet in the AgentRole enum or AGENT_PIPELINE
-        (that is AR-3), so this method is wired to nothing and is reachable only by its
-        unit test. The role to resolve is supplied by the caller (the future AR-3
-        execute() dispatch will pass AgentRole.ARCHITECT; the unit test stubs
-        _resolve_provider), so this method never names the not-yet-existing enum member.
-        ARCHITECT_SYSTEM_PROMPT is injected via dataclasses.replace until the AR-3
-        pipeline entry carries it (mirrors SR-1's pre-activation step).
         """
         try:
             defn, provider, model_name = self._resolve_provider(role)
-            defn = replace(defn, system_prompt=ARCHITECT_SYSTEM_PROMPT)
             user_msg = self._build_architect_user_message(task_context)
             raw_content, usage = await self._call_model(defn, provider, model_name, user_msg)
         except Exception as exc:

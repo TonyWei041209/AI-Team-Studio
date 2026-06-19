@@ -111,6 +111,7 @@ class MockAgentExecutor:
 
         generators = {
             AgentRole.PLANNER: self._planner,
+            AgentRole.ARCHITECT: self._architect,
             AgentRole.BUILDER: self._builder,
             AgentRole.QA: self._qa,
             AgentRole.SECURITY_REVIEWER: self._security_reviewer,
@@ -188,6 +189,17 @@ class MockAgentExecutor:
             ],
             "result": "PASS",
             "findings": [],
+        }
+        return ExecutionResult(success=True, output=output)
+
+    def _architect(self, title: str, desc: str, ctx: dict) -> ExecutionResult:
+        output = {
+            "design_summary": f"Straightforward technical design for: {title}",
+            "components": [],
+            "key_decisions": [],
+            "interfaces_or_contracts": [],
+            "risks_tradeoffs": [],
+            "summary": "No notable architectural concerns; Builder may implement per the Planner's plan (mock design).",
         }
         return ExecutionResult(success=True, output=output)
 

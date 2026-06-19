@@ -15,8 +15,9 @@ from __future__ import annotations
 
 from models import AgentRole
 
-# Roles that receive skill injection (QA excluded — mock executor)
-_INJECTABLE_ROLES = {AgentRole.PLANNER, AgentRole.BUILDER, AgentRole.REVIEWER}
+# Roles that receive skill injection (generative roles). QA + Security Reviewer are
+# excluded (read-only reviewers); Architect IS included (a generative design role).
+_INJECTABLE_ROLES = {AgentRole.PLANNER, AgentRole.ARCHITECT, AgentRole.BUILDER, AgentRole.REVIEWER}
 
 
 def load_skills_for_role(role: AgentRole) -> list[dict]:

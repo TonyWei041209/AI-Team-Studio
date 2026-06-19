@@ -26,6 +26,7 @@ class TaskPriority(str, Enum):
 
 class AgentRole(str, Enum):
     PLANNER = "planner"
+    ARCHITECT = "architect"
     BUILDER = "builder"
     QA = "qa"
     SECURITY_REVIEWER = "security_reviewer"

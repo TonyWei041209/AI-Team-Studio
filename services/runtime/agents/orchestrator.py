@@ -707,7 +707,7 @@ class Orchestrator:
         If no participant config exists, returns all default roles.
         """
         if not project_id:
-            return {"planner", "builder", "qa", "security_reviewer", "reviewer"}
+            return {"planner", "architect", "builder", "qa", "security_reviewer", "reviewer"}
         conn = get_connection()
         try:
             rows = conn.execute(
@@ -716,7 +716,7 @@ class Orchestrator:
             ).fetchall()
             if not rows:
                 # No config yet → all defaults enabled
-                return {"planner", "builder", "qa", "security_reviewer", "reviewer"}
+                return {"planner", "architect", "builder", "qa", "security_reviewer", "reviewer"}
             return {r["role_name"] for r in rows}
         finally:
             conn.close()

@@ -21,6 +21,7 @@ import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "services", "runtime"))
 
 from agents.model_executor import ModelAgentExecutor, ArchitectOutputSchema
+from dataclasses import replace
 from agents.definitions import get_definition, ARCHITECT_SYSTEM_PROMPT
 from models import AgentRole
 from providers.base import CompletionResponse, TokenUsage
@@ -59,14 +60,16 @@ class FakeProvider:
 def run_arch(canned_content, task_context):
     """Invoke _execute_architect with a fake provider, bypassing DB/registry.
 
-    ARCHITECT has no AgentRole/definition yet (AR-3), so the stub returns the QA
-    definition as a stand-in — QA is non-injectable, so build_enhanced_system_prompt
-    short-circuits to [] with no DB access — and _execute_architect overrides the
-    system prompt via replace() to ARCHITECT_SYSTEM_PROMPT regardless.
+    _execute_architect now reads the system prompt from the resolved definition (AR-3
+    dropped the in-method replace()). To stay hermetic (no DB), the stub returns the QA
+    definition — non-injectable, so build_enhanced_system_prompt short-circuits to []
+    with no DB access — but carrying ARCHITECT_SYSTEM_PROMPT (injected here via replace())
+    so the assertion that the architect prompt reaches the model still holds.
     """
     executor = ModelAgentExecutor()
     fake = FakeProvider(canned_content)
-    executor._resolve_provider = lambda role: (get_definition(AgentRole.QA), fake, "fake-arch-model")
+    arch_defn = replace(get_definition(AgentRole.QA), system_prompt=ARCHITECT_SYSTEM_PROMPT)
+    executor._resolve_provider = lambda role: (arch_defn, fake, "fake-arch-model")
     result = asyncio.run(executor._execute_architect(task_context))
     return result, fake
 

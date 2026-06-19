@@ -255,7 +255,7 @@ async def get_role_model_settings():
 # Roles that are allowed to enable real model calls.
 # Phase 6C: planner, reviewer.  Phase 6D: builder added (plan-only mode).
 # QA-Real: qa added as a real static-review role (informs the Reviewer, never vetoes).
-_REAL_MODEL_ALLOWED_ROLES = {"planner", "builder", "qa", "security_reviewer", "reviewer"}
+_REAL_MODEL_ALLOWED_ROLES = {"planner", "architect", "builder", "qa", "security_reviewer", "reviewer"}
 
 
 @router.patch("/role-models", response_model=RoleModelSettingsResponse)
@@ -351,7 +351,7 @@ async def update_role_model_settings(body: RoleModelSettingsPatch):
 
 
 _ALL_PROVIDERS = ["anthropic", "openai", "gemini", "deepseek", "kimi", "minimax"]
-_ALL_ROLES = ["planner", "builder", "qa", "security_reviewer", "reviewer"]
+_ALL_ROLES = ["planner", "architect", "builder", "qa", "security_reviewer", "reviewer"]
 
 
 @router.get("/readiness")

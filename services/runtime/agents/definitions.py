@@ -333,6 +333,16 @@ AGENT_PIPELINE: list[AgentRoleDefinition] = [
         system_prompt=PLANNER_SYSTEM_PROMPT,
     ),
     AgentRoleDefinition(
+        role=AgentRole.ARCHITECT,
+        display_name="Architect",
+        description="Turns the Planner's plan into a technical design that informs the Builder",
+        required_task_status=TaskStatus.PLANNING,
+        success_task_status=TaskStatus.PLANNING,
+        allowed_tools=["read", "grep", "glob"],
+        output_sections=["design_summary", "components", "key_decisions", "interfaces_or_contracts", "risks_tradeoffs", "summary"],
+        system_prompt=ARCHITECT_SYSTEM_PROMPT,
+    ),
+    AgentRoleDefinition(
         role=AgentRole.BUILDER,
         display_name="Builder",
         description="Produces execution proposals (supervised preparation mode)",
