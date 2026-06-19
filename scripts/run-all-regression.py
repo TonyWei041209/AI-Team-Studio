@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Unified cross-phase regression runner.
 
-Sequentially invokes all phase-level regression runners (6B-D → 6E → 6F → 6G → 7 → 8A → 8B)
-and produces a consolidated summary report.
+Sequentially invokes all phase-level regression runners
+(6B-D → 6E → 6F → 6G → 7 → 8A → 8B → Roles → Unit) and produces a consolidated
+summary report.
 
 Each runner is executed as an independent subprocess. This script does not
 modify any runner, service code, or test infrastructure.
@@ -62,6 +63,18 @@ RUNNERS = [
         "script": "scripts/run-8b-regression-isolated.py",
         "expected_suites": 1,
         "expected_checks": "~38",
+    },
+    {
+        "name": "Roles",
+        "script": "scripts/run-roles-regression-isolated.py",
+        "expected_suites": 4,
+        "expected_checks": "~90",
+    },
+    {
+        "name": "Unit",
+        "script": "scripts/run-unit-regression.py",
+        "expected_suites": 2,
+        "expected_checks": "~82",
     },
 ]
 
