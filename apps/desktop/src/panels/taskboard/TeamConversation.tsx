@@ -27,7 +27,7 @@ interface AuditEvent {
 interface ConversationMessage {
   id: string
   timestamp: string
-  role: "system" | "user" | "planner" | "builder" | "qa" | "reviewer"
+  role: "system" | "user" | "planner" | "builder" | "qa" | "security_reviewer" | "reviewer"
   type: "event" | "output" | "decision"
   content: string
   details?: string[]
@@ -49,6 +49,7 @@ const ROLE_ICONS: Record<string, string> = {
   planner: "📋",
   builder: "🔨",
   qa: "🔍",
+  security_reviewer: "🛡️",
   reviewer: "✅",
 }
 
@@ -58,6 +59,7 @@ const ROLE_COLORS: Record<string, string> = {
   planner: "#60a5fa",
   builder: "#f59e0b",
   qa: "#a78bfa",
+  security_reviewer: "#f87171",
   reviewer: "#34d399",
 }
 

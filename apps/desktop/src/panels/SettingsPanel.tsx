@@ -11,8 +11,8 @@ import { SUPPORTED_LANGUAGES, setLanguage } from "../i18n/index.ts";
 import type { LanguageCode } from "../i18n/index.ts";
 import type { ProviderSettingUpdate, RoleModelSetting, RoleModelSettingUpdate } from "../types/api";
 
-// Roles that support real model configuration (Phase 6C+6D)
-const CONFIGURABLE_ROLES = ["planner", "builder", "reviewer"] as const;
+// Roles that support real model configuration (planner, builder, qa, security_reviewer, reviewer)
+const CONFIGURABLE_ROLES = ["planner", "builder", "qa", "security_reviewer", "reviewer"] as const;
 
 export function SettingsPanel() {
   const { t, i18n } = useTranslation();

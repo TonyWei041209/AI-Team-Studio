@@ -107,6 +107,7 @@ const en = {
     roleName_planner: "Planner",
     roleName_builder: "Builder",
     roleName_qa: "QA",
+    roleName_security_reviewer: "Security Reviewer",
     roleName_reviewer: "Reviewer",
   },
 
@@ -549,6 +550,7 @@ const en = {
     role_planner: "Planner",
     role_builder: "Builder",
     role_qa: "QA",
+    role_security_reviewer: "Security Reviewer",
     role_reviewer: "Reviewer",
     status_waiting: "waiting",
     status_active: "active",

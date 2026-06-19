@@ -18,6 +18,7 @@ const ROLE_ICONS: Record<string, string> = {
   planner: "📋",
   builder: "🔨",
   qa: "🔍",
+  security_reviewer: "🛡️",
   reviewer: "✅",
 }
 
@@ -29,6 +30,7 @@ export function RoleStatusCards({ roles, visible }: RoleStatusCardsProps) {
     { role: "planner", status: "idle" },
     { role: "builder", status: "idle" },
     { role: "qa", status: "idle" },
+    { role: "security_reviewer", status: "idle" },
     { role: "reviewer", status: "idle" },
   ]
 

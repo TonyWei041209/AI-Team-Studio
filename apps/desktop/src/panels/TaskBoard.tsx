@@ -794,7 +794,7 @@ export function TaskBoard({ projectId, onNavigateToSettings, autoExpandTaskId, o
     const task = tasks.find(t => t.id === taskId);
     const cachedRuns = taskRunsCache[taskId] || [];
 
-    const roleNames = ["planner", "builder", "qa", "reviewer"];
+    const roleNames = ["planner", "builder", "qa", "security_reviewer", "reviewer"];
     const phaseMap: Record<string, number> = { planning: 0, in_progress: 1, reviewing: 2 };
 
     // Helper: extract short output summary from a run
@@ -879,8 +879,9 @@ export function TaskBoard({ projectId, onNavigateToSettings, autoExpandTaskId, o
 
     return roleNames.map((r, i) => {
       if (taskStatus === "reviewing") {
-        if (i < 3) return { role: r, status: "completed" as const, ...getRunSummary(r) };
-        if (i === 3) return { role: r, status: "running" as const };
+        // All roles up to the final Reviewer are done; the Reviewer is the active stage.
+        if (i < roleNames.length - 1) return { role: r, status: "completed" as const, ...getRunSummary(r) };
+        if (i === roleNames.length - 1) return { role: r, status: "running" as const };
       }
       if (i < currentPhaseIdx) return { role: r, status: "completed" as const, ...getRunSummary(r) };
       if (i === currentPhaseIdx) return { role: r, status: "running" as const };

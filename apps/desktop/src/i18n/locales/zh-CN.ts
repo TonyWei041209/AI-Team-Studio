@@ -99,6 +99,7 @@ const zhCN = {
     roleName_planner: "策划师",
     roleName_builder: "开发工程师",
     roleName_qa: "测试工程师",
+    roleName_security_reviewer: "安全审查员",
     roleName_reviewer: "审核员",
   },
 
@@ -541,6 +542,7 @@ const zhCN = {
     role_planner: "策划师",
     role_builder: "开发工程师",
     role_qa: "测试工程师",
+    role_security_reviewer: "安全审查员",
     role_reviewer: "审核员",
     status_waiting: "等待中",
     status_active: "进行中",

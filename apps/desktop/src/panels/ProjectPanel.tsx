@@ -13,6 +13,7 @@ const ROLE_I18N: Record<string, string> = {
   planner: "settings.roleName_planner",
   builder: "settings.roleName_builder",
   qa: "settings.roleName_qa",
+  security_reviewer: "settings.roleName_security_reviewer",
   reviewer: "settings.roleName_reviewer",
 };
 
