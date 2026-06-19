@@ -760,6 +760,36 @@ def _apply_v17(conn: sqlite3.Connection) -> None:
     conn.execute("INSERT INTO schema_version (version) VALUES (17)")
 
 
+def _apply_v18(conn: sqlite3.Connection) -> None:
+    """V18: Seed the security_reviewer role rows (SR-3 activation).
+
+    SR-2 (V17) extended the skills.agent_role CHECK but deferred row seeding so
+    the rows appear atomically with the AgentRole enum member. SR-3 adds the enum
+    member + AGENT_PIPELINE entry, so seed the deferred rows now:
+      - role_model_settings: ('security_reviewer', 'mock', '', 0) — disabled,
+        mirroring how 'qa' was seeded; the role runs as mock until an operator
+        enables it with a real provider + key.
+      - roles: the security_reviewer system role (engineering, matching the
+        other four system roles).
+    Idempotent via INSERT OR IGNORE (role PK / name UNIQUE), matching V5/V15.
+    """
+    conn.execute(
+        "INSERT OR IGNORE INTO role_model_settings (role, provider, model, enabled) "
+        "VALUES (?, ?, ?, ?)",
+        ("security_reviewer", "mock", "", 0),
+    )
+    import uuid
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc).isoformat()
+    conn.execute(
+        """INSERT OR IGNORE INTO roles (id, name, display_name, description, department, is_system, is_enabled, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, 1, 1, ?, ?)""",
+        (str(uuid.uuid4()), "security_reviewer", "Security Reviewer",
+         "Statically reviews the Builder's proposal for security risks", "engineering", now, now),
+    )
+    conn.execute("INSERT INTO schema_version (version) VALUES (18)")
+
+
 # Ordered list of migrations
 _MIGRATIONS = [
     (1, _apply_v1),
@@ -779,6 +809,7 @@ _MIGRATIONS = [
     (15, _apply_v15),
     (16, _apply_v16),
     (17, _apply_v17),
+    (18, _apply_v18),
 ]
 
 
