@@ -850,6 +850,31 @@ def _apply_v19(conn: sqlite3.Connection) -> None:
     conn.execute("INSERT INTO schema_version (version) VALUES (19)")
 
 
+def _apply_v20(conn: sqlite3.Connection) -> None:
+    """V20: Seed the architect roles-registry system row (AR-3 activation).
+
+    AR-2 (V19) extended the skills.agent_role CHECK and seeded architect's
+    role_model_settings row, but DEFERRED the roles-registry row to avoid breaking
+    phase15_1 (which used "architect" as a custom-role fixture and asserts exact
+    system-role counts) mid-initiative. AR-3 adds the enum member + AGENT_PIPELINE
+    entry and re-baselines phase15_1 (count flips + fixture rename), so seed the
+    deferred roles row now — the architect system role (engineering, matching the
+    other five system roles). role_model_settings was already seeded in V19, so this
+    migration only touches the roles registry.
+    Idempotent via INSERT OR IGNORE (name UNIQUE), matching V5/V15/V18.
+    """
+    import uuid
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc).isoformat()
+    conn.execute(
+        """INSERT OR IGNORE INTO roles (id, name, display_name, description, department, is_system, is_enabled, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, 1, 1, ?, ?)""",
+        (str(uuid.uuid4()), "architect", "Architect",
+         "Turns the Planner's plan into a technical design that informs the Builder", "engineering", now, now),
+    )
+    conn.execute("INSERT INTO schema_version (version) VALUES (20)")
+
+
 # Ordered list of migrations
 _MIGRATIONS = [
     (1, _apply_v1),
@@ -871,6 +896,7 @@ _MIGRATIONS = [
     (17, _apply_v17),
     (18, _apply_v18),
     (19, _apply_v19),
+    (20, _apply_v20),
 ]
 
 
