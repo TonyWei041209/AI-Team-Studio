@@ -24,7 +24,7 @@ def _setup_db():
 def _readiness():
     """Simulate the readiness query logic."""
     _ALL_PROVIDERS = ["anthropic", "openai", "gemini", "deepseek", "kimi", "minimax"]
-    _ALL_ROLES = ["planner", "builder", "qa", "reviewer"]
+    _ALL_ROLES = ["planner", "builder", "qa", "security_reviewer", "reviewer"]
     conn = get_connection()
     try:
         provider_rows = conn.execute(
@@ -132,7 +132,7 @@ def test_structure():
     assert "roles" in result
     assert "missing_steps" in result
     assert result["providers"]["total"] == 6
-    assert result["roles"]["total"] == 4
+    assert result["roles"]["total"] == 5
     print("  [PASS] response structure")
 
 

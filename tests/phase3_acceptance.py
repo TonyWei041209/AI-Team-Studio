@@ -70,13 +70,13 @@ code, orch = req("POST", f"/tasks/{TID1}/orchestrate", {
 test("Orchestrate returns 200", code == 200, f"code={code}")
 test("Final status is done", orch.get("final_status") == "done",
      f"got: {orch.get('final_status')}")
-test("4 steps executed", len(orch.get("steps", [])) == 4,
+test("5 steps executed", len(orch.get("steps", [])) == 5,
      f"got: {len(orch.get('steps', []))}")
 
 # Verify step roles in order
 step_roles = [s["role"] for s in orch.get("steps", [])]
-test("Steps in order: planner,builder,qa,reviewer",
-     step_roles == ["planner", "builder", "qa", "reviewer"],
+test("Steps in order: planner,builder,qa,security_reviewer,reviewer",
+     step_roles == ["planner", "builder", "qa", "security_reviewer", "reviewer"],
      f"got: {step_roles}")
 
 # Verify all steps succeeded
@@ -100,15 +100,15 @@ test("Task status is done", task_after.get("status") == "done",
 
 # Verify AgentRun records
 code, runs = req("GET", f"/tasks/{TID1}/runs")
-test("4 AgentRun records created", len(runs) == 4, f"got: {len(runs)}")
+test("5 AgentRun records created", len(runs) == 5, f"got: {len(runs)}")
 
 run_statuses = [r["status"] for r in runs]
 test("All runs completed", all(s == "completed" for s in run_statuses),
      f"got: {run_statuses}")
 
-# API returns ORDER BY created_at DESC, so reverse for chronological
-run_roles = [r["role"] for r in reversed(runs)]
-test("Run roles match pipeline", run_roles == ["planner", "builder", "qa", "reviewer"],
+# /api/tasks/{id}/runs returns runs in chronological (created_at ASC) order
+run_roles = [r["role"] for r in runs]
+test("Run roles match pipeline", run_roles == ["planner", "builder", "qa", "security_reviewer", "reviewer"],
      f"got: {run_roles}")
 
 # Verify started_at and ended_at are set
@@ -144,7 +144,7 @@ test("Orchestration status returns 200", code == 200)
 test("Status shows done", status.get("task_status") == "done")
 test("Status is_complete true", status.get("is_complete") is True)
 test("Status current_role is null", status.get("current_role") is None)
-test("Status has runs", len(status.get("runs", [])) == 4)
+test("Status has runs", len(status.get("runs", [])) == 5)
 
 # ================================================================
 # TEST 2: Failure path — agent fails
@@ -284,14 +284,15 @@ test("Planner has task_breakdown", "task_breakdown" in planner_out)
 test("Planner has acceptance_criteria", "acceptance_criteria" in planner_out)
 
 builder_out = orch["steps"][1].get("output", {})
-test("Builder has changed_files", "changed_files" in builder_out)
-test("Builder has validation", "validation" in builder_out)
+test("Builder has proposed_files", "proposed_files" in builder_out)
+test("Builder has validation_plan", "validation_plan" in builder_out)
 
 qa_out = orch["steps"][2].get("output", {})
 test("QA has result field", "result" in qa_out)
 test("QA result is PASS", qa_out.get("result") == "PASS")
 
-reviewer_out = orch["steps"][3].get("output", {})
+# steps[3] is now Security Reviewer; Reviewer moved to steps[4]
+reviewer_out = orch["steps"][4].get("output", {})
 test("Reviewer has decision field", "decision" in reviewer_out)
 test("Reviewer decision is APPROVE", reviewer_out.get("decision") == "APPROVE")
 
