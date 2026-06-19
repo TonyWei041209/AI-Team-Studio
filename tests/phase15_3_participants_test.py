@@ -109,10 +109,10 @@ def test_t1_auto_seed():
         check("no records before first ensure", count_before == 0)
 
         result = _ensure_participants(conn, project_id)
-        check("returns 5 participants", len(result) == 5)
+        check("returns 6 participants", len(result) == 6)
 
         role_names = {p["role_name"] for p in result}
-        check("all 5 default roles present", role_names == {"planner", "builder", "qa", "security_reviewer", "reviewer"})
+        check("all 6 default roles present", role_names == {"planner", "architect", "builder", "qa", "security_reviewer", "reviewer"})
     finally:
         conn.close()
 
@@ -142,7 +142,7 @@ def test_t2_existing_records():
         result2 = _ensure_participants(conn, project_id)
         qa = next((p for p in result2 if p["role_name"] == "qa"), None)
         check("qa is disabled after manual update", qa is not None and not qa["is_enabled"])
-        check("still 5 rows", len(result2) == 5)
+        check("still 6 rows", len(result2) == 6)
     finally:
         conn.close()
 
@@ -184,7 +184,7 @@ def test_t3_update():
         result2 = _ensure_participants(conn, project_id)
         reviewer2 = next((p for p in result2 if p["role_name"] == "reviewer"), None)
         check("reviewer re-enabled", reviewer2 is not None and reviewer2["is_enabled"])
-        check("total count still 5", len(result2) == 5)
+        check("total count still 6", len(result2) == 6)
     finally:
         conn.close()
 
@@ -264,12 +264,12 @@ def test_t6_enabled_roles_defaults():
 
     # Empty project_id
     roles = Orchestrator._get_enabled_roles("")
-    check("empty project_id returns all 5 defaults", roles == {"planner", "builder", "qa", "security_reviewer", "reviewer"})
+    check("empty project_id returns all 6 defaults", roles == {"planner", "architect", "builder", "qa", "security_reviewer", "reviewer"})
 
     # Valid project_id with no config rows
     project_id = _make_project()
     roles2 = Orchestrator._get_enabled_roles(project_id)
-    check("no config rows returns all 5 defaults", roles2 == {"planner", "builder", "qa", "security_reviewer", "reviewer"})
+    check("no config rows returns all 6 defaults", roles2 == {"planner", "architect", "builder", "qa", "security_reviewer", "reviewer"})
 
 
 # ── T7: _get_enabled_roles respects config ────────────────────
@@ -326,11 +326,11 @@ def test_t9_builder_index_in_filtered_pipeline():
     from agents.definitions import AGENT_PIPELINE
     from models import AgentRole
 
-    # Full pipeline: planner(0), builder(1), qa(2), reviewer(3)
+    # Full pipeline: planner(0), architect(1), builder(2), qa(3), security_reviewer(4), reviewer(5)
     full_builder_idx = next(
         i for i, d in enumerate(AGENT_PIPELINE) if d.role == AgentRole.BUILDER
     )
-    check("builder at index 1 in full pipeline", full_builder_idx == 1)
+    check("builder at index 2 in full pipeline", full_builder_idx == 2)
 
     # Filter: planner disabled — pipeline is builder(0), qa(1), reviewer(2)
     enabled_no_planner = {"builder", "qa", "reviewer"}
