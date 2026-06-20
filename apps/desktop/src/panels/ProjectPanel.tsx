@@ -16,6 +16,7 @@ const ROLE_I18N: Record<string, string> = {
   qa: "settings.roleName_qa",
   security_reviewer: "settings.roleName_security_reviewer",
   reviewer: "settings.roleName_reviewer",
+  documentation: "settings.roleName_documentation",
 };
 
 interface ProjectPanelProps {

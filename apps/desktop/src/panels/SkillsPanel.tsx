@@ -5,7 +5,7 @@ import { useSkills } from "../hooks/useSkills";
 import { ConfirmModal } from "../components/ConfirmModal";
 import "./SkillsPanel.css";
 
-const AGENT_ROLES: AgentRole[] = ["planner", "architect", "builder", "qa", "security_reviewer", "reviewer"];
+const AGENT_ROLES: AgentRole[] = ["planner", "architect", "builder", "qa", "security_reviewer", "reviewer", "documentation"];
 
 export function SkillsPanel() {
   const { t } = useTranslation();

@@ -459,6 +459,7 @@
 .dashboard-team-role-dot--qa      { background-color: #A78BFA; }
 .dashboard-team-role-dot--security_reviewer { background-color: #F87171; }
 .dashboard-team-role-dot--reviewer { background-color: #FBBF24; }
+.dashboard-team-role-dot--documentation { background-color: #E879F9; }
 
 .dashboard-team-role-icon {
   font-size: 14px;

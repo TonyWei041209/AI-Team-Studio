@@ -27,7 +27,7 @@ interface AuditEvent {
 interface ConversationMessage {
   id: string
   timestamp: string
-  role: "system" | "user" | "planner" | "architect" | "builder" | "qa" | "security_reviewer" | "reviewer"
+  role: "system" | "user" | "planner" | "architect" | "builder" | "qa" | "security_reviewer" | "reviewer" | "documentation"
   type: "event" | "output" | "decision"
   content: string
   details?: string[]
@@ -52,6 +52,7 @@ const ROLE_ICONS: Record<string, string> = {
   qa: "🔍",
   security_reviewer: "🛡️",
   reviewer: "✅",
+  documentation: "📝",
 }
 
 const ROLE_COLORS: Record<string, string> = {
@@ -63,6 +64,7 @@ const ROLE_COLORS: Record<string, string> = {
   qa: "#a78bfa",
   security_reviewer: "#f87171",
   reviewer: "#34d399",
+  documentation: "#e879f9",
 }
 
 function parseOutputSummary(raw: string): Record<string, unknown> | null {

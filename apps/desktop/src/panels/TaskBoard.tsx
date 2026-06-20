@@ -794,7 +794,7 @@ export function TaskBoard({ projectId, onNavigateToSettings, autoExpandTaskId, o
     const task = tasks.find(t => t.id === taskId);
     const cachedRuns = taskRunsCache[taskId] || [];
 
-    const roleNames = ["planner", "architect", "builder", "qa", "security_reviewer", "reviewer"];
+    const roleNames = ["planner", "architect", "builder", "qa", "security_reviewer", "reviewer", "documentation"];
     // Active-role index per task status (architect at index 1 shifts builder->2, qa->3).
     // "reviewing" is also special-cased below (everything before the final Reviewer = completed).
     const phaseMap: Record<string, number> = { planning: 0, in_progress: 2, reviewing: 3 };
@@ -844,6 +844,12 @@ export function TaskBoard({ projectId, onNavigateToSettings, autoExpandTaskId, o
           const decision = data?.decision || "";
           const reason = data?.reason || "";
           summary = decision ? `${String(decision).toUpperCase()}${reason ? ": " + String(reason).slice(0, 80) : ""}` : "";
+        } else if (role === "documentation") {
+          // Documentation is a "second Builder": surface its doc proposal like the Builder's.
+          const cs = data?.change_summary || "";
+          const fc = parseCount(data?.proposed_files);
+          summary = cs ? `${String(cs).slice(0, 90)}` : "";
+          if (fc) summary += ` · ${fc} doc file(s)`;
         }
       } catch { /* fallback */ }
       let duration = "";
@@ -860,7 +866,8 @@ export function TaskBoard({ projectId, onNavigateToSettings, autoExpandTaskId, o
         if (role === "architect" && (taskStatus === "planning" || taskStatus === "in_progress")) nextStep = "Waiting for Builder";
         if (role === "builder" && taskStatus === "reviewing") nextStep = "Waiting for review";
         if (role === "qa" && taskStatus === "reviewing") nextStep = "Waiting for Reviewer";
-        if (role === "reviewer" && taskStatus === "done") nextStep = "Idle — task complete";
+        if (role === "reviewer" && taskStatus === "done") nextStep = "Waiting for Documentation";
+        if (role === "documentation" && taskStatus === "done") nextStep = "Idle — task complete";
       } else if (run.status === "failed") {
         nextStep = "Encountered error";
       }
@@ -889,9 +896,11 @@ export function TaskBoard({ projectId, onNavigateToSettings, autoExpandTaskId, o
 
     return roleNames.map((r, i) => {
       if (taskStatus === "reviewing") {
-        // All roles up to the final Reviewer are done; the Reviewer is the active stage.
-        if (i < roleNames.length - 1) return { role: r, status: "completed" as const, ...getRunSummary(r) };
-        if (i === roleNames.length - 1) return { role: r, status: "running" as const };
+        // Reviewer is the active stage; Documentation runs later (in the DONE phase), so
+        // it's idle here. Select by ROLE (Documentation is now last, not the Reviewer).
+        if (r === "documentation") return { role: r, status: "idle" as const };
+        if (r === "reviewer") return { role: r, status: "running" as const };
+        return { role: r, status: "completed" as const, ...getRunSummary(r) };
       }
       if (i < currentPhaseIdx) return { role: r, status: "completed" as const, ...getRunSummary(r) };
       if (i === currentPhaseIdx) return { role: r, status: "running" as const };

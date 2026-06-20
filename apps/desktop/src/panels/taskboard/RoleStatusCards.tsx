@@ -21,6 +21,7 @@ const ROLE_ICONS: Record<string, string> = {
   qa: "🔍",
   security_reviewer: "🛡️",
   reviewer: "✅",
+  documentation: "📝",
 }
 
 export function RoleStatusCards({ roles, visible }: RoleStatusCardsProps) {
@@ -34,6 +35,7 @@ export function RoleStatusCards({ roles, visible }: RoleStatusCardsProps) {
     { role: "qa", status: "idle" },
     { role: "security_reviewer", status: "idle" },
     { role: "reviewer", status: "idle" },
+    { role: "documentation", status: "idle" },
   ]
 
   const displayRoles = defaultRoles.map(dr => {

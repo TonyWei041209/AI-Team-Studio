@@ -129,7 +129,7 @@ export function TaskTeamView({ taskId, projectId: _projectId, taskStatus: _taskS
     ]).then(([runs, tokenResp]) => {
       if (cancelled) return
       const tokens = tokenResp?.records || []
-      const roles = ["planner", "architect", "builder", "qa", "security_reviewer", "reviewer"]
+      const roles = ["planner", "architect", "builder", "qa", "security_reviewer", "reviewer", "documentation"]
       setCards(roles.map(r => deriveCardData(r, runs as AgentRun[], tokens)))
       setLoading(false)
     }).catch(() => { if (!cancelled) setLoading(false) })

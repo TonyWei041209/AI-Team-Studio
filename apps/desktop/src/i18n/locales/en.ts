@@ -110,6 +110,7 @@ const en = {
     roleName_qa: "QA",
     roleName_security_reviewer: "Security Reviewer",
     roleName_reviewer: "Reviewer",
+    roleName_documentation: "Documentation",
   },
 
   // ── Dashboard panel ────────────────────────────────
@@ -554,6 +555,7 @@ const en = {
     role_qa: "QA",
     role_security_reviewer: "Security Reviewer",
     role_reviewer: "Reviewer",
+    role_documentation: "Documentation",
     status_waiting: "waiting",
     status_active: "active",
     status_completed: "completed",

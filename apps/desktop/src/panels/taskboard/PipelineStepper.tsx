@@ -8,7 +8,7 @@ import { STATUS_COLORS } from "./types";
 import "./PipelineStepper.css";
 
 // The canonical pipeline order
-const PIPELINE_ROLES = ["planner", "architect", "builder", "qa", "security_reviewer", "reviewer"] as const;
+const PIPELINE_ROLES = ["planner", "architect", "builder", "qa", "security_reviewer", "reviewer", "documentation"] as const;
 
 // Derive per-role visual status from available data
 type RoleVisualStatus = "disabled" | "waiting" | "active" | "completed" | "failed" | "skipped";
@@ -257,13 +257,13 @@ export function PipelineStepper({ taskId, taskStatus, projectId }: PipelineStepp
 
 /** Map task status to a progress index (which role stage we're at or past) */
 function getStatusProgressIndex(status: TaskStatus): number {
-  // Index corresponds to PIPELINE_ROLES: planner=0, architect=1, builder=2, qa=3, security_reviewer=4, reviewer=5
+  // Index corresponds to PIPELINE_ROLES: planner=0, architect=1, builder=2, qa=3, security_reviewer=4, reviewer=5, documentation=6
   switch (status) {
     case "pending": return -1;    // before planner
     case "planning": return 0;    // planner done (success_task_status = planning); architect also runs in PLANNING (tracked via run records)
     case "in_progress": return 2; // builder done (success_task_status = in_progress)
     case "reviewing": return 3;   // qa done (success_task_status = reviewing); security_reviewer + reviewer run here
-    case "done": return 6;        // all done (past reviewer at index 5)
+    case "done": return 7;        // all done (past documentation at index 6; documentation runs in the DONE phase)
     case "failed": return -1;     // indeterminate
     default: return -1;
   }

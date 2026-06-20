@@ -19,6 +19,7 @@ const ROLE_I18N: Record<string, string> = {
   qa: "settings.roleName_qa",
   security_reviewer: "settings.roleName_security_reviewer",
   reviewer: "settings.roleName_reviewer",
+  documentation: "settings.roleName_documentation",
 };
 import "./DashboardPanel.css";
 
@@ -392,8 +393,9 @@ export function DashboardPanel({
                     qa: "✅",
                     security_reviewer: "🛡️",
                     reviewer: "📋",
+                    documentation: "📝",
                   };
-                  return (["planner", "architect", "builder", "qa", "security_reviewer", "reviewer"] as const).map((role) => {
+                  return (["planner", "architect", "builder", "qa", "security_reviewer", "reviewer", "documentation"] as const).map((role) => {
                     const detail = readiness?.roles.details.find((d) => d.role === role);
                     const isActive = detail?.is_real ?? false;
                     return (

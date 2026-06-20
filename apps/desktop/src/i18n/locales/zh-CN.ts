@@ -102,6 +102,7 @@ const zhCN = {
     roleName_qa: "测试工程师",
     roleName_security_reviewer: "安全审查员",
     roleName_reviewer: "审核员",
+    roleName_documentation: "文档",
   },
 
   // ── Dashboard panel ────────────────────────────────
@@ -546,6 +547,7 @@ const zhCN = {
     role_qa: "测试工程师",
     role_security_reviewer: "安全审查员",
     role_reviewer: "审核员",
+    role_documentation: "文档",
     status_waiting: "等待中",
     status_active: "进行中",
     status_completed: "已完成",
