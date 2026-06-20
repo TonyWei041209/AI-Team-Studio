@@ -11,10 +11,11 @@ from __future__ import annotations
 
 import json
 import re
+from dataclasses import replace
 from typing import Any
 
 from models import AgentRole, ReviewDecision
-from agents.definitions import get_definition
+from agents.definitions import get_definition, DOCUMENTATION_SYSTEM_PROMPT
 from agents.skill_loader import build_enhanced_system_prompt
 from agents.executor import ExecutionResult
 from providers.base import CompletionRequest, Message, MessageRole
@@ -152,6 +153,7 @@ class ReviewerOutputSchema:
 
 _VALID_FILE_ACTIONS = {"create", "modify", "delete"}
 _VALID_RISK_LEVELS = {"low", "medium", "high", "critical"}
+_VALID_DOC_ACTIONS = {"create", "modify"}  # documentation never deletes files
 _VALID_ACTION_TYPES = {"file", "shell", "git"}
 
 
@@ -554,6 +556,87 @@ class ArchitectOutputSchema:
         summary = data.get("summary")
         if not isinstance(summary, str) or not summary.strip():
             return False, "summary must be a non-empty string"
+
+        return True, ""
+
+
+class DocumentationOutputSchema:
+    """Validates Documentation JSON output — a Builder-COMPATIBLE doc proposal.
+
+    The Documentation role is a "second Builder": it proposes documentation FILE
+    changes (proposed_files with full content) that flow through the same execution
+    chain. The shape mirrors the Builder's proposed_files so it is chain-compatible,
+    with two deliberate tightenings over BuilderOutputSchema:
+      - ``content`` is REQUIRED and validated non-empty (the scoped file executor needs
+        file content to write create/modify actions; BuilderOutputSchema does NOT
+        validate content, which can let empty-content proposals reach the executor).
+      - ``action`` is restricted to create/modify (_VALID_DOC_ACTIONS) — docs never delete.
+    """
+
+    @staticmethod
+    def validate(data: Any) -> tuple[bool, str]:
+        """Check *data* conforms to the Documentation proposal schema.
+
+        Returns ``(True, "")`` on success or ``(False, "<reason>")`` on failure.
+        """
+        if not isinstance(data, dict):
+            return False, "Output must be a JSON object"
+
+        # change_summary: required, non-empty string
+        cs = data.get("change_summary")
+        if not isinstance(cs, str) or not cs.strip():
+            return False, "change_summary must be a non-empty string"
+
+        # proposed_files: required, list with >= 1 item
+        pf = data.get("proposed_files")
+        if not isinstance(pf, list) or len(pf) == 0:
+            return False, "proposed_files must be a non-empty list"
+        for i, item in enumerate(pf):
+            if not isinstance(item, dict):
+                return False, f"proposed_files[{i}] must be an object"
+            path = item.get("path")
+            if not isinstance(path, str) or not path.strip():
+                return False, f"proposed_files[{i}].path must be a non-empty string"
+            action = item.get("action")
+            if not isinstance(action, str) or action not in _VALID_DOC_ACTIONS:
+                return False, (
+                    f"proposed_files[{i}].action must be one of "
+                    f"{sorted(_VALID_DOC_ACTIONS)}, got: {action!r}"
+                )
+            reason = item.get("reason")
+            if not isinstance(reason, str) or not reason.strip():
+                return False, f"proposed_files[{i}].reason must be a non-empty string"
+            # content: REQUIRED, non-empty (the improvement over BuilderOutputSchema —
+            # the scoped file executor needs content to write create/modify files).
+            content = item.get("content")
+            if not isinstance(content, str) or not content.strip():
+                return False, f"proposed_files[{i}].content must be a non-empty string"
+
+        # change_steps: required, list with >= 1 item
+        cs_list = data.get("change_steps")
+        if not isinstance(cs_list, list) or len(cs_list) == 0:
+            return False, "change_steps must be a non-empty list"
+        for i, item in enumerate(cs_list):
+            if not isinstance(item, dict):
+                return False, f"change_steps[{i}] must be an object"
+            if "step" not in item or not isinstance(item["step"], (int, float)):
+                return False, f"change_steps[{i}].step must be an integer"
+            desc = item.get("description")
+            if not isinstance(desc, str) or not desc.strip():
+                return False, f"change_steps[{i}].description must be a non-empty string"
+
+        # reasoning_summary: required, non-empty string
+        rs = data.get("reasoning_summary")
+        if not isinstance(rs, str) or not rs.strip():
+            return False, "reasoning_summary must be a non-empty string"
+
+        # validation_plan: required, list with >= 1 non-empty string item
+        vp = data.get("validation_plan")
+        if not isinstance(vp, list) or len(vp) == 0:
+            return False, "validation_plan must be a non-empty list"
+        for i, item in enumerate(vp):
+            if not isinstance(item, str) or not item.strip():
+                return False, f"validation_plan[{i}] must be a non-empty string"
 
         return True, ""
 
@@ -1205,4 +1288,95 @@ class ModelAgentExecutor:
         prev = ctx.get("previous_outputs", {})
         if prev.get("planner"):
             parts.append(f"\nPlanner plan:\n{json.dumps(prev['planner'], ensure_ascii=False, separators=(',',':'))}")
+        return "\n".join(parts)
+
+    # ── Documentation execution (a "second Builder": proposes doc files) ──
+
+    async def _execute_documentation(self, task_context: dict, role=None) -> ExecutionResult:
+        """Call a real LLM to propose documentation file changes (a Builder-shaped proposal).
+
+        The Documentation role is modeled on the BUILDER, not the read-only verdict roles:
+        on success it produces proposed_files (with full content) that DOC-3 will turn into
+        an execution proposal flowing the existing approval / dry-run / execute chain.
+
+        HYBRID semantics (veto-safe failure path + Builder-like success path):
+        - ALWAYS returns success=True, so a documentation failure never fails an
+          already-approved task (Documentation runs AFTER the Reviewer in DOC-3).
+        - On a provider/resolution error OR malformed/schema-invalid output, it degrades
+          to _doc_skip_fallback — a marker output WITHOUT proposed_files ({"skipped": true,
+          ...}). DOC-3 will create a proposal ONLY when the output actually carries valid
+          proposed_files, so a skipped doc step produces no (broken/empty) proposal.
+        - On success (valid output with proposed_files), it returns the parsed proposal.
+
+        DOC-1 scope: DOCUMENTATION is NOT yet in the AgentRole enum or AGENT_PIPELINE
+        (that is DOC-3); this method is wired to nothing and reachable only by its unit
+        test. The role to resolve is supplied by the caller (the future DOC-3 dispatch
+        passes AgentRole.DOCUMENTATION; the unit test stubs _resolve_provider), so this
+        method never names the not-yet-existing enum member. DOCUMENTATION_SYSTEM_PROMPT
+        is injected via dataclasses.replace until the DOC-3 pipeline entry carries it
+        (mirrors AR-1's pre-activation step).
+        """
+        try:
+            defn, provider, model_name = self._resolve_provider(role)
+            defn = replace(defn, system_prompt=DOCUMENTATION_SYSTEM_PROMPT)
+            user_msg = self._build_documentation_user_message(task_context)
+            raw_content, usage = await self._call_model(defn, provider, model_name, user_msg)
+        except Exception as exc:
+            # Provider/config/runtime error — skip documentation, never fail the task.
+            return ExecutionResult(
+                success=True,
+                output=self._doc_skip_fallback(
+                    f"Documentation could not be produced ({exc}); no documentation proposed."
+                ),
+            )
+
+        result = self._parse_and_validate(raw_content, "Documentation", DocumentationOutputSchema)
+        if isinstance(result, ExecutionResult):
+            # Malformed JSON / schema validation failed (e.g. empty content). Skip rather
+            # than emit a broken proposal — success=True so the task is not failed.
+            return ExecutionResult(
+                success=True,
+                output=self._doc_skip_fallback(
+                    f"Documentation output was malformed or failed schema validation "
+                    f"({result.error_message}); no documentation proposed."
+                ),
+                token_usage=result.token_usage,
+            )
+
+        return ExecutionResult(success=True, output=result, token_usage=usage)
+
+    @staticmethod
+    def _doc_skip_fallback(note: str) -> dict:
+        """A 'no documentation proposed' marker — deliberately has NO proposed_files.
+
+        Used when documentation cannot be produced (provider error or malformed output).
+        Returned with success=True so it never fails the task. Because it carries no
+        proposed_files, the DOC-3 proposal-creation step (which will gate on the presence
+        of valid proposed_files) creates no proposal for a skipped doc step — avoiding a
+        broken/empty execution proposal. It is intentionally NOT a DocumentationOutputSchema-
+        valid proposal (that schema requires proposed_files >= 1).
+        """
+        return {"skipped": True, "reason": note, "change_summary": note}
+
+    @staticmethod
+    def _build_documentation_user_message(ctx: dict) -> str:
+        """Assemble the user-facing prompt from task context for Documentation.
+
+        Documentation runs after the work is done, so it documents what was built: it
+        includes the Planner's plan, the Architect's design (if present), and the
+        Builder's proposal / implemented changes. Degrades gracefully — only includes
+        whichever previous outputs are present.
+        """
+        parts = [
+            f"Task: {ctx.get('title', 'Untitled')}",
+            f"Description: {ctx.get('description', 'No description provided')}",
+            f"Priority: {ctx.get('priority', 'medium')}",
+        ]
+        prev = ctx.get("previous_outputs", {})
+        if prev.get("planner"):
+            parts.append(f"\nPlanner plan:\n{json.dumps(prev['planner'], ensure_ascii=False, separators=(',',':'))}")
+        if prev.get("architect"):
+            parts.append(f"\nArchitect design:\n{json.dumps(prev['architect'], ensure_ascii=False, separators=(',',':'))}")
+        if prev.get("builder"):
+            parts.append(f"\nBuilder proposal (implemented changes):\n{json.dumps(prev['builder'], ensure_ascii=False, separators=(',',':'))}")
         return "\n".join(parts)
