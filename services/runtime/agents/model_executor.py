@@ -1086,7 +1086,7 @@ class ModelAgentExecutor:
                     f"QA model output was malformed or failed schema validation "
                     f"({result.error_message}); flagged as concerns for the Reviewer to weigh."
                 ),
-                token_usage=result.token_usage,
+                token_usage=usage,
             )
 
         return ExecutionResult(success=True, output=result, token_usage=usage)
@@ -1170,7 +1170,7 @@ class ModelAgentExecutor:
                     f"Security-review output was malformed or failed schema validation "
                     f"({result.error_message}); flagged as concerns for the Reviewer to weigh."
                 ),
-                token_usage=result.token_usage,
+                token_usage=usage,
             )
 
         return ExecutionResult(success=True, output=result, token_usage=usage)
@@ -1251,7 +1251,7 @@ class ModelAgentExecutor:
                     f"Architecture design output was malformed or failed schema validation "
                     f"({result.error_message}); the Builder should proceed from the Planner's plan with caution."
                 ),
-                token_usage=result.token_usage,
+                token_usage=usage,
             )
 
         return ExecutionResult(success=True, output=result, token_usage=usage)
@@ -1335,7 +1335,7 @@ class ModelAgentExecutor:
                     f"Documentation output was malformed or failed schema validation "
                     f"({result.error_message}); no documentation proposed."
                 ),
-                token_usage=result.token_usage,
+                token_usage=usage,
             )
 
         return ExecutionResult(success=True, output=result, token_usage=usage)

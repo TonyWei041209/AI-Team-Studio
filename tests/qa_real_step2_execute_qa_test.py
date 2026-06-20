@@ -172,6 +172,18 @@ expect_concerns("empty rationale", res)
 res, _ = run_qa("not json {{{", TASK_CTX)
 expect_concerns("non-JSON", res)
 
+# b4b: OBSERVABILITY GUARD — on the schema-failure path (the model call SUCCEEDED,
+# then JSON failed schema validation), the REAL token usage from that call is recorded
+# (not None). This pins the fix for the shared SR-1 token_usage debt. NOTE: this holds
+# only for the post-successful-call failure path; the exception path (b5) has no real
+# usage and correctly leaves token_usage None.
+res_u, fake_u = run_qa(json.dumps(dict(VALID_QA, result="PASS")), TASK_CTX)
+check("schema-failure path records REAL token_usage (not None)",
+      bool(res_u.token_usage)
+      and res_u.token_usage.get("provider") == "fake"
+      and res_u.token_usage.get("prompt_tokens") == 11,
+      f"got: {res_u.token_usage}")
+
 # b5: provider/resolution EXCEPTION must also degrade to concerns (never propagate)
 print("\n=== (b5) provider exception -> success=True, result='concerns' ===")
 
