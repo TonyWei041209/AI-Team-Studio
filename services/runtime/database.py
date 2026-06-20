@@ -934,6 +934,33 @@ def _apply_v21(conn: sqlite3.Connection) -> None:
     conn.execute("INSERT INTO schema_version (version) VALUES (21)")
 
 
+def _apply_v22(conn: sqlite3.Connection) -> None:
+    """V22: Seed the documentation roles-registry system row (DOC-3 activation).
+
+    DOC-2 (V21) extended the skills.agent_role CHECK and seeded documentation's
+    role_model_settings row, but DEFERRED the roles-registry row to land atomically
+    with the enum/pipeline activation. DOC-3 adds the enum member + AGENT_PIPELINE
+    entry (Documentation, after the Reviewer), so seed the deferred roles row now — the
+    documentation system role (engineering, matching the other six system roles).
+    role_model_settings was already seeded in V21, so this migration only touches the
+    roles registry.
+
+    Per DOC-2's Phase-0 0b check, NO test uses "documentation" as a custom-role fixture,
+    so unlike architect (V20) this needs no test fixture rename.
+    Idempotent via INSERT OR IGNORE (name UNIQUE), matching V5/V15/V18/V20.
+    """
+    import uuid
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc).isoformat()
+    conn.execute(
+        """INSERT OR IGNORE INTO roles (id, name, display_name, description, department, is_system, is_enabled, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, 1, 1, ?, ?)""",
+        (str(uuid.uuid4()), "documentation", "Documentation",
+         "Proposes documentation file changes for the approved work (a second Builder)", "engineering", now, now),
+    )
+    conn.execute("INSERT INTO schema_version (version) VALUES (22)")
+
+
 # Ordered list of migrations
 _MIGRATIONS = [
     (1, _apply_v1),
@@ -957,6 +984,7 @@ _MIGRATIONS = [
     (19, _apply_v19),
     (20, _apply_v20),
     (21, _apply_v21),
+    (22, _apply_v22),
 ]
 
 
