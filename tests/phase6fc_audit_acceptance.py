@@ -310,8 +310,8 @@ check("result after request:finalized", result_idx is not None and req_finalized
 print("\n[S5]  total event count for full chain")
 # Full chain: proposal:created, approval:decided, snapshot:frozen,
 # execution_request:created, execution_request:finalized, execution_result:completed
-# = 6 events
-check("6 events in full chain", trail["count"] == 6, f"count={trail['count']}")
+# = 6 events, PLUS (DOC-3) a second proposal:created for the Documentation proposal = 7.
+check("7 events in full chain", trail["count"] == 7, f"count={trail['count']}")
 
 
 # ══════════════════════════════════════════════════════════════════

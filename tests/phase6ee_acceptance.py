@@ -221,8 +221,9 @@ def section_3_full_chain():
     check("count matches events length", count == len(events))
 
     # Expected events: proposal:created, approval:decided, snapshot:frozen,
-    # execution_request:created, execution_request:finalized = 5
-    check("5 events in full chain", count == 5, f"got {count}")
+    # execution_request:created, execution_request:finalized = 5, PLUS (DOC-3) a second
+    # proposal:created for the Documentation proposal = 6.
+    check("6 events in full chain", count == 6, f"got {count}")
 
     event_types = [e["event_type"] for e in events]
     check("proposal:created present", "proposal:created" in event_types)

@@ -23,6 +23,7 @@ import sys
 # Ensure services/runtime is on sys.path for direct imports
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "services", "runtime"))
 
+from dataclasses import replace
 from agents.model_executor import ModelAgentExecutor, DocumentationOutputSchema
 from agents.definitions import get_definition, DOCUMENTATION_SYSTEM_PROMPT
 from models import AgentRole
@@ -62,16 +63,16 @@ class FakeProvider:
 def run_doc(canned_content, task_context):
     """Invoke _execute_documentation with a fake provider, bypassing DB/registry.
 
-    _execute_documentation injects DOCUMENTATION_SYSTEM_PROMPT via replace() internally
-    (DOC-1 pre-activation step). To stay hermetic (no DB), the stub returns the QA
-    definition — QA is non-injectable, so build_enhanced_system_prompt short-circuits
-    with no DB access — and the method overwrites its system_prompt with
-    DOCUMENTATION_SYSTEM_PROMPT, so the assertion that the doc prompt reaches the model
-    still holds.
+    _execute_documentation now reads the system prompt from the resolved definition (DOC-3
+    dropped the in-method replace()). To stay hermetic (no DB), the stub returns the QA
+    definition — non-injectable, so build_enhanced_system_prompt short-circuits with no DB
+    access — but carrying DOCUMENTATION_SYSTEM_PROMPT (injected here via replace()) so the
+    assertion that the documentation prompt reaches the model still holds.
     """
     executor = ModelAgentExecutor()
     fake = FakeProvider(canned_content)
-    executor._resolve_provider = lambda role: (get_definition(AgentRole.QA), fake, "fake-doc-model")
+    doc_defn = replace(get_definition(AgentRole.QA), system_prompt=DOCUMENTATION_SYSTEM_PROMPT)
+    executor._resolve_provider = lambda role: (doc_defn, fake, "fake-doc-model")
     result = asyncio.run(executor._execute_documentation(task_context))
     return result, fake
 

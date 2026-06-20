@@ -94,7 +94,7 @@ code, data = GET("/settings/role-models")
 check("GET role-models returns 200", code == 200)
 check("Response has role_models key", "role_models" in data)
 role_models = data.get("role_models", {})
-check("All 6 roles present", all(r in role_models for r in ["planner", "architect", "builder", "qa", "security_reviewer", "reviewer"]))
+check("All 7 roles present", all(r in role_models for r in ["planner", "architect", "builder", "qa", "security_reviewer", "reviewer", "documentation"]))
 
 
 # ==============================================================

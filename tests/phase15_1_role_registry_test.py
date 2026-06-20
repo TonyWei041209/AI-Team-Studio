@@ -131,13 +131,13 @@ def _delete_role(role_id):
 # ── T1: Migration seeds 4 system roles ────────────────────
 
 def test_seed():
-    print("\n[T1] migrations seed 6 system roles")
+    print("\n[T1] migrations seed 7 system roles")
     _reset_db()
     roles = _list_roles(is_system=True)
-    check("T1.1 exactly 6 system roles", len(roles) == 6, f"got {len(roles)}")
+    check("T1.1 exactly 7 system roles", len(roles) == 7, f"got {len(roles)}")
     names = {r["name"] for r in roles}
-    check("T1.2 names are planner/architect/builder/qa/security_reviewer/reviewer",
-          names == {"planner", "architect", "builder", "qa", "security_reviewer", "reviewer"})
+    check("T1.2 names are planner/architect/builder/qa/security_reviewer/reviewer/documentation",
+          names == {"planner", "architect", "builder", "qa", "security_reviewer", "reviewer", "documentation"})
     for r in roles:
         check(f"T1.3 {r['name']} is_system=1", r["is_system"] == 1)
         check(f"T1.4 {r['name']} is_enabled=1", r["is_enabled"] == 1)
@@ -153,22 +153,22 @@ def test_list_filters():
     _create_role("devops", display_name="DevOps", department="engineering", is_enabled=False)
 
     all_roles = _list_roles()
-    check("T2.1 total 8 roles", len(all_roles) == 8, f"got {len(all_roles)}")
+    check("T2.1 total 9 roles", len(all_roles) == 9, f"got {len(all_roles)}")
 
     system_only = _list_roles(is_system=True)
-    check("T2.2 system roles = 6", len(system_only) == 6)
+    check("T2.2 system roles = 7", len(system_only) == 7)
 
     custom_only = _list_roles(is_system=False)
     check("T2.3 custom roles = 2", len(custom_only) == 2)
 
     eng_roles = _list_roles(department="engineering")
-    check("T2.4 engineering department = 7", len(eng_roles) == 7, f"got {len(eng_roles)}")
+    check("T2.4 engineering department = 8", len(eng_roles) == 8, f"got {len(eng_roles)}")
 
     qa_dept = _list_roles(department="qa_dept")
     check("T2.5 qa_dept department = 1", len(qa_dept) == 1)
 
     enabled = _list_roles(enabled_only=True)
-    check("T2.6 enabled roles = 7", len(enabled) == 7, f"got {len(enabled)}")
+    check("T2.6 enabled roles = 8", len(enabled) == 8, f"got {len(enabled)}")
 
 
 # ── T3: Get role by ID ────────────────────────────────────
@@ -272,9 +272,9 @@ def test_no_delete_system():
     # But we verify the role exists and is_system
     check("T9.1 planner is system", planner["is_system"] == 1)
     check("T9.2 planner exists", planner is not None)
-    # All 6 system roles still present
+    # All 7 system roles still present
     system_roles = _list_roles(is_system=True)
-    check("T9.3 all 6 system roles present", len(system_roles) == 6)
+    check("T9.3 all 7 system roles present", len(system_roles) == 7)
 
 
 # ── T10: System roles have correct metadata ───────────────
@@ -289,6 +289,7 @@ def test_system_metadata():
         "qa": ("QA", "engineering"),
         "security_reviewer": ("Security Reviewer", "engineering"),
         "reviewer": ("Reviewer", "engineering"),
+        "documentation": ("Documentation", "engineering"),
     }
     for name, (display, dept) in expected.items():
         role = _get_role_by_name(name)

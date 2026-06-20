@@ -70,21 +70,22 @@ code, orch = req("POST", f"/tasks/{TID1}/orchestrate", {
 test("Orchestrate returns 200", code == 200, f"code={code}")
 test("Final status is done", orch.get("final_status") == "done",
      f"got: {orch.get('final_status')}")
-test("6 steps executed", len(orch.get("steps", [])) == 6,
+test("7 steps executed", len(orch.get("steps", [])) == 7,
      f"got: {len(orch.get('steps', []))}")
 
-# Verify step roles in order
+# Verify step roles in order (Documentation runs LAST, after the Reviewer)
 step_roles = [s["role"] for s in orch.get("steps", [])]
-test("Steps in order: planner,architect,builder,qa,security_reviewer,reviewer",
-     step_roles == ["planner", "architect", "builder", "qa", "security_reviewer", "reviewer"],
+test("Steps in order: planner,architect,builder,qa,security_reviewer,reviewer,documentation",
+     step_roles == ["planner", "architect", "builder", "qa", "security_reviewer", "reviewer", "documentation"],
      f"got: {step_roles}")
 
 # Verify all steps succeeded
 all_success = all(s["success"] for s in orch.get("steps", []))
 test("All steps succeeded", all_success)
 
-# Verify Reviewer decision
-reviewer_step = orch.get("steps", [])[-1] if orch.get("steps") else {}
+# Verify Reviewer decision — select the Reviewer step BY ROLE (Documentation is now the
+# last step, so steps[-1] is no longer the Reviewer).
+reviewer_step = next((s for s in orch.get("steps", []) if s.get("role") == "reviewer"), {})
 test("Reviewer decision is APPROVE",
      reviewer_step.get("decision") == "APPROVE",
      f"got: {reviewer_step.get('decision')}")
@@ -100,7 +101,7 @@ test("Task status is done", task_after.get("status") == "done",
 
 # Verify AgentRun records
 code, runs = req("GET", f"/tasks/{TID1}/runs")
-test("6 AgentRun records created", len(runs) == 6, f"got: {len(runs)}")
+test("7 AgentRun records created", len(runs) == 7, f"got: {len(runs)}")
 
 run_statuses = [r["status"] for r in runs]
 test("All runs completed", all(s == "completed" for s in run_statuses),
@@ -108,7 +109,7 @@ test("All runs completed", all(s == "completed" for s in run_statuses),
 
 # /api/tasks/{id}/runs returns runs in chronological (created_at ASC) order
 run_roles = [r["role"] for r in runs]
-test("Run roles match pipeline", run_roles == ["planner", "architect", "builder", "qa", "security_reviewer", "reviewer"],
+test("Run roles match pipeline", run_roles == ["planner", "architect", "builder", "qa", "security_reviewer", "reviewer", "documentation"],
      f"got: {run_roles}")
 
 # Verify started_at and ended_at are set
@@ -144,7 +145,7 @@ test("Orchestration status returns 200", code == 200)
 test("Status shows done", status.get("task_status") == "done")
 test("Status is_complete true", status.get("is_complete") is True)
 test("Status current_role is null", status.get("current_role") is None)
-test("Status has runs", len(status.get("runs", [])) == 6)
+test("Status has runs", len(status.get("runs", [])) == 7)
 
 # ================================================================
 # TEST 2: Failure path — agent fails

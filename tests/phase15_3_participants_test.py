@@ -109,10 +109,10 @@ def test_t1_auto_seed():
         check("no records before first ensure", count_before == 0)
 
         result = _ensure_participants(conn, project_id)
-        check("returns 6 participants", len(result) == 6)
+        check("returns 7 participants", len(result) == 7)
 
         role_names = {p["role_name"] for p in result}
-        check("all 6 default roles present", role_names == {"planner", "architect", "builder", "qa", "security_reviewer", "reviewer"})
+        check("all 7 default roles present", role_names == {"planner", "architect", "builder", "qa", "security_reviewer", "reviewer", "documentation"})
     finally:
         conn.close()
 
@@ -142,7 +142,7 @@ def test_t2_existing_records():
         result2 = _ensure_participants(conn, project_id)
         qa = next((p for p in result2 if p["role_name"] == "qa"), None)
         check("qa is disabled after manual update", qa is not None and not qa["is_enabled"])
-        check("still 6 rows", len(result2) == 6)
+        check("still 7 rows", len(result2) == 7)
     finally:
         conn.close()
 
@@ -184,7 +184,7 @@ def test_t3_update():
         result2 = _ensure_participants(conn, project_id)
         reviewer2 = next((p for p in result2 if p["role_name"] == "reviewer"), None)
         check("reviewer re-enabled", reviewer2 is not None and reviewer2["is_enabled"])
-        check("total count still 6", len(result2) == 6)
+        check("total count still 7", len(result2) == 7)
     finally:
         conn.close()
 
@@ -264,12 +264,12 @@ def test_t6_enabled_roles_defaults():
 
     # Empty project_id
     roles = Orchestrator._get_enabled_roles("")
-    check("empty project_id returns all 6 defaults", roles == {"planner", "architect", "builder", "qa", "security_reviewer", "reviewer"})
+    check("empty project_id returns all 7 defaults", roles == {"planner", "architect", "builder", "qa", "security_reviewer", "reviewer", "documentation"})
 
     # Valid project_id with no config rows
     project_id = _make_project()
     roles2 = Orchestrator._get_enabled_roles(project_id)
-    check("no config rows returns all 6 defaults", roles2 == {"planner", "architect", "builder", "qa", "security_reviewer", "reviewer"})
+    check("no config rows returns all 7 defaults", roles2 == {"planner", "architect", "builder", "qa", "security_reviewer", "reviewer", "documentation"})
 
 
 # ── T7: _get_enabled_roles respects config ────────────────────

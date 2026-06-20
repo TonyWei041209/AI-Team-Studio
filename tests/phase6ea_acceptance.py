@@ -266,7 +266,17 @@ if code in (200, 201):
               len(proposals_list) >= 1, f"found {len(proposals_list)} proposals")
 
         if proposals_list:
-            proposal = proposals_list[0]
+            # Role-based selection (robust to multiple proposals). As of DOC-3 the
+            # Documentation role adds a SECOND proposal (created after the Builder, so it
+            # sorts first by created_at DESC) — select the Builder proposal by role rather
+            # than positionally, and positively assert the documentation proposal too.
+            builder_proposal = next((p for p in proposals_list if p.get("role") == "builder"), None)
+            doc_proposal = next((p for p in proposals_list if p.get("role") == "documentation"), None)
+            check("Builder proposal exists (role-based)", builder_proposal is not None,
+                  f"roles={[p.get('role') for p in proposals_list]}")
+            check("Documentation proposal also exists (DOC-3 second proposal)", doc_proposal is not None,
+                  f"roles={[p.get('role') for p in proposals_list]}")
+            proposal = builder_proposal or proposals_list[0]
             _proposal_id = proposal.get("id", "")
             check("Proposal has task_id matching the task", proposal.get("task_id") == _task_id)
             check("Proposal role is 'builder'", proposal.get("role") == "builder")
