@@ -875,6 +875,65 @@ def _apply_v20(conn: sqlite3.Connection) -> None:
     conn.execute("INSERT INTO schema_version (version) VALUES (20)")
 
 
+def _apply_v21(conn: sqlite3.Connection) -> None:
+    """V21: Add the 'documentation' role — extend skills.agent_role CHECK + seed role_model_settings (DOC-2).
+
+    Phase-0 re-confirmed (post-AR) that no DB-read path converts a stored role string to
+    the AgentRole enum, so seeding a 'documentation' role_model_settings row before the
+    enum member exists (added in DOC-3) is safe.
+
+    1. Recreate skills with the agent_role CHECK extended to include 'documentation'
+       (mirrors the V17/V19 recreate exactly: create skills_v21 with identical columns/
+       defaults/scope_type CHECK + the extended agent_role CHECK, copy ALL rows, drop,
+       rename, recreate idx_skills_scope). Every column/default/constraint/index and all
+       rows are preserved; the only change is adding 'documentation' to the allow-list.
+    2. Seed role_model_settings ('documentation','mock','',0) — disabled (mirroring how
+       architect was seeded in V19); invisible to get_role_model_settings (which iterates
+       the enum-derived _VALID_ROLES) until DOC-3 adds the enum member.
+
+    DEFERRED to DOC-3: the documentation *roles* (registry) system-role row. The roles
+    seed lands in DOC-3 (atomically with the enum/pipeline activation + the role-count
+    test re-baseline), matching the AR V19→V20 sequencing. Phase-0 0b confirmed NO test
+    uses "documentation" as a fixture, so unlike architect this needs no fixture rename.
+    Idempotent via INSERT OR IGNORE.
+    """
+    conn.execute("""
+        CREATE TABLE skills_v21 (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            description TEXT NOT NULL DEFAULT '',
+            content TEXT NOT NULL DEFAULT '',
+            scope_type TEXT NOT NULL DEFAULT 'global' CHECK(scope_type IN ('global', 'agent')),
+            agent_role TEXT,
+            is_enabled INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+            CHECK(
+                (scope_type = 'global' AND agent_role IS NULL) OR
+                (scope_type = 'agent' AND agent_role IN ('planner', 'builder', 'qa', 'reviewer', 'security_reviewer', 'architect', 'documentation'))
+            )
+        )
+    """)
+    conn.execute("""
+        INSERT INTO skills_v21
+        SELECT id, name, description, content, scope_type, agent_role,
+               is_enabled, created_at, updated_at
+        FROM skills
+    """)
+    conn.execute("DROP TABLE skills")
+    conn.execute("ALTER TABLE skills_v21 RENAME TO skills")
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_skills_scope "
+        "ON skills(scope_type, agent_role)"
+    )
+    conn.execute(
+        "INSERT OR IGNORE INTO role_model_settings (role, provider, model, enabled) "
+        "VALUES (?, ?, ?, ?)",
+        ("documentation", "mock", "", 0),
+    )
+    conn.execute("INSERT INTO schema_version (version) VALUES (21)")
+
+
 # Ordered list of migrations
 _MIGRATIONS = [
     (1, _apply_v1),
@@ -897,6 +956,7 @@ _MIGRATIONS = [
     (18, _apply_v18),
     (19, _apply_v19),
     (20, _apply_v20),
+    (21, _apply_v21),
 ]
 
 
