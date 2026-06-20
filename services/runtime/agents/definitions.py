@@ -448,6 +448,20 @@ AGENT_PIPELINE: list[AgentRoleDefinition] = [
         output_sections=["decision", "reason", "issues_found", "confidence"],
         system_prompt=REVIEWER_SYSTEM_PROMPT,
     ),
+    AgentRoleDefinition(
+        role=AgentRole.DOCUMENTATION,
+        display_name="Documentation",
+        description="Proposes documentation file changes for the approved work (a second Builder); runs after the Reviewer",
+        # required/success = DONE: Documentation runs AFTER the Reviewer (which set DONE).
+        # required_task_status is advisory (not enforced at runtime); success_task_status=DONE
+        # is a no-op advance (the loop skips _update_task_status when current == target), so
+        # this adds zero state-machine change and never triggers a DONE→X transition.
+        required_task_status=TaskStatus.DONE,
+        success_task_status=TaskStatus.DONE,
+        allowed_tools=["read", "grep", "glob"],
+        output_sections=["change_summary", "proposed_files", "change_steps", "reasoning_summary", "validation_plan"],
+        system_prompt=DOCUMENTATION_SYSTEM_PROMPT,
+    ),
 ]
 
 

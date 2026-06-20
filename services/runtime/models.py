@@ -31,6 +31,7 @@ class AgentRole(str, Enum):
     QA = "qa"
     SECURITY_REVIEWER = "security_reviewer"
     REVIEWER = "reviewer"
+    DOCUMENTATION = "documentation"
 
 
 class RunStatus(str, Enum):

@@ -12,7 +12,7 @@ from models import Skill, SkillCreate, SkillUpdate
 router = APIRouter(prefix="/api/skills", tags=["skills"])
 
 # Valid agent roles for scope_type=agent
-_VALID_ROLES = {"planner", "architect", "builder", "qa", "security_reviewer", "reviewer"}
+_VALID_ROLES = {"planner", "architect", "builder", "qa", "security_reviewer", "reviewer", "documentation"}
 
 
 def _validate_skill_body(body: SkillCreate | SkillUpdate, *, is_create: bool = False) -> None:

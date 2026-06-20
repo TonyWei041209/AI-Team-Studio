@@ -11,11 +11,10 @@ from __future__ import annotations
 
 import json
 import re
-from dataclasses import replace
 from typing import Any
 
 from models import AgentRole, ReviewDecision
-from agents.definitions import get_definition, DOCUMENTATION_SYSTEM_PROMPT
+from agents.definitions import get_definition
 from agents.skill_loader import build_enhanced_system_prompt
 from agents.executor import ExecutionResult
 from providers.base import CompletionRequest, Message, MessageRole
@@ -768,7 +767,7 @@ class ModelAgentExecutor:
     QA-Real: QA added as a real static-review role (informs the Reviewer, never vetoes).
     """
 
-    _SUPPORTED_ROLES = {AgentRole.PLANNER, AgentRole.ARCHITECT, AgentRole.BUILDER, AgentRole.QA, AgentRole.SECURITY_REVIEWER, AgentRole.REVIEWER}
+    _SUPPORTED_ROLES = {AgentRole.PLANNER, AgentRole.ARCHITECT, AgentRole.BUILDER, AgentRole.QA, AgentRole.SECURITY_REVIEWER, AgentRole.REVIEWER, AgentRole.DOCUMENTATION}
 
     def __init__(self, registry: ProviderRegistry | None = None):
         self._registry = registry or get_registry()
@@ -791,6 +790,8 @@ class ModelAgentExecutor:
             return await self._execute_security_reviewer(task_context, role)
         if role == AgentRole.REVIEWER:
             return await self._execute_reviewer(task_context)
+        if role == AgentRole.DOCUMENTATION:
+            return await self._execute_documentation(task_context, role)
         raise NotImplementedError(
             f"ModelAgentExecutor does not yet support role: {role.value}. "
             f"Use MockAgentExecutor for {role.value}."
@@ -1308,17 +1309,11 @@ class ModelAgentExecutor:
           proposed_files, so a skipped doc step produces no (broken/empty) proposal.
         - On success (valid output with proposed_files), it returns the parsed proposal.
 
-        DOC-1 scope: DOCUMENTATION is NOT yet in the AgentRole enum or AGENT_PIPELINE
-        (that is DOC-3); this method is wired to nothing and reachable only by its unit
-        test. The role to resolve is supplied by the caller (the future DOC-3 dispatch
-        passes AgentRole.DOCUMENTATION; the unit test stubs _resolve_provider), so this
-        method never names the not-yet-existing enum member. DOCUMENTATION_SYSTEM_PROMPT
-        is injected via dataclasses.replace until the DOC-3 pipeline entry carries it
-        (mirrors AR-1's pre-activation step).
+        The system prompt comes from the DOCUMENTATION definition (like the other roles);
+        the execute() dispatch passes the role, and the unit test stubs _resolve_provider.
         """
         try:
             defn, provider, model_name = self._resolve_provider(role)
-            defn = replace(defn, system_prompt=DOCUMENTATION_SYSTEM_PROMPT)
             user_msg = self._build_documentation_user_message(task_context)
             raw_content, usage = await self._call_model(defn, provider, model_name, user_msg)
         except Exception as exc:

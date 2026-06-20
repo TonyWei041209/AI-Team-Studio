@@ -303,9 +303,16 @@ class Orchestrator:
             self._log(task_id, run_id, "info", defn.role.value,
                       f"{defn.display_name} completed successfully")
 
-            # 5. Create execution proposal after Builder succeeds (Phase 6E-A)
-            if defn.role == AgentRole.BUILDER:
-                self._create_execution_proposal(task_id, run_id, result.output)
+            # 5. Create execution proposal after a proposal-producing role succeeds.
+            #    Builder (Phase 6E-A) and Documentation (DOC-3) both emit proposed_files
+            #    that flow the execution chain. Gate on a non-empty proposed_files list so
+            #    a Documentation HYBRID skip-fallback (no proposed_files) creates NO proposal.
+            #    The Builder schema always requires proposed_files >= 1, so its behavior is
+            #    unchanged (it always had proposed_files → always created a proposal).
+            if defn.role in (AgentRole.BUILDER, AgentRole.DOCUMENTATION):
+                output = result.output
+                if isinstance(output, dict) and output.get("proposed_files"):
+                    self._create_execution_proposal(task_id, run_id, output, role=defn.role)
         else:
             self._update_run(
                 run_id, RunStatus.FAILED,
@@ -339,8 +346,14 @@ class Orchestrator:
         task_id: str,
         run_id: str,
         builder_output: dict,
+        role: AgentRole = AgentRole.BUILDER,
     ) -> str | None:
-        """Persist Builder output as an execution proposal.
+        """Persist a proposal-producing role's output as an execution proposal.
+
+        Used by the Builder and (DOC-3) the Documentation role — both emit proposed_files
+        that flow the execution chain. *role* parameterizes the stored proposal.role and
+        the approval action_type; it defaults to BUILDER so the Builder call site (and any
+        legacy caller) produces byte-identical values to before this was parameterized.
 
         If the proposal requires approval, also creates an ApprovalRequest
         linked via proposal_id.  Returns proposal_id or None on error.
@@ -372,7 +385,7 @@ class Orchestrator:
                         created_at, updated_at)
                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                     (
-                        proposal_id, task_id, run_id, "builder",
+                        proposal_id, task_id, run_id, role.value,
                         json.dumps(builder_output),
                         risk_level,
                         1 if requires_approval else 0,
@@ -400,7 +413,7 @@ class Orchestrator:
                            VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
                         (
                             approval_id, task_id, run_id,
-                            "proposal:builder", payload,
+                            f"proposal:{role.value}", payload,
                             "pending", proposal_id, now,
                         ),
                     )
@@ -707,7 +720,7 @@ class Orchestrator:
         If no participant config exists, returns all default roles.
         """
         if not project_id:
-            return {"planner", "architect", "builder", "qa", "security_reviewer", "reviewer"}
+            return {"planner", "architect", "builder", "qa", "security_reviewer", "reviewer", "documentation"}
         conn = get_connection()
         try:
             rows = conn.execute(
@@ -716,7 +729,7 @@ class Orchestrator:
             ).fetchall()
             if not rows:
                 # No config yet → all defaults enabled
-                return {"planner", "architect", "builder", "qa", "security_reviewer", "reviewer"}
+                return {"planner", "architect", "builder", "qa", "security_reviewer", "reviewer", "documentation"}
             return {r["role_name"] for r in rows}
         finally:
             conn.close()

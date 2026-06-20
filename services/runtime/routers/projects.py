@@ -14,7 +14,7 @@ from models import Project, ProjectCreate, ProjectUpdate, ProjectParticipant, Pr
 router = APIRouter(prefix="/api/projects", tags=["projects"])
 
 # Default system roles for auto-seeding
-_DEFAULT_ROLES = ["planner", "architect", "builder", "qa", "security_reviewer", "reviewer"]
+_DEFAULT_ROLES = ["planner", "architect", "builder", "qa", "security_reviewer", "reviewer", "documentation"]
 # Mandatory roles that cannot be disabled
 _MANDATORY_ROLES = {"planner", "builder"}
 
