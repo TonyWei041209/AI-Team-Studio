@@ -1289,7 +1289,49 @@ class ModelAgentExecutor:
         prev = ctx.get("previous_outputs", {})
         if prev.get("planner"):
             parts.append(f"\nPlanner plan:\n{json.dumps(prev['planner'], ensure_ascii=False, separators=(',',':'))}")
+
+        # B1-Arch-甲: inject the real project file/directory structure (PATHS ONLY,
+        # no contents) so the Architect designs against the actual layout. Sandboxed,
+        # capped; silently degrades to text-only when no workspace_root resolves.
+        structure_block = ModelAgentExecutor._build_architect_structure_context(ctx)
+        if structure_block:
+            parts.append(structure_block)
         return "\n".join(parts)
+
+    # Caps for B1-Arch-甲 injected project structure (paths only) — keep the
+    # listing well within the model's max_tokens budget (16384).
+    _ARCH_TREE_MAX_ENTRIES = 1000
+    _ARCH_TREE_MAX_TOTAL_CHARS = 12_000
+
+    @staticmethod
+    def _build_architect_structure_context(ctx: dict) -> str | None:
+        """Inject the project's file/directory structure (PATHS ONLY) for the Architect.
+
+        Lists the workspace tree via the sandboxed ``list_scoped_tree``
+        (workspace-scoped, sensitive-pruned, symlink-safe, capped) and returns a
+        labeled block of RELATIVE paths. PATHS ONLY — never file contents (reading
+        contents is a separate, later decision). Returns ``None`` when no
+        workspace_root resolves or the listing is empty (graceful: the Architect
+        designs on text only). Never raises.
+        """
+        # Lazy import keeps model_executor's module-level import graph unchanged.
+        from agents.scoped_file_reader import list_scoped_tree, resolve_workspace_root
+
+        workspace_root = resolve_workspace_root(ctx.get("project_id"))
+        if not workspace_root:
+            return None
+
+        paths, truncated = list_scoped_tree(
+            workspace_root,
+            ModelAgentExecutor._ARCH_TREE_MAX_ENTRIES,
+            ModelAgentExecutor._ARCH_TREE_MAX_TOTAL_CHARS,
+        )
+        if not paths:
+            return None
+
+        suffix = ", truncated" if truncated else ""
+        header = f"\nProject structure (file paths, {len(paths)} shown{suffix}):\n"
+        return header + "\n".join(paths)
 
     # ── Documentation execution (a "second Builder": proposes doc files) ──
 
