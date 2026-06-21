@@ -1296,6 +1296,13 @@ class ModelAgentExecutor:
         structure_block = ModelAgentExecutor._build_architect_structure_context(ctx)
         if structure_block:
             parts.append(structure_block)
+
+        # B1-Arch-乙-3a: inject the CONTENT of a few facade files (README, manifests,
+        # entry-point source) AFTER the structure block. Sandboxed via read_scoped_file,
+        # multi-layer-capped; silently degrades when unavailable.
+        facade_block = ModelAgentExecutor._build_architect_facade_context(ctx)
+        if facade_block:
+            parts.append(facade_block)
         return "\n".join(parts)
 
     # Caps for B1-Arch-甲 injected project structure (paths only) — keep the
@@ -1332,6 +1339,94 @@ class ModelAgentExecutor:
         suffix = ", truncated" if truncated else ""
         header = f"\nProject structure (file paths, {len(paths)} shown{suffix}):\n"
         return header + "\n".join(paths)
+
+    # B1-Arch-乙-3a facade-file CONTENT caps. Read a small fixed set of "facade"
+    # files (README, dependency manifests, entry-point source) to ground the design.
+    # NOTE: max_tokens=16384 is the OUTPUT cap; these bound input cost/latency/signal.
+    _ARCH_FACADE_MAX_FILES = 6        # at most 6 facade files included
+    _ARCH_FACADE_PER_FILE_CAP = 6_000   # chars injected per facade file (truncate-with-note)
+    _ARCH_FACADE_TOTAL_CAP = 18_000     # chars across all facade files
+    # Bounded read ceiling passed to read_scoped_file as max_bytes: it DENIES (not
+    # truncates) files above max_bytes, so to truncate-with-note (per the locked
+    # decision) we read up to this ceiling — smaller than the 100KB default so we
+    # never read a giant file whole — then slice to the per-file cap below.
+    _ARCH_FACADE_READ_CEILING = 64_000
+
+    # Try-in-order, include-if-exists, deduplicated facade candidates (decisions locked).
+    _ARCH_FACADE_CANDIDATES = (
+        "README.md", "README.rst", "README.txt",
+        "pyproject.toml", "setup.py", "setup.cfg", "requirements.txt",
+        "package.json", "tsconfig.json",
+        "Cargo.toml", "go.mod", "pom.xml", "build.gradle",
+        "main.py", "app.py", "__main__.py", "src/main.py",
+        "index.ts", "index.js", "src/index.ts", "src/index.js", "src/main.ts",
+    )
+
+    @staticmethod
+    def _build_architect_facade_context(ctx: dict) -> str | None:
+        """Inject the CONTENT of a small fixed set of facade files for the Architect.
+
+        Reads README + dependency manifests + entry-point source via the sandboxed
+        ``read_scoped_file`` (workspace-scoped, sensitive-denied, symlink + size
+        checks) — it NEVER uses the unsandboxed ReadFileTool. Multi-layer caps run
+        together: at most ``_ARCH_FACADE_MAX_FILES`` files, each truncated to
+        ``_ARCH_FACADE_PER_FILE_CAP`` chars, total bounded by ``_ARCH_FACADE_TOTAL_CAP``.
+
+        Returns a labeled block, or ``None`` when no workspace_root resolves or
+        nothing is found (graceful: the Architect designs on text + structure only).
+        Never raises. PATHS ONLY is 甲; this is the first role to read CONTENT.
+        """
+        # Lazy import keeps model_executor's module-level import graph unchanged.
+        from agents.scoped_file_reader import read_scoped_file, resolve_workspace_root
+
+        workspace_root = resolve_workspace_root(ctx.get("project_id"))
+        if not workspace_root:
+            return None
+
+        sections: list[str] = []
+        included = 0
+        used = 0
+        budget_hit = False
+        for path in ModelAgentExecutor._ARCH_FACADE_CANDIDATES:
+            if included >= ModelAgentExecutor._ARCH_FACADE_MAX_FILES:
+                break
+            # Bounded read; read_scoped_file denies missing/sensitive/symlink/>ceiling.
+            ok, content = read_scoped_file(
+                path, workspace_root,
+                max_bytes=ModelAgentExecutor._ARCH_FACADE_READ_CEILING,
+            )
+            if not ok:
+                continue  # missing / sensitive / oversized / outside sandbox → skip
+
+            truncated_file = False
+            # Per-file cap: slice to the injection cap with a note.
+            if len(content) > ModelAgentExecutor._ARCH_FACADE_PER_FILE_CAP:
+                content = content[: ModelAgentExecutor._ARCH_FACADE_PER_FILE_CAP]
+                truncated_file = True
+
+            # Total-char budget guard across all facade files.
+            remaining = ModelAgentExecutor._ARCH_FACADE_TOTAL_CAP - used
+            if remaining <= 0:
+                budget_hit = True
+                break
+            if len(content) > remaining:
+                content = content[:remaining]
+                truncated_file = True
+                budget_hit = True
+
+            header = f"\n--- {path}" + (" (truncated)" if truncated_file else "") + " ---\n"
+            sections.append(header + content)
+            used += len(content)
+            included += 1
+            if budget_hit:
+                break
+
+        if not sections:
+            return None
+        block = "\nKey project files (content):" + "".join(sections)
+        if budget_hit:
+            block += "\n[...additional file content truncated to respect the context budget...]"
+        return block
 
     # ── Documentation execution (a "second Builder": proposes doc files) ──
 
