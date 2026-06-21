@@ -9,8 +9,9 @@ previously had no CI runner).
 Covers: qa_real_step2 (_execute_qa), sr_step1 (_execute_security_reviewer),
 ar_step1 (_execute_architect), doc_step1 (_execute_documentation),
 b1_scoped_file_reader (sandboxed role file-reading, B1-b),
-b1_documentation_reads (Documentation reads modify-targets, B1-d).
-Total: 6 suites.
+b1_documentation_reads (Documentation reads modify-targets, B1-d),
+b1_scoped_tree (sandboxed directory listing, B1-Arch-甲-1).
+Total: 7 suites.
 
 Usage:
     python scripts/run-unit-regression.py
@@ -30,6 +31,7 @@ TEST_SUITES = [
     "tests/doc_step1_execute_documentation_test.py",
     "tests/b1_scoped_file_reader_test.py",
     "tests/b1_documentation_reads_test.py",
+    "tests/b1_scoped_tree_test.py",
 ]
 
 
@@ -81,7 +83,7 @@ def main():
         sys.exit(1)
     else:
         print()
-        print("  Unit baseline: ALL PASS (6 suites)")
+        print("  Unit baseline: ALL PASS (7 suites)")
         sys.exit(0)
 
 

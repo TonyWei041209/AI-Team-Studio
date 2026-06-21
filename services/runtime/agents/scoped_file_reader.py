@@ -34,6 +34,12 @@ from agents.scoped_file_executor import _is_sensitive_path
 # here — any cross-file budgeting is the caller's decision.
 DEFAULT_MAX_BYTES = 100_000
 
+# Default caps for the sandboxed directory listing (B1-Arch-甲).  Bound the
+# number of paths and their total characters so a large repo cannot blow the
+# model's context budget.
+DEFAULT_TREE_MAX_ENTRIES = 1000
+DEFAULT_TREE_MAX_TOTAL_CHARS = 12_000
+
 
 def read_scoped_file(
     relative_path: str,
@@ -133,3 +139,83 @@ def resolve_workspace_root(project_id: str | None) -> str | None:
     if not path or not str(path).strip():
         return None
     return path
+
+
+def list_scoped_tree(
+    workspace_root: str,
+    max_entries: int = DEFAULT_TREE_MAX_ENTRIES,
+    max_total_chars: int = DEFAULT_TREE_MAX_TOTAL_CHARS,
+) -> tuple[list[str], bool]:
+    """Sandboxed recursive listing of FILE PATHS within ``workspace_root``.
+
+    Returns ``(relative_posix_paths, truncated)`` — PATHS ONLY, never file
+    contents. Reuses ``_is_sensitive_path`` (imported, unmodified) and applies
+    the full directory-walk safety recipe; the symlinked-directory escape is the
+    key traversal risk, so ALL of these run together:
+
+    - ``os.walk(realpath(workspace_root), followlinks=False)`` — never descends
+      into symlinked directories (followlinks=False is the safe default).
+    - Prunes sensitive AND symlinked directories in-place (no descent, excluded
+      from output).
+    - Skips symlinked files and sensitive files.
+    - Per-file defense-in-depth: the resolved real path must stay inside the
+      workspace (``realpath(full).startswith(realpath(workspace_root)+os.sep)``).
+    - Returns RELATIVE POSIX-style paths, sorted for determinism.
+    - Stops at ``max_entries`` OR when the running joined-path character total
+      would exceed ``max_total_chars`` → ``truncated=True``.
+
+    Non-raising: a bad workspace or a walk error returns whatever was collected
+    so far (``([], False)`` for an invalid workspace), never raises. It NEVER
+    uses the unsandboxed ListDirectoryTool / _resolve_path / ReadFileTool.
+    """
+    if not workspace_root or not str(workspace_root).strip():
+        return [], False
+    real_ws = os.path.realpath(workspace_root)
+    if not os.path.isdir(real_ws):
+        return [], False
+
+    ws_prefix = real_ws + os.sep
+    results: list[str] = []
+    truncated = False
+    total_chars = 0
+
+    try:
+        for dirpath, dirnames, filenames in os.walk(real_ws, followlinks=False):
+            # Prune sensitive AND symlinked dirs in-place: no descent, not output.
+            dirnames[:] = sorted(
+                d for d in dirnames
+                if not _is_sensitive_path(d)[0]
+                and not os.path.islink(os.path.join(dirpath, d))
+            )
+            for fn in sorted(filenames):
+                full = os.path.join(dirpath, fn)
+                # Skip symlinked files (mirror read_scoped_file's symlink rejection).
+                if os.path.islink(full):
+                    continue
+                rel = os.path.relpath(full, real_ws).replace("\\", "/")
+                # Skip sensitive files at any level (e.g. a top-level .env).
+                if _is_sensitive_path(rel)[0]:
+                    continue
+                # Defense-in-depth: resolved real path must stay inside workspace.
+                try:
+                    if not os.path.realpath(full).startswith(ws_prefix):
+                        continue
+                except OSError:
+                    continue
+                # Char-budget guard (path + a newline separator).
+                projected = total_chars + len(rel) + 1
+                if projected > max_total_chars:
+                    truncated = True
+                    break
+                results.append(rel)
+                total_chars = projected
+                if len(results) >= max_entries:
+                    truncated = True
+                    break
+            if truncated:
+                break
+    except OSError:
+        # Non-raising: return whatever was collected so far.
+        return sorted(results), truncated
+
+    return sorted(results), truncated
