@@ -73,8 +73,8 @@ RUNNERS = [
     {
         "name": "Unit",
         "script": "scripts/run-unit-regression.py",
-        "expected_suites": 8,
-        "expected_checks": "~230",
+        "expected_suites": 9,
+        "expected_checks": "~258",
     },
 ]
 

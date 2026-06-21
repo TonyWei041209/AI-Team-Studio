@@ -11,8 +11,9 @@ ar_step1 (_execute_architect), doc_step1 (_execute_documentation),
 b1_scoped_file_reader (sandboxed role file-reading, B1-b),
 b1_documentation_reads (Documentation reads modify-targets, B1-d),
 b1_scoped_tree (sandboxed directory listing, B1-Arch-甲-1),
-b1_architect_structure (Architect sees dir structure, B1-Arch-甲-3).
-Total: 8 suites.
+b1_architect_structure (Architect sees dir structure, B1-Arch-甲-3),
+b1_architect_facade (Architect reads facade-file content, B1-Arch-乙-3a).
+Total: 9 suites.
 
 Usage:
     python scripts/run-unit-regression.py
@@ -34,6 +35,7 @@ TEST_SUITES = [
     "tests/b1_documentation_reads_test.py",
     "tests/b1_scoped_tree_test.py",
     "tests/b1_architect_structure_test.py",
+    "tests/b1_architect_facade_test.py",
 ]
 
 
@@ -85,7 +87,7 @@ def main():
         sys.exit(1)
     else:
         print()
-        print("  Unit baseline: ALL PASS (8 suites)")
+        print("  Unit baseline: ALL PASS (9 suites)")
         sys.exit(0)
 
 
