@@ -860,7 +860,12 @@ class ModelAgentExecutor:
             model=model_name,
             messages=[Message(role=MessageRole.user, content=user_msg)],
             system_prompt=build_enhanced_system_prompt(defn.system_prompt, defn.role),
-            max_tokens=16384,
+            # Output-token ceiling. 8192 is supported by every seeded model
+            # (Anthropic claude-3-5-haiku caps at 8192; Gemini 2.5 flash/pro
+            # advertise 8192) — 16384 exceeded Haiku's API limit and would error
+            # on a real call. This is an OUTPUT cap; input is bounded by the
+            # model's context window, not this value.
+            max_tokens=8192,
             temperature=0.3,
         )
         response = await provider.complete(request)
