@@ -1374,4 +1374,93 @@ class ModelAgentExecutor:
             parts.append(f"\nArchitect design:\n{json.dumps(prev['architect'], ensure_ascii=False, separators=(',',':'))}")
         if prev.get("builder"):
             parts.append(f"\nBuilder proposal (implemented changes):\n{json.dumps(prev['builder'], ensure_ascii=False, separators=(',',':'))}")
+
+        # B1: pre-fetch the CURRENT on-disk content of the files the Builder will
+        # MODIFY, so Documentation describes what actually changes. Sandboxed,
+        # read-only, modify-targets ONLY; silently degrades when unavailable.
+        file_block = ModelAgentExecutor._build_doc_modify_file_context(ctx)
+        if file_block:
+            parts.append(file_block)
         return "\n".join(parts)
+
+    # Caps for B1 pre-fetched file content. Keep the injected context well within
+    # the model's max_tokens budget (16384) — read at most N modify targets and
+    # cap the total injected characters.
+    _DOC_READ_MAX_FILES = 10
+    _DOC_READ_TOTAL_CAP = 24_000  # chars across all injected files
+
+    @staticmethod
+    def _build_doc_modify_file_context(ctx: dict) -> str | None:
+        """Pre-fetch current on-disk content of the Builder's modify targets (B1).
+
+        HARDCODED MINIMAL READ POLICY: read ONLY ``proposed_files`` entries whose
+        action == "modify"; nothing else (``create`` targets don't exist yet; no
+        directory listing; no project scan). Every read goes through the sandboxed
+        ``read_scoped_file`` (workspace-scoped, sensitive deny-list, symlink + size
+        checks) — it NEVER uses the unsandboxed ReadFileTool.
+
+        Returns a labeled prompt block, or ``None`` when there is nothing to inject
+        (no Builder output, no modify targets, no resolvable workspace_root, or
+        every read denied). Never raises — Documentation still works on text only.
+        """
+        prev = ctx.get("previous_outputs", {})
+        builder = prev.get("builder")
+        if not isinstance(builder, dict):
+            return None
+        proposed = builder.get("proposed_files")
+        if not isinstance(proposed, list):
+            return None
+
+        modify_targets: list[str] = []
+        for f in proposed:
+            if not isinstance(f, dict):
+                continue
+            action = f.get("action") or f.get("operation")
+            if action != "modify":
+                continue
+            path = f.get("path")
+            if isinstance(path, str) and path.strip():
+                modify_targets.append(path)
+        if not modify_targets:
+            return None
+
+        # Lazy import keeps model_executor's module-level import graph unchanged.
+        from agents.scoped_file_reader import read_scoped_file, resolve_workspace_root
+
+        workspace_root = resolve_workspace_root(ctx.get("project_id"))
+        if not workspace_root:
+            return None  # graceful: no file content injected, role works on text
+
+        sections: list[str] = []
+        used = 0
+        for path in modify_targets[: ModelAgentExecutor._DOC_READ_MAX_FILES]:
+            ok, result = read_scoped_file(path, workspace_root)
+            if not ok:
+                continue  # denied / missing / oversized / outside sandbox → skip
+            remaining = ModelAgentExecutor._DOC_READ_TOTAL_CAP - used
+            if remaining <= 0:
+                sections.append("\n[...additional files omitted to respect the context budget...]")
+                break
+            snippet = result
+            truncated = False
+            if len(snippet) > remaining:
+                snippet = snippet[:remaining]
+                truncated = True
+            used += len(snippet)
+            header = (
+                f"\n--- Current content of {path}"
+                + (" (truncated)" if truncated else "")
+                + " ---"
+            )
+            sections.append(header + "\n" + snippet)
+            if truncated:
+                sections.append("\n[...truncated to respect the context budget...]")
+                break
+
+        if not sections:
+            return None
+        return (
+            "\nCurrent content of files to be documented "
+            "(modify targets, read from the project workspace):"
+            + "".join(sections)
+        )
