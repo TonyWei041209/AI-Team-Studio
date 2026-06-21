@@ -7,8 +7,9 @@ Folds both model_executor unit tests into the unified regression gate (they
 previously had no CI runner).
 
 Covers: qa_real_step2 (_execute_qa), sr_step1 (_execute_security_reviewer),
-ar_step1 (_execute_architect), doc_step1 (_execute_documentation).
-Total: 4 suites.
+ar_step1 (_execute_architect), doc_step1 (_execute_documentation),
+b1_scoped_file_reader (sandboxed role file-reading, B1-b).
+Total: 5 suites.
 
 Usage:
     python scripts/run-unit-regression.py
@@ -26,6 +27,7 @@ TEST_SUITES = [
     "tests/sr_step1_execute_security_reviewer_test.py",
     "tests/ar_step1_execute_architect_test.py",
     "tests/doc_step1_execute_documentation_test.py",
+    "tests/b1_scoped_file_reader_test.py",
 ]
 
 
@@ -77,7 +79,7 @@ def main():
         sys.exit(1)
     else:
         print()
-        print("  Unit baseline: ALL PASS (4 suites)")
+        print("  Unit baseline: ALL PASS (5 suites)")
         sys.exit(0)
 
 
