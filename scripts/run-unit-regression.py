@@ -10,8 +10,9 @@ Covers: qa_real_step2 (_execute_qa), sr_step1 (_execute_security_reviewer),
 ar_step1 (_execute_architect), doc_step1 (_execute_documentation),
 b1_scoped_file_reader (sandboxed role file-reading, B1-b),
 b1_documentation_reads (Documentation reads modify-targets, B1-d),
-b1_scoped_tree (sandboxed directory listing, B1-Arch-甲-1).
-Total: 7 suites.
+b1_scoped_tree (sandboxed directory listing, B1-Arch-甲-1),
+b1_architect_structure (Architect sees dir structure, B1-Arch-甲-3).
+Total: 8 suites.
 
 Usage:
     python scripts/run-unit-regression.py
@@ -32,6 +33,7 @@ TEST_SUITES = [
     "tests/b1_scoped_file_reader_test.py",
     "tests/b1_documentation_reads_test.py",
     "tests/b1_scoped_tree_test.py",
+    "tests/b1_architect_structure_test.py",
 ]
 
 
@@ -83,7 +85,7 @@ def main():
         sys.exit(1)
     else:
         print()
-        print("  Unit baseline: ALL PASS (7 suites)")
+        print("  Unit baseline: ALL PASS (8 suites)")
         sys.exit(0)
 
 
