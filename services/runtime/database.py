@@ -961,6 +961,34 @@ def _apply_v22(conn: sqlite3.Connection) -> None:
     conn.execute("INSERT INTO schema_version (version) VALUES (22)")
 
 
+def _apply_v23(conn: sqlite3.Connection) -> None:
+    """V23: Persist audit-grade raw provider output + finish_reason on agent_runs (TASK 乙).
+
+    agent_runs.output_summary stays a LOSSY summary (lists collapsed) for cheap display;
+    these ADDITIVE, nullable columns capture the audit-grade data that every post-hoc
+    verification in this project has fought the lack of:
+      - raw_output    TEXT NULL — the FULL parsed provider output (result.output JSON,
+                       lists NOT collapsed). What audits actually need.
+      - finish_reason TEXT NULL — the provider finish/stop reason captured in
+                       ModelAgentExecutor._call_model.
+
+    Write-side only: runtime handoff (previous_outputs) and _summarize_output are
+    UNCHANGED. With finish_reason persisted, a future per-model max_tokens clamp can
+    detect truncation directly (finish_reason in ("length","max_tokens",...)) instead of
+    inferring from completion≈cap — the clamp itself is NOT implemented here.
+
+    Additive nullable columns → existing rows are preserved untouched. Idempotent: the
+    _MIGRATIONS version gate runs this once; the PRAGMA guard additionally makes a stray
+    re-invocation of the ADD COLUMNs safe.
+    """
+    existing = {row[1] for row in conn.execute("PRAGMA table_info(agent_runs)").fetchall()}
+    if "raw_output" not in existing:
+        conn.execute("ALTER TABLE agent_runs ADD COLUMN raw_output TEXT")
+    if "finish_reason" not in existing:
+        conn.execute("ALTER TABLE agent_runs ADD COLUMN finish_reason TEXT")
+    conn.execute("INSERT INTO schema_version (version) VALUES (23)")
+
+
 # Ordered list of migrations
 _MIGRATIONS = [
     (1, _apply_v1),
@@ -985,6 +1013,7 @@ _MIGRATIONS = [
     (20, _apply_v20),
     (21, _apply_v21),
     (22, _apply_v22),
+    (23, _apply_v23),
 ]
 
 

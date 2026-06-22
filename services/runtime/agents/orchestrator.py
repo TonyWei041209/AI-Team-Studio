@@ -296,9 +296,15 @@ class Orchestrator:
 
         # 4. Record result
         if result.success:
+            # TASK 乙: persist the FULL parsed output + provider finish_reason alongside the
+            # (unchanged) lossy output_summary — additive, audit-grade, write-side only.
+            # Runtime handoff (previous_outputs = result.output) is untouched.
+            _usage = result.token_usage if isinstance(result.token_usage, dict) else {}
             self._update_run(
                 run_id, RunStatus.COMPLETED,
                 output_summary=self._summarize_output(result.output),
+                raw_output=json.dumps(result.output, ensure_ascii=False),
+                finish_reason=_usage.get("finish_reason"),
             )
             self._log(task_id, run_id, "info", defn.role.value,
                       f"{defn.display_name} completed successfully")
@@ -541,6 +547,8 @@ class Orchestrator:
     _ALLOWED_RUN_COLUMNS = frozenset({
         "status", "started_at", "ended_at", "output_summary",
         "model_provider", "model_name",
+        # TASK 乙 (V23): audit-grade columns — additive, write-side only.
+        "raw_output", "finish_reason",
     })
 
     @staticmethod
@@ -548,6 +556,8 @@ class Orchestrator:
         run_id: str,
         status: RunStatus,
         output_summary: str | None = None,
+        raw_output: str | None = None,
+        finish_reason: str | None = None,
     ) -> None:
         now = datetime.now(timezone.utc).isoformat()
         conn = get_connection()
@@ -559,6 +569,12 @@ class Orchestrator:
                 updates["ended_at"] = now
             if output_summary is not None:
                 updates["output_summary"] = output_summary
+            # TASK 乙: persist the FULL parsed output + provider finish_reason (audit-grade).
+            # output_summary above stays the lossy summary; these are additive.
+            if raw_output is not None:
+                updates["raw_output"] = raw_output
+            if finish_reason is not None:
+                updates["finish_reason"] = finish_reason
 
             # Validate all column names against allowlist
             for col in updates:

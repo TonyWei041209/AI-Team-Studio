@@ -875,6 +875,9 @@ class ModelAgentExecutor:
             "prompt_tokens": response.usage.prompt_tokens,
             "completion_tokens": response.usage.completion_tokens,
             "total_tokens": response.usage.total_tokens,
+            # TASK 乙: capture the provider finish/stop reason for audit + future
+            # truncation detection. Metadata only — NOT injected into handoff.
+            "finish_reason": getattr(response, "finish_reason", None),
         }
         return response.content, usage_dict
 

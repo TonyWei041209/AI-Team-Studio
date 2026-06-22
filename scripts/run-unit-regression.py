@@ -15,8 +15,9 @@ b1_architect_structure (Architect sees dir structure, B1-Arch-甲-3),
 b1_architect_facade (Architect reads facade-file content, B1-Arch-乙-3a),
 b1_architect_taskfile (Architect reads task-relevant file content, B1-Arch-乙-3b),
 b1_builder_taskfile (Builder reads existing modify-target content, B1-Builder),
-secret_redactor (content-level secret redaction at the B1 injection layer, TASK 甲).
-Total: 12 suites.
+secret_redactor (content-level secret redaction at the B1 injection layer, TASK 甲),
+v23_persist_raw_output (raw_output + finish_reason persistence, V23, TASK 乙).
+Total: 13 suites.
 
 Usage:
     python scripts/run-unit-regression.py
@@ -42,6 +43,7 @@ TEST_SUITES = [
     "tests/b1_architect_taskfile_test.py",
     "tests/b1_builder_taskfile_test.py",
     "tests/secret_redactor_test.py",
+    "tests/v23_persist_raw_output_test.py",
 ]
 
 
@@ -93,7 +95,7 @@ def main():
         sys.exit(1)
     else:
         print()
-        print("  Unit baseline: ALL PASS (12 suites)")
+        print("  Unit baseline: ALL PASS (13 suites)")
         sys.exit(0)
 
 
