@@ -1406,6 +1406,7 @@ class ModelAgentExecutor:
         """
         # Lazy import keeps model_executor's module-level import graph unchanged.
         from agents.scoped_file_reader import read_scoped_file, resolve_workspace_root
+        from agents.secret_redactor import redact_secrets, log_redaction_hits
 
         workspace_root = resolve_workspace_root(ctx.get("project_id"))
         if not workspace_root:
@@ -1413,6 +1414,7 @@ class ModelAgentExecutor:
 
         sections: list[str] = []
         included_paths: set[str] = set()
+        redaction_hits: list[dict] = []
         included = 0
         used = 0
         budget_hit = False
@@ -1426,6 +1428,12 @@ class ModelAgentExecutor:
             )
             if not ok:
                 continue  # missing / sensitive / oversized / outside sandbox → skip
+
+            # B1-甲: redact hardcoded secrets in the read content BEFORE the cap/budget
+            # math, so the budget reflects what is actually injected. Redaction preserves
+            # line structure and is byte-identical on clean files (no hits → unchanged).
+            content, _hits = redact_secrets(content, path)
+            redaction_hits.extend(_hits)
 
             truncated_file = False
             # Per-file cap: slice to the injection cap with a note.
@@ -1453,6 +1461,7 @@ class ModelAgentExecutor:
 
         if not sections:
             return None, set(), 0
+        log_redaction_hits(redaction_hits, context="architect-facade")
         block = "\nKey project files (content):" + "".join(sections)
         if budget_hit:
             block += "\n[...additional file content truncated to respect the context budget...]"
@@ -1565,6 +1574,7 @@ class ModelAgentExecutor:
             import os
             import re
             from agents.scoped_file_reader import read_scoped_file
+            from agents.secret_redactor import redact_secrets, log_redaction_hits
 
             if not signal or not signal.strip():
                 return None
@@ -1614,6 +1624,7 @@ class ModelAgentExecutor:
                 return None  # earlier block already used the whole shared budget
 
             sections: list[str] = []
+            redaction_hits: list[dict] = []
             used_in_block = 0
             budget_hit = False
             for path in selected:
@@ -1623,6 +1634,11 @@ class ModelAgentExecutor:
                 )
                 if not ok:
                     continue  # sensitive/oversized/symlink/MISSING (e.g. create-target) → skip
+                # B1-甲: redact hardcoded secrets BEFORE cap/budget math (covers BOTH the
+                # architect 乙-3b and builder callers via this shared core). Preserves line
+                # structure; byte-identical on clean files.
+                content, _hits = redact_secrets(content, path)
+                redaction_hits.extend(_hits)
                 truncated_file = False
                 if len(content) > ModelAgentExecutor._ARCH_TASKFILE_PER_FILE_CAP:
                     content = content[: ModelAgentExecutor._ARCH_TASKFILE_PER_FILE_CAP]
@@ -1643,6 +1659,7 @@ class ModelAgentExecutor:
 
             if not sections:
                 return None
+            log_redaction_hits(redaction_hits, context=block_label)
             block = f"\n{block_label}:" + "".join(sections)
             if budget_hit:
                 block += "\n[...additional task-relevant file content truncated to respect the context budget...]"
