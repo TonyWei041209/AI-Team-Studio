@@ -1897,17 +1897,26 @@ class ModelAgentExecutor:
 
         # Lazy import keeps model_executor's module-level import graph unchanged.
         from agents.scoped_file_reader import read_scoped_file, resolve_workspace_root
+        from agents.secret_redactor import redact_secrets, log_redaction_hits
 
         workspace_root = resolve_workspace_root(ctx.get("project_id"))
         if not workspace_root:
             return None  # graceful: no file content injected, role works on text
 
         sections: list[str] = []
+        doc_redaction_hits: list[dict] = []
         used = 0
         for path in modify_targets[: ModelAgentExecutor._DOC_READ_MAX_FILES]:
             ok, result = read_scoped_file(path, workspace_root)
             if not ok:
                 continue  # denied / missing / oversized / outside sandbox → skip
+            # B1-甲: redact hardcoded secrets BEFORE the cap. This cap is a total-budget
+            # slice (snippet[:remaining]); if it ran first, a secret could be split across
+            # the cap boundary, leaving the redactor unable to match the truncated token
+            # and leaking a partial secret. read -> redact -> cap -> append (same order as
+            # the other three B1 injection points). Byte-identical on clean files.
+            result, _doc_hits = redact_secrets(result, path)
+            doc_redaction_hits.extend(_doc_hits)
             remaining = ModelAgentExecutor._DOC_READ_TOTAL_CAP - used
             if remaining <= 0:
                 sections.append("\n[...additional files omitted to respect the context budget...]")
@@ -1930,6 +1939,7 @@ class ModelAgentExecutor:
 
         if not sections:
             return None
+        log_redaction_hits(doc_redaction_hits, context="documentation")
         return (
             "\nCurrent content of files to be documented "
             "(modify targets, read from the project workspace):"
