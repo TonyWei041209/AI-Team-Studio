@@ -23,10 +23,30 @@ from providers.registry import get_registry, ProviderRegistry
 
 logger = logging.getLogger(__name__)
 
-# Builder malformed-JSON retry cap (inner model-call layer, distinct from and BELOW the
-# orchestrator's reviewer-rejection loop). At most this many retries AFTER the first
-# attempt → up to 3 total _call_model calls per builder step invocation.
-_BUILDER_JSON_RETRY_MAX = 2
+# Malformed-JSON retry cap (inner model-call layer, distinct from and BELOW the orchestrator's
+# reviewer-rejection loop). SHARED by the three pipeline-BLOCKING roles (planner/builder/
+# reviewer) via _call_parse_retry. At most this many retries AFTER the first attempt → up to
+# 3 total _call_model calls per blocking-role step invocation.
+_JSON_RETRY_MAX = 2
+
+# Retry-feedback templates. {parse_err} = the JSONDecodeError detail from the failed attempt,
+# interpolated into the feedback appended for the NEXT attempt. Builder keeps content-specific
+# escaping guidance (its proposed_files[].content is the large escape-prone field); planner/
+# reviewer (no big multi-line content field) use the generic version.
+_BUILDER_JSON_RETRY_FEEDBACK = (
+    "\n\nIMPORTANT — your previous response was NOT valid JSON and could not be "
+    "parsed: {parse_err}\n"
+    "Respond again with a SINGLE valid JSON object only. In multi-line file "
+    "`content` values, escape every newline as \\n and every double-quote as "
+    "\\\", and do not include unescaped control characters or markdown code fences."
+)
+_GENERIC_JSON_RETRY_FEEDBACK = (
+    "\n\nIMPORTANT — your previous response was NOT valid JSON and could not be "
+    "parsed: {parse_err}\n"
+    "Respond again with a SINGLE valid JSON object only. Escape every double-quote "
+    "as \\\" and every newline as \\n inside all string values, and do not include "
+    "unescaped control characters or markdown code fences."
+)
 
 # Desired per-call OUTPUT-token budget. _call_model clamps this to each model's real hard
 # API limit (its ModelInfo.max_tokens), so this is what we WANT, not a flat global cap.
@@ -966,24 +986,107 @@ class ModelAgentExecutor:
             )
         return parsed
 
+    # ── Shared malformed-JSON retry (pipeline-BLOCKING roles only) ──
+
+    async def _call_parse_retry(
+        self,
+        role: AgentRole,
+        role_name: str,
+        schema_cls,
+        base_user_msg: str,
+        *,
+        retry_feedback_text: str,
+    ) -> tuple[dict | None, ExecutionResult | None, dict | None]:
+        """Call the model + parse/validate, retrying ONLY syntactic JSON-parse failures.
+
+        Shared inner retry for the three pipeline-BLOCKING roles (planner/builder/reviewer):
+        a parse failure makes them return success=False, which aborts the whole pipeline at
+        orchestrator §158, so recovering the common "malformed-but-complete" case is worth a
+        few re-prompts. DISTINCT from and BELOW the orchestrator's reviewer-rejection loop
+        (which acts on parsed+valid output). NOT triggered by a schema failure (wrong shape)
+        nor by ``finish_reason == "length"`` (truncation — re-prompting truncates again at the
+        same cap; that is the per-model max_tokens-clamp concern). Up to ``_JSON_RETRY_MAX``
+        retries; on exhaustion it returns the LAST failure as-is so the orchestrator's
+        FAILED-path persistence captures its raw_output + finish_reason.
+
+        Return contract (the CALLER does the role-specific post-success normalize + wrapping):
+          success          -> (parsed_dict, None, usage)
+          parse/other fail -> (None, failure_ExecutionResult, usage)   # failure.token_usage == usage
+
+        ``retry_feedback_text`` is a template with a single ``{parse_err}`` slot; the parse
+        error from THIS attempt is interpolated into the feedback appended for the NEXT attempt.
+        token_usage returned is the DECISIVE call's (successful attempt on success; last on fail).
+        """
+        defn, provider, model_name = self._resolve_provider(role)
+
+        retry_feedback = ""   # empty on the first attempt → user_msg == base (behavior-neutral)
+        result = None
+        usage = None
+        for attempt in range(1 + _JSON_RETRY_MAX):
+            user_msg = base_user_msg + retry_feedback
+            raw_content, usage = await self._call_model(defn, provider, model_name, user_msg)
+            result = self._parse_and_validate(raw_content, role_name, schema_cls)
+
+            # SUCCESS: parsed + schema-valid → hand the dict back for role-specific handling.
+            if not isinstance(result, ExecutionResult):
+                return result, None, usage
+
+            # FAILURE: attach the decisive call's usage (provider/model/finish_reason).
+            result.token_usage = usage
+            failure_kind = getattr(result, "failure_kind", None)
+            finish_reason = usage.get("finish_reason") if isinstance(usage, dict) else None
+
+            # Retry ONLY syntactic json-parse failures — never a schema (wrong-shape) failure.
+            if failure_kind != "json_parse":
+                return None, result, usage
+            # Never retry truncation — re-prompting truncates again at the same max_tokens cap.
+            if finish_reason == "length":
+                return None, result, usage
+            # Retries exhausted → return the LAST malformed failure as-is (hard-fail preserved).
+            if attempt >= _JSON_RETRY_MAX:
+                return None, result, usage
+
+            # Build feedback for the next attempt: the parse error + (role-specific) guidance.
+            # We do NOT echo the full previous raw_output (large + could re-confuse the model).
+            parse_err = (result.error_message or "").split(" Response preview:")[0].strip()
+            retry_feedback = retry_feedback_text.format(parse_err=parse_err)
+            logger.warning(
+                "[%s-json-retry] attempt %d/%d failed JSON parse (finish_reason=%s): %s",
+                role.value, attempt + 1, _JSON_RETRY_MAX, finish_reason, parse_err,
+            )
+
+        # Unreachable (the loop always returns), but keep a safe fallback.
+        if isinstance(result, ExecutionResult):
+            result.token_usage = usage
+            return None, result, usage
+        return None, ExecutionResult(
+            success=False, output={},
+            error_message=f"{role_name} retry loop exited without a result", token_usage=usage,
+        ), usage
+
     # ── Planner execution ─────────────────────────────────────
 
     async def _execute_planner(self, task_context: dict) -> ExecutionResult:
-        """Call a real LLM to produce a structured Planner output."""
-        defn, provider, model_name = self._resolve_provider(AgentRole.PLANNER)
-        user_msg = self._build_planner_user_message(task_context)
-        raw_content, usage = await self._call_model(defn, provider, model_name, user_msg)
+        """Call a real LLM to produce a structured Planner output.
 
-        result = self._parse_and_validate(raw_content, "Planner", PlannerOutputSchema)
-        if isinstance(result, ExecutionResult):
-            result.token_usage = usage  # preserve actual provider/model for logging
-            return result  # validation failed
+        Wraps the shared malformed-JSON retry (_call_parse_retry): a Planner parse failure
+        returns success=False and aborts the pipeline (it is step 0), so the retry recovers
+        malformed-but-complete output. Generic feedback (no large content field). On success,
+        the Planner-specific optional-field normalization is applied here.
+        """
+        base_user_msg = self._build_planner_user_message(task_context)
+        parsed, failure, usage = await self._call_parse_retry(
+            AgentRole.PLANNER, "Planner", PlannerOutputSchema, base_user_msg,
+            retry_feedback_text=_GENERIC_JSON_RETRY_FEEDBACK,
+        )
+        if failure is not None:
+            return failure  # parse/schema/length/exhausted — success=False (token_usage set)
 
         # Normalize optional fields
-        result.setdefault("risks", [])
-        result.setdefault("dependencies", [])
+        parsed.setdefault("risks", [])
+        parsed.setdefault("dependencies", [])
 
-        return ExecutionResult(success=True, output=result, token_usage=usage)
+        return ExecutionResult(success=True, output=parsed, token_usage=usage)
 
     @staticmethod
     def _build_planner_user_message(ctx: dict) -> str:
@@ -1007,83 +1110,28 @@ class ModelAgentExecutor:
         change plan but does NOT execute any file modifications, shell commands,
         or git operations.
 
-        MALFORMED-JSON RETRY (inner model-call layer): the Builder hard-fails on invalid
-        JSON, which aborts the whole pipeline before the Reviewer runs. To recover the
-        common "malformed-but-complete" case (e.g. Gemini emitting unescaped multi-line
-        `content`), a json.loads failure is retried up to ``_BUILDER_JSON_RETRY_MAX`` times
-        with appended feedback (the parse error + escaping guidance). This is DISTINCT from
-        and BELOW the orchestrator's reviewer-rejection loop (which handles parsed+valid-
-        but-rejected output via rejection_history). It is NOT triggered by a schema failure
-        (parsed but wrong shape — a different problem) nor by ``finish_reason == "length"``
-        (truncation — re-prompting just truncates again at the same cap; that is the separate
-        per-model max_tokens-clamp debt). After retries are exhausted it returns the LAST
-        failure as-is (success=False), preserving the hard-fail behavior so the FAILED-path
-        persistence captures the last malformed output + finish_reason.
-
-        token_usage reports the DECISIVE call: the successful attempt's usage on success, or
-        the LAST attempt's usage (with its finish_reason) on total failure — not summed.
-
-        NOTE: planner/reviewer parse JSON the same way and could benefit from the identical
-        retry; that is a possible follow-up, intentionally NOT done here (scoped to builder).
+        Wraps the shared malformed-JSON retry (_call_parse_retry) with Builder's
+        content-specific escaping feedback — its proposed_files[].content is the large
+        escape-prone field that drives the common "malformed-but-complete" failures. The
+        retry loop is the SAME one now shared by planner/reviewer; Builder's externally-
+        observed behavior is unchanged by the extraction. On success, Builder's Phase 6D /
+        6E-A normalization is applied here. On parse/schema/length/exhausted failure the
+        shared helper returns the failure as-is (success=False), preserving the hard-fail
+        so the orchestrator's FAILED-path persistence captures raw_output + finish_reason.
         """
-        defn, provider, model_name = self._resolve_provider(AgentRole.BUILDER)
         base_user_msg = self._build_builder_user_message(task_context)
-
-        retry_feedback = ""   # empty on the first attempt → user_msg == base (behavior-neutral)
-        result = None
-        usage = None
-        for attempt in range(1 + _BUILDER_JSON_RETRY_MAX):
-            user_msg = base_user_msg + retry_feedback
-            raw_content, usage = await self._call_model(defn, provider, model_name, user_msg)
-            result = self._parse_and_validate(raw_content, "Builder", BuilderOutputSchema)
-
-            # SUCCESS: parsed + schema-valid → normalize and return this call's usage.
-            if not isinstance(result, ExecutionResult):
-                result.setdefault("risk_notes", [])          # Phase 6D core
-                _normalize_builder_proposal(result)          # Phase 6E-A execution fields
-                return ExecutionResult(success=True, output=result, token_usage=usage)
-
-            # FAILURE: attach the decisive call's usage (provider/model/finish_reason).
-            result.token_usage = usage
-            failure_kind = getattr(result, "failure_kind", None)
-            finish_reason = usage.get("finish_reason") if isinstance(usage, dict) else None
-
-            # Retry ONLY syntactic json-parse failures — never a schema (wrong-shape) failure.
-            if failure_kind != "json_parse":
-                return result
-            # Never retry truncation — re-prompting truncates again at the same max_tokens cap
-            # (needs a higher cap / output-splitting strategy — the separate clamp debt).
-            if finish_reason == "length":
-                return result
-            # Retries exhausted → return the LAST malformed failure as-is (hard-fail preserved;
-            # FAILED-path persistence captures its raw_output + finish_reason).
-            if attempt >= _BUILDER_JSON_RETRY_MAX:
-                return result
-
-            # Build feedback for the next attempt: the parse error + escaping guidance. We do
-            # NOT echo the full previous raw_output (large + could re-confuse the model); the
-            # parse error + guidance is enough.
-            parse_err = (result.error_message or "").split(" Response preview:")[0].strip()
-            retry_feedback = (
-                "\n\nIMPORTANT — your previous response was NOT valid JSON and could not be "
-                f"parsed: {parse_err}\n"
-                "Respond again with a SINGLE valid JSON object only. In multi-line file "
-                "`content` values, escape every newline as \\n and every double-quote as "
-                "\\\", and do not include unescaped control characters or markdown code fences."
-            )
-            logger.warning(
-                "[builder-json-retry] attempt %d/%d failed JSON parse (finish_reason=%s): %s",
-                attempt + 1, _BUILDER_JSON_RETRY_MAX, finish_reason, parse_err,
-            )
-
-        # Unreachable (the loop always returns), but keep a safe fallback.
-        if isinstance(result, ExecutionResult):
-            result.token_usage = usage
-            return result
-        return ExecutionResult(
-            success=False, output={},
-            error_message="Builder retry loop exited without a result", token_usage=usage,
+        parsed, failure, usage = await self._call_parse_retry(
+            AgentRole.BUILDER, "Builder", BuilderOutputSchema, base_user_msg,
+            retry_feedback_text=_BUILDER_JSON_RETRY_FEEDBACK,
         )
+        if failure is not None:
+            return failure  # parse/schema/length/exhausted — success=False (token_usage set)
+
+        # Normalize optional fields (Phase 6D core) + execution proposal (Phase 6E-A)
+        parsed.setdefault("risk_notes", [])
+        _normalize_builder_proposal(parsed)
+
+        return ExecutionResult(success=True, output=parsed, token_usage=usage)
 
     @staticmethod
     def _build_builder_user_message(ctx: dict) -> str:
@@ -1121,21 +1169,28 @@ class ModelAgentExecutor:
     # ── Reviewer execution ────────────────────────────────────
 
     async def _execute_reviewer(self, task_context: dict) -> ExecutionResult:
-        """Call a real LLM to produce a structured Reviewer output."""
-        defn, provider, model_name = self._resolve_provider(AgentRole.REVIEWER)
-        user_msg = self._build_reviewer_user_message(task_context)
-        raw_content, usage = await self._call_model(defn, provider, model_name, user_msg)
+        """Call a real LLM to produce a structured Reviewer output.
 
-        result = self._parse_and_validate(raw_content, "Reviewer", ReviewerOutputSchema)
-        if isinstance(result, ExecutionResult):
-            result.token_usage = usage  # preserve actual provider/model for logging
-            return result  # validation failed
+        Wraps the shared malformed-JSON retry (_call_parse_retry) with generic feedback. A
+        Reviewer PARSE failure returns success=False and aborts at orchestrator §158 BEFORE
+        the reviewer decision logic (§172) runs — a separate code path from the request_changes
+        rejection loop, which fires only on a SUCCESSFUL parse. So the JSON retry recovers
+        malformed-but-complete reviewer output WITHOUT touching the rejection loop. On success
+        the decision is mapped to ReviewDecision for the orchestrator here.
+        """
+        base_user_msg = self._build_reviewer_user_message(task_context)
+        parsed, failure, usage = await self._call_parse_retry(
+            AgentRole.REVIEWER, "Reviewer", ReviewerOutputSchema, base_user_msg,
+            retry_feedback_text=_GENERIC_JSON_RETRY_FEEDBACK,
+        )
+        if failure is not None:
+            return failure  # parse/schema/length/exhausted — success=False (token_usage set)
 
         # Normalize optional fields
-        result.setdefault("issues_found", [])
+        parsed.setdefault("issues_found", [])
 
         # Map decision to ReviewDecision for the orchestrator
-        decision_str = result["decision"]
+        decision_str = parsed["decision"]
         if decision_str == "approve":
             decision = ReviewDecision.APPROVE
         else:
@@ -1143,7 +1198,7 @@ class ModelAgentExecutor:
 
         return ExecutionResult(
             success=True,
-            output=result,
+            output=parsed,
             decision=decision,
             token_usage=usage,
         )
