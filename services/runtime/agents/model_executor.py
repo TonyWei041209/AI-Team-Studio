@@ -1456,6 +1456,7 @@ class ModelAgentExecutor:
     _ARCH_TASKFILE_MAX_FILES = 3          # precise supplements, not broad coverage (tighter than facade's 6)
     _ARCH_TASKFILE_PER_FILE_CAP = 6_000   # same per-file cap as facade
     _ARCH_TASKFILE_READ_CEILING = 64_000  # same bounded read ceiling as facade
+    _ARCH_TASKFILE_MIN_SCORE = 2          # require a filename-level signal (see keep condition)
     # Source-file extensions 乙-3b considers matchable (others skipped for now).
     _ARCH_TASKFILE_SOURCE_EXTS = (".py", ".js", ".ts", ".tsx", ".jsx", ".go", ".rs", ".java", ".rb")
 
@@ -1551,7 +1552,16 @@ class ModelAgentExecutor:
                     score += 2                                  # parent-qualified stem
                 if len(symbol_guess) >= 3 and symbol_guess.lower() in signal:
                     score += 1                                  # symbol-guess HINT, low weight
-                if score > 0:
+                # Keep only files with a FILENAME-level signal, not the symbol-guess
+                # (weight 1) alone. symbol-guess is the only single-source weight-1 signal
+                # and the sole source of coincidental-substring false positives (e.g.
+                # "Init" matching inside "minitaskqueue"). score>=2 guarantees at least one
+                # of basename/stem/parent-stem hit. Intended implementation files are
+                # unaffected (they score >=2 on filename signals); the current symbol-guess
+                # (filename->PascalCase) cannot reach the "filename differs from class name"
+                # blind spot anyway, so dropping its standalone hits costs no real recall —
+                # true symbol reverse-lookup is a later B3 enhancement carrying its own >=2 weight.
+                if score >= ModelAgentExecutor._ARCH_TASKFILE_MIN_SCORE:
                     scored.append((score, p))
 
             if not scored:
