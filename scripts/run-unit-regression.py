@@ -19,8 +19,9 @@ secret_redactor (content-level secret redaction at the B1 injection layer, TASK 
 v23_persist_raw_output (raw_output + finish_reason persistence, V23, TASK 乙),
 doc_secret_redaction (secret redaction wired into the documentation read path),
 failed_path_persist (raw_output + finish_reason on the FAILED path — V23 gap closed),
-builder_json_retry (builder malformed-JSON inner retry, json-parse-only/finish_reason-gated).
-Total: 16 suites.
+builder_json_retry (builder malformed-JSON inner retry, json-parse-only/finish_reason-gated),
+max_tokens_clamp (per-model output-token clamp: desired 16384 capped at ModelInfo.max_tokens).
+Total: 17 suites.
 
 Usage:
     python scripts/run-unit-regression.py
@@ -50,6 +51,7 @@ TEST_SUITES = [
     "tests/doc_secret_redaction_test.py",
     "tests/failed_path_persist_test.py",
     "tests/builder_json_retry_test.py",
+    "tests/max_tokens_clamp_test.py",
 ]
 
 
@@ -101,7 +103,7 @@ def main():
         sys.exit(1)
     else:
         print()
-        print("  Unit baseline: ALL PASS (16 suites)")
+        print("  Unit baseline: ALL PASS (17 suites)")
         sys.exit(0)
 
 

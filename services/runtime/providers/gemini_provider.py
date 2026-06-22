@@ -20,19 +20,19 @@ _GEMINI_MODELS = [
         id="gemini-2.5-flash",
         display_name="Gemini 2.5 Flash",
         provider="gemini",
-        max_tokens=8192,
+        max_tokens=65536,  # real Gemini 2.5 output limit (~64K); was wrongly declared 8192
     ),
     ModelInfo(
         id="gemini-2.5-pro",
         display_name="Gemini 2.5 Pro",
         provider="gemini",
-        max_tokens=8192,
+        max_tokens=65536,  # real Gemini 2.5 output limit (~64K); was wrongly declared 8192
     ),
     ModelInfo(
         id="gemini-3.1-pro-preview",
         display_name="Gemini 3.1 Pro Preview",
         provider="gemini",
-        max_tokens=8192,
+        max_tokens=65536,  # real Gemini 2.5 output limit (~64K); was wrongly declared 8192
     ),
 ]
 

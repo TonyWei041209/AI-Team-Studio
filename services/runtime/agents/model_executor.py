@@ -28,6 +28,14 @@ logger = logging.getLogger(__name__)
 # attempt → up to 3 total _call_model calls per builder step invocation.
 _BUILDER_JSON_RETRY_MAX = 2
 
+# Desired per-call OUTPUT-token budget. _call_model clamps this to each model's real hard
+# API limit (its ModelInfo.max_tokens), so this is what we WANT, not a flat global cap.
+# 16384 gives headroom for Builder proposals writing multiple file contents (the cancel-task
+# truncations exceeded 8192); we deliberately do NOT pull Gemini to its full ~65536 — 16384
+# is enough for proposals and avoids cost/latency blowup. Tunable policy value, separate
+# from any model's true capability (which lives in ModelInfo.max_tokens).
+_DESIRED_MAX_OUTPUT_TOKENS = 16384
+
 
 # ── Planner output schema validation ──────────────────────────
 
@@ -862,18 +870,44 @@ class ModelAgentExecutor:
             )
         return defn, provider, model_name
 
+    @staticmethod
+    async def _resolve_max_tokens(provider, model_name: str) -> int:
+        """Clamp the desired output budget to the model's real hard API limit.
+
+        Returns ``min(_DESIRED_MAX_OUTPUT_TOKENS, per_model_max)``, where ``per_model_max``
+        is the configured model's ``ModelInfo.max_tokens`` (its real output ceiling), looked
+        up via ``provider.list_models()``. If the model is not in the registry metadata (or
+        the lookup fails), ``per_model_max`` falls back to a conservative **8192 floor** —
+        NEVER the desired-high value, because an unknown model could be hard-limited like
+        Anthropic, which ERRORS above 8192 (commit 2ef81c5).
+
+        Haiku/Sonnet (8192) -> min(16384, 8192)  = 8192  (safe — no API error; unchanged).
+        Gemini 2.5 (65536)  -> min(16384, 65536) = 16384 (unlocked headroom).
+        Unknown model       -> min(16384, 8192)  = 8192  (safe degradation).
+        """
+        per_model_max = 8192  # conservative floor for unknown / unlistable models
+        try:
+            for mi in await provider.list_models():
+                if getattr(mi, "id", None) == model_name:
+                    per_model_max = mi.max_tokens
+                    break
+        except Exception:
+            per_model_max = 8192
+        return min(_DESIRED_MAX_OUTPUT_TOKENS, per_model_max)
+
     async def _call_model(self, defn, provider, model_name: str, user_msg: str) -> tuple[str, dict]:
         """Build a CompletionRequest, call the provider, return (content, usage_dict)."""
+        # Per-model OUTPUT-token clamp: the desired budget (_DESIRED_MAX_OUTPUT_TOKENS=16384)
+        # capped at the model's real hard API limit. Anthropic Haiku/Sonnet ERROR above 8192
+        # (commit 2ef81c5), so the cap must never exceed a model's ModelInfo.max_tokens;
+        # Gemini's real limit is far higher, so 16384 is unlocked there. OUTPUT cap only —
+        # input is bounded by the model's context window, not this value.
+        max_tokens = await self._resolve_max_tokens(provider, model_name)
         request = CompletionRequest(
             model=model_name,
             messages=[Message(role=MessageRole.user, content=user_msg)],
             system_prompt=build_enhanced_system_prompt(defn.system_prompt, defn.role),
-            # Output-token ceiling. 8192 is supported by every seeded model
-            # (Anthropic claude-3-5-haiku caps at 8192; Gemini 2.5 flash/pro
-            # advertise 8192) — 16384 exceeded Haiku's API limit and would error
-            # on a real call. This is an OUTPUT cap; input is bounded by the
-            # model's context window, not this value.
-            max_tokens=8192,
+            max_tokens=max_tokens,
             temperature=0.3,
         )
         response = await provider.complete(request)
