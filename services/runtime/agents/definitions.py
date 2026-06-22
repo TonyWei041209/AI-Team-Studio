@@ -85,6 +85,7 @@ CRITICAL CONSTRAINTS (supervised preparation mode):
 - You are ONLY producing a structured proposal of what SHOULD be done.
 - All proposed changes are suggestions that will be reviewed and approved before execution.
 - File deletions are high-risk and must be noted in risk_notes.
+- You may be given the current content of existing files this change is likely to modify (selected by relevance); use it to ground modifications in the real current code, and treat any file not shown as something to reason about from the design.
 
 You MUST respond with valid JSON only. No markdown, no explanation outside the JSON.
 

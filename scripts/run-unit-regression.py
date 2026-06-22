@@ -13,8 +13,9 @@ b1_documentation_reads (Documentation reads modify-targets, B1-d),
 b1_scoped_tree (sandboxed directory listing, B1-Arch-甲-1),
 b1_architect_structure (Architect sees dir structure, B1-Arch-甲-3),
 b1_architect_facade (Architect reads facade-file content, B1-Arch-乙-3a),
-b1_architect_taskfile (Architect reads task-relevant file content, B1-Arch-乙-3b).
-Total: 10 suites.
+b1_architect_taskfile (Architect reads task-relevant file content, B1-Arch-乙-3b),
+b1_builder_taskfile (Builder reads existing modify-target content, B1-Builder).
+Total: 11 suites.
 
 Usage:
     python scripts/run-unit-regression.py
@@ -38,6 +39,7 @@ TEST_SUITES = [
     "tests/b1_architect_structure_test.py",
     "tests/b1_architect_facade_test.py",
     "tests/b1_architect_taskfile_test.py",
+    "tests/b1_builder_taskfile_test.py",
 ]
 
 
@@ -89,7 +91,7 @@ def main():
         sys.exit(1)
     else:
         print()
-        print("  Unit baseline: ALL PASS (10 suites)")
+        print("  Unit baseline: ALL PASS (11 suites)")
         sys.exit(0)
 
 

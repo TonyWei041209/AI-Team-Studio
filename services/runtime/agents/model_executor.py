@@ -990,6 +990,16 @@ class ModelAgentExecutor:
                 f"\nPrevious rejection(s):\n{json.dumps(rejection_history, ensure_ascii=False, separators=(',',':'))}"
             )
 
+        # B1-Builder: inject the CURRENT content of EXISTING files this change will likely
+        # modify (selected from architect components/interfaces + planner). Builder gets ONLY
+        # this block — NOT 甲's structure / 乙-3a's facade — because the Architect already read
+        # structure+facade and digested them into the design (which the Builder sees in full
+        # via the architect output above); the Builder's unique gap is the line-level CURRENT
+        # content of the files it must edit. No prior file block here → already_included=set(),
+        # used_chars=0 (draws from the full shared budget). Sandboxed read_scoped_file; graceful None.
+        taskfile_block = ModelAgentExecutor._build_builder_taskfile_context(ctx, set(), 0)
+        if taskfile_block:
+            parts.append(taskfile_block)
         return "\n".join(parts)
 
     # ── Reviewer execution ────────────────────────────────────
@@ -1464,31 +1474,20 @@ class ModelAgentExecutor:
     def _build_architect_taskfile_context(ctx: dict, already_included: "set[str]", used_chars: int) -> "str | None":
         """Inject CONTENT of up to a few files THIS task is likely to modify (乙-3b).
 
-        Selection matches the task's free-text signals (title, description, planner
-        goal_summary + task_breakdown descriptions + acceptance_criteria) against the
-        REAL workspace path universe (the SAME sandboxed ``list_scoped_tree`` 甲 uses).
-        Direction is path->prose (iterate real paths, test their tokens against the
-        signal text), so it can only ever surface files that ACTUALLY EXIST — never a
-        hallucinated path — and it skips anything 乙-3a already showed (``already_included``).
-
-        Reads via the SANDBOXED ``read_scoped_file`` (NEVER ReadFileTool — inherits
-        sensitive-denied/symlink/size protection) and draws from the SHARED facade
-        budget (``_ARCH_FACADE_TOTAL_CAP`` minus ``used_chars`` consumed by 乙-3a).
-        Returns ``None`` on any no-op (no workspace, nothing selected, budget exhausted).
-        Never raises.
+        Builds the ARCHITECT-side signal (title/description + planner goal_summary/
+        task_breakdown descriptions/acceptance_criteria), then delegates scoring +
+        keep-threshold + ranking + shared-budget reading to the role-agnostic
+        ``_select_and_read_taskfiles``. Direction is path->prose over the REAL
+        ``list_scoped_tree`` universe, so it can only surface files that ACTUALLY EXIST;
+        it dedups against ``already_included`` (乙-3a) and draws from the SHARED budget.
+        Returns ``None`` on any no-op. Never raises.
         """
         try:
-            import os
-            import re
-            from agents.scoped_file_reader import (
-                read_scoped_file, list_scoped_tree, resolve_workspace_root,
-            )
+            from agents.scoped_file_reader import list_scoped_tree, resolve_workspace_root
 
             workspace_root = resolve_workspace_root(ctx.get("project_id"))
             if not workspace_root:
                 return None
-
-            # Closed universe of real relative paths (reuse 甲's sandboxed listing + caps).
             paths, _truncated = list_scoped_tree(
                 workspace_root,
                 ModelAgentExecutor._ARCH_TREE_MAX_ENTRIES,
@@ -1497,8 +1496,8 @@ class ModelAgentExecutor:
             if not paths:
                 return None
 
-            # Build the task signal text from every available free-text source (defensive:
-            # guard each, do NOT assume the planner schema is clean).
+            # seg2 (role-specific signal) — UNCHANGED from the original 乙-3b monolith:
+            # title/description + planner goal_summary/task_breakdown/acceptance_criteria.
             sig_parts: list[str] = []
             title = ctx.get("title")
             if isinstance(title, str):
@@ -1525,10 +1524,52 @@ class ModelAgentExecutor:
                         if isinstance(c, str):
                             sig_parts.append(c)
             signal = " ".join(sig_parts).lower()
-            if not signal.strip():
+
+            return ModelAgentExecutor._select_and_read_taskfiles(
+                workspace_root, paths, signal, already_included, used_chars,
+                block_label="Task-relevant project files (content)",
+            )
+        except Exception:
+            return None  # defensive: never raise (matches 甲 / 乙-3a posture)
+
+    @staticmethod
+    def _select_and_read_taskfiles(
+        workspace_root: str,
+        paths: "list[str]",
+        signal: str,
+        already_included: "set[str]",
+        used_chars: int,
+        *,
+        block_label: str,
+    ) -> "str | None":
+        """Role-AGNOSTIC task-file SELECTOR + READER core (shared by 乙-3b architect + B1 builder).
+
+        Inputs: a resolved ``workspace_root``, the real path universe ``paths`` (from
+        ``list_scoped_tree``), a lowercased ``signal`` built by the caller (the ONLY
+        role-specific input), the ``already_included`` set to dedup against, and
+        ``used_chars`` consumed by an earlier block (shared budget). Scores real source
+        files by path-token -> ``signal`` substring (basename+3 / stem+2 / parent-stem+2
+        / symbol-guess+1), keeps ``score >= _ARCH_TASKFILE_MIN_SCORE`` (a filename-level
+        signal must hit — symbol-guess alone is dropped, the sole coincidental-substring
+        false-positive source), ranks (score DESC, path len ASC, alpha), takes the top
+        ``_ARCH_TASKFILE_MAX_FILES``, and reads them via the SANDBOXED ``read_scoped_file``
+        (NEVER ReadFileTool) within the SHARED remaining budget
+        (``_ARCH_FACADE_TOTAL_CAP`` - ``used_chars``). Returns a block headed by
+        ``block_label``, or ``None`` on any no-op. Never raises.
+
+        A not-ok read (sensitive/oversized/symlink/MISSING — e.g. a not-yet-created file)
+        is skipped via ``continue``, so a caller's signal may name a file that does not
+        exist and it is silently filtered by existence.
+        """
+        try:
+            import os
+            import re
+            from agents.scoped_file_reader import read_scoped_file
+
+            if not signal or not signal.strip():
                 return None
 
-            # Score real, non-already-included source files: path tokens -> prose substring.
+            # Score real, non-already-included source files: path tokens -> signal substring.
             scored: list[tuple[int, str]] = []
             for p in paths:
                 if p in already_included:
@@ -1552,33 +1593,28 @@ class ModelAgentExecutor:
                     score += 2                                  # parent-qualified stem
                 if len(symbol_guess) >= 3 and symbol_guess.lower() in signal:
                     score += 1                                  # symbol-guess HINT, low weight
-                # Keep only files with a FILENAME-level signal, not the symbol-guess
-                # (weight 1) alone. symbol-guess is the only single-source weight-1 signal
-                # and the sole source of coincidental-substring false positives (e.g.
-                # "Init" matching inside "minitaskqueue"). score>=2 guarantees at least one
-                # of basename/stem/parent-stem hit. Intended implementation files are
-                # unaffected (they score >=2 on filename signals); the current symbol-guess
-                # (filename->PascalCase) cannot reach the "filename differs from class name"
-                # blind spot anyway, so dropping its standalone hits costs no real recall —
-                # true symbol reverse-lookup is a later B3 enhancement carrying its own >=2 weight.
+                # Require a FILENAME-level signal, not the symbol-guess (weight 1) alone:
+                # symbol-guess is the only single-source weight-1 signal and the sole source
+                # of coincidental-substring false positives (e.g. "Init" ⊂ "minitaskqueue").
+                # score>=2 guarantees at least one of basename/stem/parent-stem hit. True
+                # symbol reverse-lookup is a later B3 enhancement carrying its own >=2 weight.
                 if score >= ModelAgentExecutor._ARCH_TASKFILE_MIN_SCORE:
                     scored.append((score, p))
 
             if not scored:
-                return None  # selected-empty is normal; 甲 + 乙-3a cover the Architect
+                return None
 
             # Rank: score DESC, then shorter path, then alphabetical (deterministic).
             scored.sort(key=lambda sp: (-sp[0], len(sp[1]), sp[1]))
             selected = [p for _, p in scored[: ModelAgentExecutor._ARCH_TASKFILE_MAX_FILES]]
 
-            # Read within the SHARED remaining budget left by 乙-3a.
+            # Read within the SHARED remaining budget left by any earlier block.
             remaining_total = ModelAgentExecutor._ARCH_FACADE_TOTAL_CAP - used_chars
             if remaining_total <= 0:
-                return None  # 乙-3a already used the whole shared budget
+                return None  # earlier block already used the whole shared budget
 
             sections: list[str] = []
             used_in_block = 0
-            included = 0
             budget_hit = False
             for path in selected:
                 ok, content = read_scoped_file(
@@ -1586,7 +1622,7 @@ class ModelAgentExecutor:
                     max_bytes=ModelAgentExecutor._ARCH_TASKFILE_READ_CEILING,
                 )
                 if not ok:
-                    continue  # sensitive/oversized/symlink/missing → skip (sandbox protection)
+                    continue  # sensitive/oversized/symlink/MISSING (e.g. create-target) → skip
                 truncated_file = False
                 if len(content) > ModelAgentExecutor._ARCH_TASKFILE_PER_FILE_CAP:
                     content = content[: ModelAgentExecutor._ARCH_TASKFILE_PER_FILE_CAP]
@@ -1602,18 +1638,109 @@ class ModelAgentExecutor:
                 header = f"\n--- {path}" + (" (truncated)" if truncated_file else "") + " ---\n"
                 sections.append(header + content)
                 used_in_block += len(content)
-                included += 1
                 if budget_hit:
                     break
 
             if not sections:
                 return None
-            block = "\nTask-relevant project files (content):" + "".join(sections)
+            block = f"\n{block_label}:" + "".join(sections)
             if budget_hit:
                 block += "\n[...additional task-relevant file content truncated to respect the context budget...]"
             return block
         except Exception:
             return None  # defensive: never raise (matches 甲 / 乙-3a posture)
+
+    @staticmethod
+    def _build_builder_taskfile_context(ctx: dict, already_included: "set[str]", used_chars: int) -> "str | None":
+        """Inject CONTENT of EXISTING files this change will likely MODIFY (B1 builder).
+
+        Mirrors the architect taskfile helper but with a BUILDER-SPECIFIC signal source:
+        PRIMARY = the architect's STRUCTURED fields — component names + their interfaces,
+        plus interfaces_or_contracts (component names are usually module/class names that
+        map to real files, and the interface/contract strings often name the files/paths
+        to touch); SECONDARY = planner goal_summary + task_breakdown descriptions + the
+        task title/description.
+
+        DELIBERATELY EXCLUDED from the signal (reasoning prose with NO file-locating value):
+        architect design_summary / summary / risks_tradeoffs / key_decisions
+        (decision/rationale/alternatives), and planner acceptance_criteria / risks.
+        Including them would dilute the strong component-name/interface signal and worsen
+        substring false positives — builder's architect-output signal is noisier than the
+        architect's planner source, so we precision-select fields rather than dumping the
+        whole architect output into the signal.
+
+        SEMANTICS: injects ONLY the CURRENT content of EXISTING files. Files the builder
+        will CREATE don't exist yet → read_scoped_file returns not-ok → skipped by the
+        shared reader (no create/modify branching; "file exists or not" is the filter).
+        This grounds MODIFY-class proposals in the real current code and is a correct
+        no-op for pure-create files. Never raises.
+        """
+        try:
+            from agents.scoped_file_reader import list_scoped_tree, resolve_workspace_root
+
+            workspace_root = resolve_workspace_root(ctx.get("project_id"))
+            if not workspace_root:
+                return None
+            paths, _truncated = list_scoped_tree(
+                workspace_root,
+                ModelAgentExecutor._ARCH_TREE_MAX_ENTRIES,
+                ModelAgentExecutor._ARCH_TREE_MAX_TOTAL_CHARS,
+            )
+            if not paths:
+                return None
+
+            sig_parts: list[str] = []
+            prev = ctx.get("previous_outputs", {})
+            prev = prev if isinstance(prev, dict) else {}
+            # PRIMARY: architect structured fields (component names + interfaces + contracts).
+            arch = prev.get("architect", {})
+            if isinstance(arch, dict):
+                comps = arch.get("components")
+                if isinstance(comps, list):
+                    for c in comps:
+                        if isinstance(c, dict):
+                            name = c.get("name")
+                            if isinstance(name, str):
+                                sig_parts.append(name)
+                            iface = c.get("interfaces")
+                            if isinstance(iface, str):
+                                sig_parts.append(iface)
+                ioc = arch.get("interfaces_or_contracts")
+                if isinstance(ioc, list):
+                    for s in ioc:
+                        if isinstance(s, str):
+                            sig_parts.append(s)
+            # SECONDARY: planner goal_summary + task_breakdown descriptions.
+            planner = prev.get("planner", {})
+            if isinstance(planner, dict):
+                gs = planner.get("goal_summary")
+                if isinstance(gs, str):
+                    sig_parts.append(gs)
+                tb = planner.get("task_breakdown")
+                if isinstance(tb, list):
+                    for item in tb:
+                        if isinstance(item, dict):
+                            d = item.get("description")
+                            if isinstance(d, str):
+                                sig_parts.append(d)
+            # Task framing.
+            title = ctx.get("title")
+            if isinstance(title, str):
+                sig_parts.append(title)
+            desc = ctx.get("description")
+            if isinstance(desc, str):
+                sig_parts.append(desc)
+            # EXCLUDED (reasoning prose, no file-locating value, adds substring noise):
+            # arch design_summary / summary / risks_tradeoffs / key_decisions; planner
+            # acceptance_criteria / risks. See docstring for the rationale.
+            signal = " ".join(sig_parts).lower()
+
+            return ModelAgentExecutor._select_and_read_taskfiles(
+                workspace_root, paths, signal, already_included, used_chars,
+                block_label="Existing files this change will likely modify (content)",
+            )
+        except Exception:
+            return None
 
     # ── Documentation execution (a "second Builder": proposes doc files) ──
 
