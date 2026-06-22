@@ -57,6 +57,100 @@ _GENERIC_JSON_RETRY_FEEDBACK = (
 _DESIRED_MAX_OUTPUT_TOKENS = 16384
 
 
+# ── B3 tool-use loop (A2 text-protocol) constants ─────────────
+# These power _call_model_with_tools — the SEPARATE multi-turn sibling of _call_model. The
+# single-shot _call_model is UNTOUCHED. A2 = provider-agnostic TEXT protocol: the model emits
+# ONE JSON object per turn with a top-level "action" discriminator ("tool" | "final"); the loop
+# parses it from the response TEXT (no native SDK function-calling → no provider change; the
+# providers already transmit a multi-message list). Detection is text-based, so Gemini hardcoding
+# finish_reason="stop" does NOT affect this loop.
+_TOOL_LOOP_MAX_ROUNDS = 5            # hard bound on model round-trips per tool-loop call
+_TOOL_RESULT_CHAR_BUDGET = 8000     # per tool-result text fed back to the model (truncate-with-note)
+# Step-1 ADVERTISED read-only tool set. The AUTHORITATIVE gate is still the role's allowed_tools
+# (via get_registry().is_allowed); this tuple is (1) what the preamble advertises and (2) a
+# defense-in-depth allowlist — the loop refuses to execute any tool whose CANONICAL name is not
+# here, even if a role's allowed_tools somehow lists a write/shell tool. read_file + list_directory
+# are both sandboxed + fail-closed (commit 8a468c8). write_file/shell/git are deliberately EXCLUDED.
+_STEP1_TOOL_NAMES = ("read_file", "list_directory")
+
+# Human-readable tool descriptions for the protocol preamble (the param shapes the model emits).
+_TOOL_PROTOCOL_DESCRIPTIONS = {
+    "read_file": (
+        'read_file — read a UTF-8 text file inside the project. '
+        'params: {"path": "<path relative to the project root>"}'
+    ),
+    "list_directory": (
+        'list_directory — list the entries of a directory inside the project. '
+        'params: {"path": "<subdirectory relative to the project root; use \\".\\" for the root>"}'
+    ),
+}
+
+
+def _build_tool_protocol_preamble(advertised_tools: tuple[str, ...]) -> str:
+    """Build the read-only tool-use protocol text appended to a role's system prompt.
+
+    SEPARATE preamble — NOT baked into any role's system_prompt. _call_model_with_tools appends
+    it at call time. Describes the advertised read-only tools + the one-JSON-object-per-turn
+    action protocol ("tool" to read, "final" to answer) with an example of each.
+    """
+    tool_lines = [
+        "- " + _TOOL_PROTOCOL_DESCRIPTIONS.get(name, f"{name} — (read-only tool)")
+        for name in advertised_tools
+    ]
+    tools_block = "\n".join(tool_lines)
+    return (
+        "TOOL-USE PROTOCOL (read-only)\n"
+        "You may inspect the project with the read-only tools below BEFORE giving your final "
+        "answer. Reading is optional — answer directly if you already have enough context.\n\n"
+        "Available tools:\n"
+        f"{tools_block}\n\n"
+        "Response format — respond with EXACTLY ONE JSON object per turn, and nothing else:\n"
+        '  - To call a tool:  {"action": "tool", "tool": "<tool name>", "params": { ... }}\n'
+        '  - When finished:   {"action": "final", "result": { ... }}\n'
+        'The "result" object MUST be the COMPLETE required output schema for your role.\n'
+        "Call at most one tool per turn; its result arrives as the next message, then continue.\n\n"
+        "Examples:\n"
+        '  {"action": "tool", "tool": "read_file", "params": {"path": "src/app.py"}}\n'
+        '  {"action": "final", "result": {"design_summary": "...", "components": []}}\n'
+    )
+
+
+def _format_tool_result_text(tool_name: str, result, budget: int = _TOOL_RESULT_CHAR_BUDGET) -> str:
+    """Render a ToolResult as a BOUNDED text message to feed back to the model.
+
+    On success: the tool output (read_file → the file content; list_directory → the entries),
+    truncated to *budget* chars with a "[truncated]" note when over. On failure: the error.
+    Wrapped as a small JSON object {"tool_result": {...}} the model can consume. The returned
+    string is bounded to ~budget + a small wrapper overhead (a size guard on the conversation).
+    Never raises.
+    """
+    try:
+        if result.success:
+            out = result.output
+            if isinstance(out, dict) and "content" in out:        # read_file output shape
+                content = out.get("content", "") or ""
+                truncated = len(content) > budget
+                shown = content[:budget] + "\n...[truncated]" if truncated else content
+                payload = {
+                    "tool": tool_name, "success": True,
+                    "path": out.get("path"), "content": shown, "truncated": truncated,
+                }
+            else:                                                  # list_directory / other shapes
+                text = json.dumps(out, ensure_ascii=False, default=str)
+                truncated = len(text) > budget
+                if truncated:
+                    text = text[:budget] + "...[truncated]"
+                payload = {"tool": tool_name, "success": True, "output": text, "truncated": truncated}
+        else:
+            payload = {"tool": tool_name, "success": False, "error": (result.error or "")[:budget]}
+        return json.dumps({"tool_result": payload}, ensure_ascii=False)
+    except Exception as exc:                                       # never raise into the loop
+        return json.dumps(
+            {"tool_result": {"tool": tool_name, "success": False,
+                             "error": f"result formatting failed: {exc}"}}
+        )
+
+
 # ── Planner output schema validation ──────────────────────────
 
 
@@ -1063,6 +1157,250 @@ class ModelAgentExecutor:
             success=False, output={},
             error_message=f"{role_name} retry loop exited without a result", token_usage=usage,
         ), usage
+
+    # ── B3 tool-use loop (A2 text-protocol) — SEPARATE sibling of _call_model ──
+    # Purely additive multi-turn READ-ONLY tool loop. _call_model (single-shot) is UNTOUCHED;
+    # this is called by NOTHING yet (step 2 swaps a role's _call_model line for this). Returns
+    # the IDENTICAL (final_text, usage_dict) tuple as _call_model so the swap is one line.
+
+    @staticmethod
+    def _extract_first_json_object(text: str) -> str | None:
+        """Return the first balanced ``{...}`` JSON object substring, or None.
+
+        String/escape-aware brace matcher so leading/trailing prose around a JSON object
+        (a common model habit) does not defeat parsing. Does not validate — the caller
+        json.loads() the returned candidate.
+        """
+        if not isinstance(text, str):
+            return None
+        start = text.find("{")
+        if start == -1:
+            return None
+        depth = 0
+        in_str = False
+        esc = False
+        for i in range(start, len(text)):
+            ch = text[i]
+            if in_str:
+                if esc:
+                    esc = False
+                elif ch == "\\":
+                    esc = True
+                elif ch == '"':
+                    in_str = False
+            else:
+                if ch == '"':
+                    in_str = True
+                elif ch == "{":
+                    depth += 1
+                elif ch == "}":
+                    depth -= 1
+                    if depth == 0:
+                        return text[start:i + 1]
+        return None
+
+    @staticmethod
+    def _parse_tool_protocol(content: str) -> dict:
+        """Parse ONE A2 protocol turn from model TEXT. Never raises.
+
+        Fence- AND prose-tolerant (mirrors strip_code_fences' robustness): strip markdown fences,
+        json.loads; on failure, extract the first balanced ``{...}`` object and parse that. Then
+        read the top-level ``action`` discriminator. Returns exactly one of:
+          {"kind": "tool",  "tool": <str>, "params": <dict>}
+          {"kind": "final", "result": <the result sub-object>}
+          {"kind": "malformed", "reason": <str>}
+        "malformed" when: unparseable as JSON, not an object, missing/invalid ``action``, a
+        "tool" action without a valid ``tool`` name, or a "final" action without a ``result``.
+        """
+        try:
+            if not isinstance(content, str) or not content.strip():
+                return {"kind": "malformed", "reason": "empty response"}
+            stripped = strip_code_fences(content)
+            obj = None
+            try:
+                obj = json.loads(stripped)
+            except (json.JSONDecodeError, ValueError):
+                candidate = ModelAgentExecutor._extract_first_json_object(stripped)
+                if candidate is None:
+                    candidate = ModelAgentExecutor._extract_first_json_object(content)
+                if candidate is not None:
+                    try:
+                        obj = json.loads(candidate)
+                    except (json.JSONDecodeError, ValueError):
+                        obj = None
+            if not isinstance(obj, dict):
+                return {"kind": "malformed", "reason": "response is not a single JSON object"}
+            action = obj.get("action")
+            if action == "tool":
+                tool = obj.get("tool")
+                if not isinstance(tool, str) or not tool.strip():
+                    return {"kind": "malformed", "reason": "'tool' action without a valid tool name"}
+                params = obj.get("params")
+                if not isinstance(params, dict):
+                    params = {}
+                return {"kind": "tool", "tool": tool.strip(), "params": params}
+            if action == "final":
+                if "result" not in obj:
+                    return {"kind": "malformed", "reason": "'final' action without a 'result'"}
+                return {"kind": "final", "result": obj["result"]}
+            return {"kind": "malformed", "reason": f"missing or invalid 'action': {action!r}"}
+        except Exception as exc:   # defensive — must never raise into the loop
+            return {"kind": "malformed", "reason": f"unexpected parse error: {exc}"}
+
+    async def _call_model_with_tools(
+        self,
+        defn,
+        provider,
+        model_name: str,
+        user_msg: str,
+        *,
+        role,
+        task_context: dict,
+        advertised_tools: tuple[str, ...] = _STEP1_TOOL_NAMES,
+        max_rounds: int = _TOOL_LOOP_MAX_ROUNDS,
+    ) -> tuple[str, dict]:
+        """A2 text-protocol read-only tool loop. SEPARATE sibling of _call_model.
+
+        Builds a GROWING list[Message] and re-sends it via the SAME provider.complete each round
+        (no provider change — multi-message text is already supported). The model emits one JSON
+        object per turn with a top-level ``action``: "tool" (read a file/dir) or "final" (done).
+          - "final"     → unwraps the {"action":"final","result":{...}} envelope and returns
+                          json.dumps(result) as the content, so the caller's _parse_and_validate
+                          sees exactly the role's schema object and works UNCHANGED.
+          - "tool"      → enforces access (role allowed_tools via is_allowed + the step-1 read-only
+                          allowlist), executes the sandboxed tool, appends the BOUNDED result text.
+          - "malformed" → appends a protocol-error nudge and re-prompts (bounded by max_rounds).
+        Returns the IDENTICAL (content, usage_dict) tuple shape as _call_model. usage_dict SUMS
+        token usage across ALL rounds. NEVER raises: any unexpected error (incl. provider.complete
+        raising) returns the last content (or "") + accumulated usage, so the role's own veto-safe
+        / parse handling takes over.
+
+        Called by NOTHING yet — step 2 swaps a role's _call_model call for this one line.
+        """
+        # Lazy imports keep model_executor's module-level import graph unchanged AND avoid the
+        # name clash with the module-level providers `get_registry`. The tool registry + access
+        # check are replicated here (NO orchestrator coupling) — exactly what the orchestrator's
+        # reserved _check_tool_access seam does internally: registry.is_allowed(name, allowed_tools).
+        from tools.base import get_registry as get_tool_registry, ToolContext
+        from agents.scoped_file_reader import resolve_workspace_root
+
+        role_label = getattr(role, "value", str(role))
+        advertised_canonical = set(advertised_tools)
+
+        workspace_root = resolve_workspace_root(task_context.get("project_id"))
+        tool_context = ToolContext(
+            project_id=task_context.get("project_id") or "",
+            task_id=task_context.get("task_id"),
+            run_id=task_context.get("run_id"),
+            role=role_label,
+            working_dir=workspace_root or "",   # "" → read tools fail closed on their own guard
+        )
+
+        system_prompt = (
+            build_enhanced_system_prompt(defn.system_prompt, defn.role)
+            + "\n\n"
+            + _build_tool_protocol_preamble(advertised_tools)
+        )
+
+        messages = [Message(role=MessageRole.user, content=user_msg)]
+        accum_usage: dict[str, Any] = {
+            "provider": None, "model": None,
+            "prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0,
+            "finish_reason": None,
+        }
+        last_content = ""
+
+        try:
+            registry = get_tool_registry()
+            for round_idx in range(max_rounds):
+                # Reuse the SAME per-model output clamp as _call_model (each round is clamped).
+                max_tokens = await self._resolve_max_tokens(provider, model_name)
+                request = CompletionRequest(
+                    model=model_name,
+                    messages=messages,
+                    system_prompt=system_prompt,
+                    max_tokens=max_tokens,
+                    temperature=0.3,
+                )
+                response = await provider.complete(request)
+                last_content = response.content
+
+                # Accumulate usage across rounds (the caller records ONE row; we sum here).
+                accum_usage["provider"] = response.provider
+                accum_usage["model"] = response.model
+                accum_usage["prompt_tokens"] += response.usage.prompt_tokens
+                accum_usage["completion_tokens"] += response.usage.completion_tokens
+                accum_usage["total_tokens"] += response.usage.total_tokens
+                accum_usage["finish_reason"] = getattr(response, "finish_reason", None)
+
+                parsed = self._parse_tool_protocol(response.content)
+                kind = parsed["kind"]
+
+                if kind == "final":
+                    # Unwrap the envelope: hand the inner result to the caller AS IF it were the
+                    # raw model output, so the existing _parse_and_validate works unchanged.
+                    return json.dumps(parsed["result"], ensure_ascii=False), accum_usage
+
+                if kind == "tool":
+                    tool_name = parsed["tool"]
+                    # Record the model's request verbatim (assistant turn) before acting.
+                    messages.append(Message(role=MessageRole.assistant, content=response.content))
+
+                    # ENFORCEMENT 1 (authoritative): the role's allowed_tools, alias-aware.
+                    if not registry.is_allowed(tool_name, defn.allowed_tools):
+                        logger.warning("[tool-loop] denied tool=%s for role=%s (not in allowed_tools)",
+                                       tool_name, role_label)
+                        messages.append(Message(role=MessageRole.user, content=json.dumps(
+                            {"tool_error": f"tool '{tool_name}' is not permitted for role {role_label}"})))
+                        continue
+
+                    tool = registry.get(tool_name)
+                    if tool is None:
+                        logger.warning("[tool-loop] unknown tool=%s requested by role=%s",
+                                       tool_name, role_label)
+                        messages.append(Message(role=MessageRole.user, content=json.dumps(
+                            {"tool_error": f"unknown tool '{tool_name}'"})))
+                        continue
+
+                    # ENFORCEMENT 2 (defense-in-depth): step-1 only ever executes the READ-ONLY
+                    # advertised set, matched on the CANONICAL name — so even if a role's
+                    # allowed_tools lists a write/shell tool, the loop refuses to run it.
+                    if tool.name not in advertised_canonical:
+                        logger.warning(
+                            "[tool-loop] blocked non-advertised tool=%s (canonical=%s) for role=%s",
+                            tool_name, tool.name, role_label)
+                        messages.append(Message(role=MessageRole.user, content=json.dumps(
+                            {"tool_error": f"tool '{tool_name}' is not available (read-only tools only)"})))
+                        continue
+
+                    params = parsed.get("params", {}) or {}
+                    result = await tool.execute(params, tool_context)
+                    # Metadata-only log (param KEYS, not values/content — mirrors the redactor's
+                    # discipline of never logging file contents).
+                    logger.info("[tool-loop] round=%d role=%s tool=%s params_keys=%s -> success=%s",
+                                round_idx, role_label, tool.name, sorted(params.keys()), result.success)
+                    messages.append(Message(role=MessageRole.user,
+                                            content=_format_tool_result_text(tool.name, result)))
+                    continue
+
+                # kind == "malformed" → record the bad turn + a bounded protocol-error nudge.
+                logger.warning("[tool-loop] malformed protocol turn round=%d role=%s: %s",
+                               round_idx, role_label, parsed.get("reason"))
+                messages.append(Message(role=MessageRole.assistant, content=response.content))
+                messages.append(Message(role=MessageRole.user, content=json.dumps(
+                    {"protocol_error": (
+                        "Your response was not a single valid JSON object with an \"action\" of "
+                        "\"tool\" or \"final\". Respond with exactly one such JSON object.")})))
+
+            # Rounds exhausted — return the LAST raw content as-is for the caller to parse (a
+            # veto-safe role like architect degrades gracefully when it is not the schema object).
+            logger.warning("[tool-loop] max_rounds=%d exhausted for role=%s; returning last content",
+                           max_rounds, role_label)
+            return last_content, accum_usage
+        except Exception as exc:
+            # NEVER raise: graceful degrade so the role's own handling takes over.
+            logger.warning("[tool-loop] unexpected error for role=%s: %s", role_label, exc)
+            return last_content, accum_usage
 
     # ── Planner execution ─────────────────────────────────────
 

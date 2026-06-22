@@ -24,8 +24,12 @@ max_tokens_clamp (per-model output-token clamp: desired 16384 capped at ModelInf
 planner_json_retry / reviewer_json_retry (shared _call_parse_retry generalized to the other
 two pipeline-blocking roles — planner + reviewer — alongside builder),
 sandboxed_file_tools (ReadFileTool/ListDirectoryTool routed through scoped containment,
-fail-closed; closes the live /api/tools/execute arbitrary-path-read hole).
-Total: 20 suites.
+fail-closed; closes the live /api/tools/execute arbitrary-path-read hole),
+tool_loop (B3 step 1: _call_model_with_tools A2 text-protocol read-only tool loop —
+action discriminator, fence/prose-tolerant parsing, allowed_tools + read-only enforcement,
+max_rounds bound, per-result size budget, token accumulation, never-raises; NOT yet wired
+to any role).
+Total: 21 suites.
 
 Usage:
     python scripts/run-unit-regression.py
@@ -59,6 +63,7 @@ TEST_SUITES = [
     "tests/planner_json_retry_test.py",
     "tests/reviewer_json_retry_test.py",
     "tests/sandboxed_file_tools_test.py",
+    "tests/tool_loop_test.py",
 ]
 
 
@@ -110,7 +115,7 @@ def main():
         sys.exit(1)
     else:
         print()
-        print("  Unit baseline: ALL PASS (20 suites)")
+        print("  Unit baseline: ALL PASS (21 suites)")
         sys.exit(0)
 
 
