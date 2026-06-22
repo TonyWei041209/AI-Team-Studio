@@ -28,8 +28,11 @@ fail-closed; closes the live /api/tools/execute arbitrary-path-read hole),
 tool_loop (B3 step 1: _call_model_with_tools A2 text-protocol read-only tool loop —
 action discriminator, fence/prose-tolerant parsing, allowed_tools + read-only enforcement,
 max_rounds bound, per-result size budget, token accumulation, never-raises; NOT yet wired
-to any role).
-Total: 21 suites.
+to any role),
+architect_tools (B3 step 2: _execute_architect wired to _call_model_with_tools advertising
+read_file — pre-fetch augmented not replaced, veto-safe preserved on exhaustion + exception,
+end-of-loop observability SUMMARY LogEvent).
+Total: 22 suites.
 
 Usage:
     python scripts/run-unit-regression.py
@@ -64,6 +67,7 @@ TEST_SUITES = [
     "tests/reviewer_json_retry_test.py",
     "tests/sandboxed_file_tools_test.py",
     "tests/tool_loop_test.py",
+    "tests/architect_tools_test.py",
 ]
 
 
@@ -115,7 +119,7 @@ def main():
         sys.exit(1)
     else:
         print()
-        print("  Unit baseline: ALL PASS (21 suites)")
+        print("  Unit baseline: ALL PASS (22 suites)")
         sys.exit(0)
 
 

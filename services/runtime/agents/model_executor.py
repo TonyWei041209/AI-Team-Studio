@@ -1275,7 +1275,8 @@ class ModelAgentExecutor:
         raising) returns the last content (or "") + accumulated usage, so the role's own veto-safe
         / parse handling takes over.
 
-        Called by NOTHING yet — step 2 swaps a role's _call_model call for this one line.
+        Called by _execute_architect (B3 step 2, advertising read_file only). The other 6
+        roles still use the single-shot _call_model.
         """
         # Lazy imports keep model_executor's module-level import graph unchanged AND avoid the
         # name clash with the module-level providers `get_registry`. The tool registry + access
@@ -1310,9 +1311,24 @@ class ModelAgentExecutor:
         }
         last_content = ""
 
+        # Observability counters for the end-of-loop SUMMARY log. Architect (the first caller) is
+        # veto-safe, so a tool loop that silently does nothing — or degrades — would be invisible
+        # otherwise; this summary is the audit trail step-3 real-model validation queries. Metadata
+        # ONLY: tool names + requested PATHS, NEVER file contents (mirrors the redactor discipline).
+        rounds_taken = 0
+        tool_call_count = 0
+        tool_requests: list[str] = []
+
+        def _emit_loop_summary(ended: str) -> None:
+            logger.info(
+                "[tool-loop] SUMMARY role=%s rounds=%d tool_calls=%d requests=%s ended=%s",
+                role_label, rounds_taken, tool_call_count, tool_requests, ended,
+            )
+
         try:
             registry = get_tool_registry()
             for round_idx in range(max_rounds):
+                rounds_taken = round_idx + 1
                 # Reuse the SAME per-model output clamp as _call_model (each round is clamped).
                 max_tokens = await self._resolve_max_tokens(provider, model_name)
                 request = CompletionRequest(
@@ -1339,6 +1355,7 @@ class ModelAgentExecutor:
                 if kind == "final":
                     # Unwrap the envelope: hand the inner result to the caller AS IF it were the
                     # raw model output, so the existing _parse_and_validate works unchanged.
+                    _emit_loop_summary("final")
                     return json.dumps(parsed["result"], ensure_ascii=False), accum_usage
 
                 if kind == "tool":
@@ -1375,6 +1392,12 @@ class ModelAgentExecutor:
 
                     params = parsed.get("params", {}) or {}
                     result = await tool.execute(params, tool_context)
+                    tool_call_count += 1
+                    # Record the request as metadata: tool name + the requested PATH (a path is
+                    # safe to log; file CONTENTS are never logged — mirrors the redactor discipline).
+                    req_path = params.get("path")
+                    tool_requests.append(
+                        f"{tool.name}:{req_path}" if isinstance(req_path, str) else tool.name)
                     # Metadata-only log (param KEYS, not values/content — mirrors the redactor's
                     # discipline of never logging file contents).
                     logger.info("[tool-loop] round=%d role=%s tool=%s params_keys=%s -> success=%s",
@@ -1396,10 +1419,12 @@ class ModelAgentExecutor:
             # veto-safe role like architect degrades gracefully when it is not the schema object).
             logger.warning("[tool-loop] max_rounds=%d exhausted for role=%s; returning last content",
                            max_rounds, role_label)
+            _emit_loop_summary("max_rounds_exhausted")
             return last_content, accum_usage
         except Exception as exc:
             # NEVER raise: graceful degrade so the role's own handling takes over.
             logger.warning("[tool-loop] unexpected error for role=%s: %s", role_label, exc)
+            _emit_loop_summary("error")
             return last_content, accum_usage
 
     # ── Planner execution ─────────────────────────────────────
@@ -1754,7 +1779,18 @@ class ModelAgentExecutor:
         try:
             defn, provider, model_name = self._resolve_provider(role)
             user_msg = self._build_architect_user_message(task_context)
-            raw_content, usage = await self._call_model(defn, provider, model_name, user_msg)
+            # B3 step 2: route the Architect through the A2 read-only tool loop (AUGMENT, not
+            # replace — user_msg already carries the structure+facade+task-relevant PRE-FETCH as
+            # the seed; tool rounds let the Architect actively read MORE files if it wants).
+            # Advertise read_file ONLY: the Architect's allowed_tools grant read (→ read_file);
+            # list_directory is not granted, so advertising it would only ever be blocked. Returns
+            # the IDENTICAL (content, usage) tuple as _call_model (final envelope unwrapped), so the
+            # _parse_and_validate + veto-safe fallback below are UNCHANGED.
+            raw_content, usage = await self._call_model_with_tools(
+                defn, provider, model_name, user_msg,
+                role=AgentRole.ARCHITECT, task_context=task_context,
+                advertised_tools=["read_file"],
+            )
         except Exception as exc:
             # Provider/config/runtime error — degrade to a minimal valid design, never veto.
             return ExecutionResult(

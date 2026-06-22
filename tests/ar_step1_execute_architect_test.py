@@ -103,8 +103,12 @@ VALID_ARCH = {
 
 
 # ── (a) valid architect JSON → success, parsed design passed through ──
+# B3 step 2: the Architect now routes through the A2 tool loop. The model must emit the
+# {"action":"final","result":{...}} envelope; the loop unwraps it and hands the inner result
+# to _parse_and_validate exactly as before. (The malformed/degradation cases below deliberately
+# return non-protocol JSON to exercise the veto-safe fallback.)
 print("\n=== (a) valid architect JSON -> ExecutionResult(success=True) ===")
-res, fake = run_arch(json.dumps(VALID_ARCH), TASK_CTX)
+res, fake = run_arch(json.dumps({"action": "final", "result": VALID_ARCH}), TASK_CTX)
 check("valid: success is True", res.success, getattr(res, "error_message", ""))
 check("valid: design_summary preserved", res.output.get("design_summary", "").startswith("Add an OAuth2"))
 check("valid: components preserved (2)", len(res.output.get("components", [])) == 2)
@@ -113,9 +117,14 @@ check("valid: no decision (informs, not a Reviewer)", res.decision is None)
 check("valid: token_usage captured from provider",
       bool(res.token_usage) and res.token_usage.get("provider") == "fake")
 # Confirm ARCHITECT_SYSTEM_PROMPT reached the model (injected via replace()).
+# B3 step 2: the tool loop APPENDS the read-only tool-use protocol preamble to the base prompt,
+# so the base prompt is now the PREFIX (was exact equality under single-shot _call_model).
 sp = fake.last_request.system_prompt
-check("valid: ARCHITECT_SYSTEM_PROMPT injected to model", sp == ARCHITECT_SYSTEM_PROMPT,
+check("valid: ARCHITECT_SYSTEM_PROMPT is the system-prompt prefix",
+      (sp or "").startswith(ARCHITECT_SYSTEM_PROMPT),
       f"system_prompt head: {(sp or '')[:80]!r}")
+check("valid: read-only tool-use protocol preamble appended (step-2 wiring)",
+      "TOOL-USE PROTOCOL (read-only)" in (sp or "") and "read_file" in (sp or ""))
 check("valid: prompt carries anti-fabrication framing",
       "MUST NOT fabricate existing code structure" in (sp or ""))
 check("valid: prompt carries Planner-boundary framing (HOW not WHAT / no re-decompose)",
