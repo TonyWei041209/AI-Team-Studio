@@ -10,6 +10,7 @@ Phase 6D: Builder support added in plan-only mode (structured change plan, no to
 from __future__ import annotations
 
 import json
+import logging
 import re
 from typing import Any
 
@@ -19,6 +20,13 @@ from agents.skill_loader import build_enhanced_system_prompt
 from agents.executor import ExecutionResult
 from providers.base import CompletionRequest, Message, MessageRole
 from providers.registry import get_registry, ProviderRegistry
+
+logger = logging.getLogger(__name__)
+
+# Builder malformed-JSON retry cap (inner model-call layer, distinct from and BELOW the
+# orchestrator's reviewer-rejection loop). At most this many retries AFTER the first
+# attempt → up to 3 total _call_model calls per builder step invocation.
+_BUILDER_JSON_RETRY_MAX = 2
 
 
 # ── Planner output schema validation ──────────────────────────
@@ -907,6 +915,8 @@ class ModelAgentExecutor:
                 # it to raw_output on the FAILED path (the 200-char preview above is kept for
                 # the human-readable error; this is the complete text for diagnosis).
                 raw_output=raw_text,
+                # Syntactic failure → the Builder's inner retry may re-prompt for valid JSON.
+                failure_kind="json_parse",
             )
 
         valid, err = schema_cls.validate(parsed)
@@ -916,6 +926,9 @@ class ModelAgentExecutor:
                 output=parsed,
                 error_message=f"{role_name} output schema validation failed: {err}",
                 raw_output=raw_text,
+                # Parsed OK but wrong shape → NOT a syntactic failure; not retried by the
+                # Builder's json-retry (re-prompting "fix your JSON syntax" is the wrong fix).
+                failure_kind="schema",
             )
         return parsed
 
@@ -959,23 +972,84 @@ class ModelAgentExecutor:
         Phase 6D: Builder operates in plan-only mode. It outputs a structured
         change plan but does NOT execute any file modifications, shell commands,
         or git operations.
+
+        MALFORMED-JSON RETRY (inner model-call layer): the Builder hard-fails on invalid
+        JSON, which aborts the whole pipeline before the Reviewer runs. To recover the
+        common "malformed-but-complete" case (e.g. Gemini emitting unescaped multi-line
+        `content`), a json.loads failure is retried up to ``_BUILDER_JSON_RETRY_MAX`` times
+        with appended feedback (the parse error + escaping guidance). This is DISTINCT from
+        and BELOW the orchestrator's reviewer-rejection loop (which handles parsed+valid-
+        but-rejected output via rejection_history). It is NOT triggered by a schema failure
+        (parsed but wrong shape — a different problem) nor by ``finish_reason == "length"``
+        (truncation — re-prompting just truncates again at the same cap; that is the separate
+        per-model max_tokens-clamp debt). After retries are exhausted it returns the LAST
+        failure as-is (success=False), preserving the hard-fail behavior so the FAILED-path
+        persistence captures the last malformed output + finish_reason.
+
+        token_usage reports the DECISIVE call: the successful attempt's usage on success, or
+        the LAST attempt's usage (with its finish_reason) on total failure — not summed.
+
+        NOTE: planner/reviewer parse JSON the same way and could benefit from the identical
+        retry; that is a possible follow-up, intentionally NOT done here (scoped to builder).
         """
         defn, provider, model_name = self._resolve_provider(AgentRole.BUILDER)
-        user_msg = self._build_builder_user_message(task_context)
-        raw_content, usage = await self._call_model(defn, provider, model_name, user_msg)
+        base_user_msg = self._build_builder_user_message(task_context)
 
-        result = self._parse_and_validate(raw_content, "Builder", BuilderOutputSchema)
+        retry_feedback = ""   # empty on the first attempt → user_msg == base (behavior-neutral)
+        result = None
+        usage = None
+        for attempt in range(1 + _BUILDER_JSON_RETRY_MAX):
+            user_msg = base_user_msg + retry_feedback
+            raw_content, usage = await self._call_model(defn, provider, model_name, user_msg)
+            result = self._parse_and_validate(raw_content, "Builder", BuilderOutputSchema)
+
+            # SUCCESS: parsed + schema-valid → normalize and return this call's usage.
+            if not isinstance(result, ExecutionResult):
+                result.setdefault("risk_notes", [])          # Phase 6D core
+                _normalize_builder_proposal(result)          # Phase 6E-A execution fields
+                return ExecutionResult(success=True, output=result, token_usage=usage)
+
+            # FAILURE: attach the decisive call's usage (provider/model/finish_reason).
+            result.token_usage = usage
+            failure_kind = getattr(result, "failure_kind", None)
+            finish_reason = usage.get("finish_reason") if isinstance(usage, dict) else None
+
+            # Retry ONLY syntactic json-parse failures — never a schema (wrong-shape) failure.
+            if failure_kind != "json_parse":
+                return result
+            # Never retry truncation — re-prompting truncates again at the same max_tokens cap
+            # (needs a higher cap / output-splitting strategy — the separate clamp debt).
+            if finish_reason == "length":
+                return result
+            # Retries exhausted → return the LAST malformed failure as-is (hard-fail preserved;
+            # FAILED-path persistence captures its raw_output + finish_reason).
+            if attempt >= _BUILDER_JSON_RETRY_MAX:
+                return result
+
+            # Build feedback for the next attempt: the parse error + escaping guidance. We do
+            # NOT echo the full previous raw_output (large + could re-confuse the model); the
+            # parse error + guidance is enough.
+            parse_err = (result.error_message or "").split(" Response preview:")[0].strip()
+            retry_feedback = (
+                "\n\nIMPORTANT — your previous response was NOT valid JSON and could not be "
+                f"parsed: {parse_err}\n"
+                "Respond again with a SINGLE valid JSON object only. In multi-line file "
+                "`content` values, escape every newline as \\n and every double-quote as "
+                "\\\", and do not include unescaped control characters or markdown code fences."
+            )
+            logger.warning(
+                "[builder-json-retry] attempt %d/%d failed JSON parse (finish_reason=%s): %s",
+                attempt + 1, _BUILDER_JSON_RETRY_MAX, finish_reason, parse_err,
+            )
+
+        # Unreachable (the loop always returns), but keep a safe fallback.
         if isinstance(result, ExecutionResult):
-            result.token_usage = usage  # preserve actual provider/model for logging
-            return result  # validation failed
-
-        # Normalize optional fields (Phase 6D core)
-        result.setdefault("risk_notes", [])
-
-        # Normalize Phase 6E-A execution proposal fields
-        _normalize_builder_proposal(result)
-
-        return ExecutionResult(success=True, output=result, token_usage=usage)
+            result.token_usage = usage
+            return result
+        return ExecutionResult(
+            success=False, output={},
+            error_message="Builder retry loop exited without a result", token_usage=usage,
+        )
 
     @staticmethod
     def _build_builder_user_message(ctx: dict) -> str:

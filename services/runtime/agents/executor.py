@@ -29,6 +29,9 @@ class ExecutionResult:
     raw_output     Raw provider text on a parse/validation failure (the unparsed
                    string that failed json.loads). Used by the orchestrator to
                    persist audit-grade raw_output on the FAILED path. None on success.
+    failure_kind   On failure, what KIND: "json_parse" (json.loads failed — syntactic)
+                   or "schema" (parsed but failed the output schema). Lets the builder's
+                   inner retry target syntactic JSON failures only. None on success.
     """
 
     def __init__(
@@ -39,12 +42,14 @@ class ExecutionResult:
         decision: str | ReviewDecision | None = None,
         token_usage: dict | None = None,
         raw_output: str | None = None,
+        failure_kind: str | None = None,
     ):
         self.success = success
         self.output = output
         self.error_message = error_message
         self.token_usage = token_usage
         self.raw_output = raw_output
+        self.failure_kind = failure_kind
         # Normalise to ReviewDecision enum when provided
         if isinstance(decision, str):
             self.decision = ReviewDecision(decision).value
