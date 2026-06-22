@@ -22,8 +22,10 @@ failed_path_persist (raw_output + finish_reason on the FAILED path — V23 gap c
 builder_json_retry (builder malformed-JSON inner retry, json-parse-only/finish_reason-gated),
 max_tokens_clamp (per-model output-token clamp: desired 16384 capped at ModelInfo.max_tokens),
 planner_json_retry / reviewer_json_retry (shared _call_parse_retry generalized to the other
-two pipeline-blocking roles — planner + reviewer — alongside builder).
-Total: 19 suites.
+two pipeline-blocking roles — planner + reviewer — alongside builder),
+sandboxed_file_tools (ReadFileTool/ListDirectoryTool routed through scoped containment,
+fail-closed; closes the live /api/tools/execute arbitrary-path-read hole).
+Total: 20 suites.
 
 Usage:
     python scripts/run-unit-regression.py
@@ -56,6 +58,7 @@ TEST_SUITES = [
     "tests/max_tokens_clamp_test.py",
     "tests/planner_json_retry_test.py",
     "tests/reviewer_json_retry_test.py",
+    "tests/sandboxed_file_tools_test.py",
 ]
 
 
@@ -107,7 +110,7 @@ def main():
         sys.exit(1)
     else:
         print()
-        print("  Unit baseline: ALL PASS (19 suites)")
+        print("  Unit baseline: ALL PASS (20 suites)")
         sys.exit(0)
 
 

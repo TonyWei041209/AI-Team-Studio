@@ -219,3 +219,83 @@ def list_scoped_tree(
         return sorted(results), truncated
 
     return sorted(results), truncated
+
+
+def list_scoped_dir(
+    relative_subdir: str,
+    workspace_root: str,
+    max_entries: int = 500,
+) -> tuple[bool, list[dict] | str]:
+    """SINGLE-level directory listing scoped to ``workspace_root`` + the deny-list.
+
+    Mirrors ``read_scoped_file``'s containment for a DIRECTORY target: rejects
+    absolute / ``../`` paths, asserts realpath containment, denies sensitive dirs,
+    and rejects a symlinked target dir. Lists ONE level (like the original
+    ``ListDirectoryTool``), SKIPPING sensitive and symlinked entries, capped at
+    ``max_entries``. Returns ``(True, [{"name","type","size"}, ...])`` on success or
+    ``(False, reason)`` on ANY rejection. Never raises.
+
+    ``relative_subdir`` of ``""`` or ``"."`` means the workspace root itself (the
+    root is handled WITHOUT _validate_file_path, which deliberately rejects the
+    workspace root as a write target). Used to give ListDirectoryTool the same
+    containment as read_scoped_file while preserving its per-entry type/size shape.
+    """
+    if not workspace_root or not str(workspace_root).strip():
+        return False, "workspace_root not provided"
+    real_workspace = os.path.realpath(workspace_root)
+    if not os.path.isdir(real_workspace):
+        return False, f"workspace_root is not a directory: {workspace_root}"
+
+    subdir = (relative_subdir or "").strip()
+    if subdir in ("", "."):
+        # Root listing — skip _validate_file_path (it rejects the workspace root).
+        full_dir = real_workspace
+        base_rel = ""
+    else:
+        # 1. Boundary check — reuse the write-sandbox validator (rejects absolute +
+        #    ../ traversal; enforces realpath containment within the workspace).
+        valid, reason = _validate_file_path(subdir, real_workspace)
+        if not valid:
+            return False, reason
+        # 2. Sensitive-path deny-list (e.g. .git, node_modules).
+        sensitive, s_reason = _is_sensitive_path(subdir)
+        if sensitive:
+            return False, s_reason
+        full_dir = os.path.normpath(os.path.join(real_workspace, subdir))
+        # 3. Reject a symlinked target directory.
+        if os.path.islink(full_dir):
+            return False, f"Target is a symlink: {subdir}"
+        # 4. Defense-in-depth: resolved real path must stay inside the workspace.
+        real_full = os.path.realpath(full_dir)
+        if not real_full.startswith(real_workspace + os.sep):
+            return False, f"Resolved path escapes workspace: {subdir}"
+        base_rel = subdir.replace("\\", "/").rstrip("/")
+
+    if not os.path.exists(full_dir):
+        return False, f"Directory not found: {relative_subdir}"
+    if not os.path.isdir(full_dir):
+        return False, f"Not a directory: {relative_subdir}"
+
+    entries: list[dict] = []
+    try:
+        for name in sorted(os.listdir(full_dir)):
+            if len(entries) >= max_entries:
+                break
+            entry_full = os.path.join(full_dir, name)
+            # Skip symlinked entries (mirror read_scoped_file's symlink rejection).
+            if os.path.islink(entry_full):
+                continue
+            # Skip sensitive entries at this level (e.g. a .env / .git / node_modules).
+            entry_rel = name if not base_rel else f"{base_rel}/{name}"
+            if _is_sensitive_path(entry_rel)[0]:
+                continue
+            is_dir = os.path.isdir(entry_full)
+            entries.append({
+                "name": name,
+                "type": "directory" if is_dir else "file",
+                "size": os.path.getsize(entry_full) if (not is_dir and os.path.isfile(entry_full)) else None,
+            })
+    except OSError as exc:
+        return False, f"List error: {exc}"
+
+    return True, entries

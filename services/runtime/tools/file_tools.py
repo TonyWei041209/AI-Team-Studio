@@ -1,13 +1,20 @@
 """File system tools: read_file, list_directory, write_file.
 
-All paths are resolved relative to ``context.working_dir`` (the project's
-``local_repo_path``) when the path is relative and a context is provided.
+read_file / list_directory are SANDBOXED: they route through the verified scoped-file
+containment (``agents.scoped_file_reader.read_scoped_file`` / ``list_scoped_dir``), scoped
+to ``context.working_dir`` (the project's ``local_repo_path``). They reject absolute paths,
+``../`` traversal, sensitive paths (.git/.env/...), symlinks, and out-of-workspace targets,
+and FAIL CLOSED when there is no usable workspace root — never an unsandboxed read. This
+closes the live POST /api/tools/execute arbitrary-path-read hole AND pre-empts the B3
+tool-use hazard. (write_file still uses ``_resolve_path`` — unchanged, out of scope.)
 """
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
+from agents.scoped_file_reader import list_scoped_dir, read_scoped_file
 from tools.base import BaseTool, ToolCategory, ToolContext, ToolResult
 
 
@@ -45,43 +52,37 @@ class ReadFileTool(BaseTool):
         if err:
             return ToolResult(success=False, output=None, error=err, tool_name=self.name)
 
-        path = _resolve_path(params["path"], context)
-
-        if not path.exists():
+        # SANDBOXED: route through the verified scoped-file containment (rejects absolute /
+        # ../ / sensitive / symlink / out-of-workspace paths). FAIL CLOSED when there is no
+        # usable workspace root — NEVER fall back to an unsandboxed read.
+        workspace_root = context.working_dir if context else None
+        if not workspace_root or not os.path.isdir(workspace_root):
             return ToolResult(
                 success=False, output=None,
-                error=f"File not found: {path}",
-                tool_name=self.name, risk_level="safe",
-            )
-        if not path.is_file():
-            return ToolResult(
-                success=False, output=None,
-                error=f"Not a file: {path}",
+                error="no workspace root configured for sandboxed read",
                 tool_name=self.name, risk_level="safe",
             )
 
-        try:
-            max_size = params.get("max_size", 1_048_576)  # 1 MB
-            stat = path.stat()
-            if stat.st_size > max_size:
-                return ToolResult(
-                    success=False, output=None,
-                    error=f"File too large: {stat.st_size} bytes (max {max_size})",
-                    tool_name=self.name, risk_level="safe",
-                )
-
-            content = path.read_text(encoding=params.get("encoding", "utf-8"))
+        # Preserve the tool's historical 1 MB ceiling by passing it as the read cap.
+        ok, result = read_scoped_file(
+            params["path"], workspace_root, params.get("max_size", 1_048_576),
+        )
+        if not ok:
+            # result is the rejection reason (containment / sensitive / symlink / missing / size).
             return ToolResult(
-                success=True,
-                output={"path": str(path), "content": content, "size": stat.st_size},
+                success=False, output=None, error=result,
                 tool_name=self.name, risk_level="safe",
             )
-        except Exception as exc:
-            return ToolResult(
-                success=False, output=None,
-                error=f"Read error: {exc}",
-                tool_name=self.name, risk_level="safe",
-            )
+        # Use the caller's relative path in the output (avoids leaking absolute host paths).
+        return ToolResult(
+            success=True,
+            output={
+                "path": params["path"],
+                "content": result,
+                "size": len(result.encode("utf-8")),
+            },
+            tool_name=self.name, risk_level="safe",
+        )
 
 
 # ── list_directory ────────────────────────────────────────────
@@ -107,44 +108,31 @@ class ListDirectoryTool(BaseTool):
         if err:
             return ToolResult(success=False, output=None, error=err, tool_name=self.name)
 
-        path = _resolve_path(params["path"], context)
-
-        if not path.exists():
+        # SANDBOXED: route through the scoped single-level lister (same containment as the
+        # scoped reader; preserves the per-entry {name,type,size} shape). FAIL CLOSED when
+        # there is no usable workspace root. "" / "." lists the workspace root itself.
+        workspace_root = context.working_dir if context else None
+        if not workspace_root or not os.path.isdir(workspace_root):
             return ToolResult(
                 success=False, output=None,
-                error=f"Directory not found: {path}",
-                tool_name=self.name, risk_level="safe",
-            )
-        if not path.is_dir():
-            return ToolResult(
-                success=False, output=None,
-                error=f"Not a directory: {path}",
+                error="no workspace root configured for sandboxed listing",
                 tool_name=self.name, risk_level="safe",
             )
 
-        try:
-            max_entries = params.get("max_entries", 500)
-            entries = []
-            for i, entry in enumerate(sorted(path.iterdir())):
-                if i >= max_entries:
-                    break
-                entries.append({
-                    "name": entry.name,
-                    "type": "directory" if entry.is_dir() else "file",
-                    "size": entry.stat().st_size if entry.is_file() else None,
-                })
-
+        ok, result = list_scoped_dir(
+            params["path"], workspace_root, params.get("max_entries", 500),
+        )
+        if not ok:
+            # result is the rejection reason (containment / sensitive / symlink / missing).
             return ToolResult(
-                success=True,
-                output={"path": str(path), "entries": entries, "count": len(entries)},
+                success=False, output=None, error=result,
                 tool_name=self.name, risk_level="safe",
             )
-        except Exception as exc:
-            return ToolResult(
-                success=False, output=None,
-                error=f"List error: {exc}",
-                tool_name=self.name, risk_level="safe",
-            )
+        return ToolResult(
+            success=True,
+            output={"path": params["path"], "entries": result, "count": len(result)},
+            tool_name=self.name, risk_level="safe",
+        )
 
 
 # ── write_file ────────────────────────────────────────────────
