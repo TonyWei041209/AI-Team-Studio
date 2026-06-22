@@ -26,6 +26,9 @@ class ExecutionResult:
     output         Structured dict of the agent's output sections.
     error_message  Human-readable error (only when success is False).
     decision       Reviewer-only: ReviewDecision enum value.
+    raw_output     Raw provider text on a parse/validation failure (the unparsed
+                   string that failed json.loads). Used by the orchestrator to
+                   persist audit-grade raw_output on the FAILED path. None on success.
     """
 
     def __init__(
@@ -35,11 +38,13 @@ class ExecutionResult:
         error_message: str | None = None,
         decision: str | ReviewDecision | None = None,
         token_usage: dict | None = None,
+        raw_output: str | None = None,
     ):
         self.success = success
         self.output = output
         self.error_message = error_message
         self.token_usage = token_usage
+        self.raw_output = raw_output
         # Normalise to ReviewDecision enum when provided
         if isinstance(decision, str):
             self.decision = ReviewDecision(decision).value

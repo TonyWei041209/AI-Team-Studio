@@ -903,6 +903,10 @@ class ModelAgentExecutor:
                     f"{role_name} returned invalid JSON: {exc}. "
                     f"Response preview: {preview}"
                 ),
+                # Carry the FULL unparsed provider text out so the orchestrator can persist
+                # it to raw_output on the FAILED path (the 200-char preview above is kept for
+                # the human-readable error; this is the complete text for diagnosis).
+                raw_output=raw_text,
             )
 
         valid, err = schema_cls.validate(parsed)
@@ -911,6 +915,7 @@ class ModelAgentExecutor:
                 success=False,
                 output=parsed,
                 error_message=f"{role_name} output schema validation failed: {err}",
+                raw_output=raw_text,
             )
         return parsed
 

@@ -320,12 +320,20 @@ class Orchestrator:
                 if isinstance(output, dict) and output.get("proposed_files"):
                     self._create_execution_proposal(task_id, run_id, output, role=defn.role)
         else:
+            # FAILED-path audit (closes the V23 FAILED-path gap): persist the FULL raw
+            # provider text (the unparsed string that failed json.loads, when available;
+            # NULL for pre-response failures) + finish_reason, so failures are fully
+            # diagnosable — not just the 200-char preview in the error message.
+            # success → raw_output is the parsed full output; failure → the raw unparsed text.
+            _fusage = result.token_usage if isinstance(result.token_usage, dict) else {}
             self._update_run(
                 run_id, RunStatus.FAILED,
                 output_summary=json.dumps({
                     "error": result.error_message,
                     "output": result.output,
                 }),
+                raw_output=getattr(result, "raw_output", None),
+                finish_reason=_fusage.get("finish_reason"),
             )
             self._log(task_id, run_id, "error", defn.role.value,
                       f"{defn.display_name} failed: {result.error_message}")
