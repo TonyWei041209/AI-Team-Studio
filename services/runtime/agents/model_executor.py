@@ -1302,12 +1302,20 @@ class ModelAgentExecutor:
         if structure_block:
             parts.append(structure_block)
 
-        # B1-Arch-乙-3a: inject the CONTENT of a few facade files (README, manifests,
-        # entry-point source) AFTER the structure block. Sandboxed via read_scoped_file,
-        # multi-layer-capped; silently degrades when unavailable.
-        facade_block = ModelAgentExecutor._build_architect_facade_context(ctx)
+        # B1-Arch-乙-3a: inject the CONTENT of a few FIXED facade files (README,
+        # manifests, entry-point source) AFTER the structure block. Sandboxed via
+        # read_scoped_file, multi-layer-capped; silently degrades when unavailable.
+        # Returns the included-path set + chars used so 乙-3b can dedup + share budget.
+        facade_block, facade_paths, facade_used = ModelAgentExecutor._build_architect_facade_context(ctx)
         if facade_block:
             parts.append(facade_block)
+
+        # B1-Arch-乙-3b: inject the CONTENT of a few ADDITIONAL files THIS task is
+        # likely to modify (selected by task-relevance), deduped against 乙-3a's set and
+        # drawing from the SAME shared facade char budget. Sandboxed; graceful None.
+        taskfile_block = ModelAgentExecutor._build_architect_taskfile_context(ctx, facade_paths, facade_used)
+        if taskfile_block:
+            parts.append(taskfile_block)
         return "\n".join(parts)
 
     # Caps for B1-Arch-甲 injected project structure (paths only) — keep the
@@ -1368,7 +1376,7 @@ class ModelAgentExecutor:
     )
 
     @staticmethod
-    def _build_architect_facade_context(ctx: dict) -> str | None:
+    def _build_architect_facade_context(ctx: dict) -> "tuple[str | None, set[str], int]":
         """Inject the CONTENT of a small fixed set of facade files for the Architect.
 
         Reads README + dependency manifests + entry-point source via the sandboxed
@@ -1377,8 +1385,13 @@ class ModelAgentExecutor:
         together: at most ``_ARCH_FACADE_MAX_FILES`` files, each truncated to
         ``_ARCH_FACADE_PER_FILE_CAP`` chars, total bounded by ``_ARCH_FACADE_TOTAL_CAP``.
 
-        Returns a labeled block, or ``None`` when no workspace_root resolves or
-        nothing is found (graceful: the Architect designs on text + structure only).
+        Returns ``(block, included_paths, used_chars)``:
+        - block: the labeled block string, or ``None`` when no workspace_root resolves
+          or nothing is found (graceful: the Architect designs on text + structure only).
+        - included_paths: the set of relative paths actually included (so 乙-3b can dedup).
+        - used_chars: total chars consumed (so 乙-3b can draw from the SHARED budget).
+        Returns ``(None, set(), 0)`` on any no-op. The block string and per-file/total
+        cap behavior are byte-identical to before — only the return shape changed.
         Never raises. PATHS ONLY is 甲; this is the first role to read CONTENT.
         """
         # Lazy import keeps model_executor's module-level import graph unchanged.
@@ -1386,9 +1399,10 @@ class ModelAgentExecutor:
 
         workspace_root = resolve_workspace_root(ctx.get("project_id"))
         if not workspace_root:
-            return None
+            return None, set(), 0
 
         sections: list[str] = []
+        included_paths: set[str] = set()
         included = 0
         used = 0
         budget_hit = False
@@ -1423,15 +1437,173 @@ class ModelAgentExecutor:
             sections.append(header + content)
             used += len(content)
             included += 1
+            included_paths.add(path)
             if budget_hit:
                 break
 
         if not sections:
-            return None
+            return None, set(), 0
         block = "\nKey project files (content):" + "".join(sections)
         if budget_hit:
             block += "\n[...additional file content truncated to respect the context budget...]"
-        return block
+        return block, included_paths, used
+
+    # B1-Arch-乙-3b task-relevant file CONTENT caps. A NEW selector that matches the
+    # task's free-text signals against REAL workspace paths to add files THIS task is
+    # likely to modify (the module defining the class being changed, etc.) — files
+    # 乙-3a's fixed facade list does not cover. It draws from the SHARED
+    # _ARCH_FACADE_TOTAL_CAP (no new budget), using only what 乙-3a left.
+    _ARCH_TASKFILE_MAX_FILES = 3          # precise supplements, not broad coverage (tighter than facade's 6)
+    _ARCH_TASKFILE_PER_FILE_CAP = 6_000   # same per-file cap as facade
+    _ARCH_TASKFILE_READ_CEILING = 64_000  # same bounded read ceiling as facade
+    # Source-file extensions 乙-3b considers matchable (others skipped for now).
+    _ARCH_TASKFILE_SOURCE_EXTS = (".py", ".js", ".ts", ".tsx", ".jsx", ".go", ".rs", ".java", ".rb")
+
+    @staticmethod
+    def _build_architect_taskfile_context(ctx: dict, already_included: "set[str]", used_chars: int) -> "str | None":
+        """Inject CONTENT of up to a few files THIS task is likely to modify (乙-3b).
+
+        Selection matches the task's free-text signals (title, description, planner
+        goal_summary + task_breakdown descriptions + acceptance_criteria) against the
+        REAL workspace path universe (the SAME sandboxed ``list_scoped_tree`` 甲 uses).
+        Direction is path->prose (iterate real paths, test their tokens against the
+        signal text), so it can only ever surface files that ACTUALLY EXIST — never a
+        hallucinated path — and it skips anything 乙-3a already showed (``already_included``).
+
+        Reads via the SANDBOXED ``read_scoped_file`` (NEVER ReadFileTool — inherits
+        sensitive-denied/symlink/size protection) and draws from the SHARED facade
+        budget (``_ARCH_FACADE_TOTAL_CAP`` minus ``used_chars`` consumed by 乙-3a).
+        Returns ``None`` on any no-op (no workspace, nothing selected, budget exhausted).
+        Never raises.
+        """
+        try:
+            import os
+            import re
+            from agents.scoped_file_reader import (
+                read_scoped_file, list_scoped_tree, resolve_workspace_root,
+            )
+
+            workspace_root = resolve_workspace_root(ctx.get("project_id"))
+            if not workspace_root:
+                return None
+
+            # Closed universe of real relative paths (reuse 甲's sandboxed listing + caps).
+            paths, _truncated = list_scoped_tree(
+                workspace_root,
+                ModelAgentExecutor._ARCH_TREE_MAX_ENTRIES,
+                ModelAgentExecutor._ARCH_TREE_MAX_TOTAL_CHARS,
+            )
+            if not paths:
+                return None
+
+            # Build the task signal text from every available free-text source (defensive:
+            # guard each, do NOT assume the planner schema is clean).
+            sig_parts: list[str] = []
+            title = ctx.get("title")
+            if isinstance(title, str):
+                sig_parts.append(title)
+            desc = ctx.get("description")
+            if isinstance(desc, str):
+                sig_parts.append(desc)
+            prev = ctx.get("previous_outputs", {})
+            planner = prev.get("planner", {}) if isinstance(prev, dict) else {}
+            if isinstance(planner, dict):
+                gs = planner.get("goal_summary")
+                if isinstance(gs, str):
+                    sig_parts.append(gs)
+                tb = planner.get("task_breakdown")
+                if isinstance(tb, list):
+                    for item in tb:
+                        if isinstance(item, dict):
+                            d = item.get("description")
+                            if isinstance(d, str):
+                                sig_parts.append(d)
+                ac = planner.get("acceptance_criteria")
+                if isinstance(ac, list):
+                    for c in ac:
+                        if isinstance(c, str):
+                            sig_parts.append(c)
+            signal = " ".join(sig_parts).lower()
+            if not signal.strip():
+                return None
+
+            # Score real, non-already-included source files: path tokens -> prose substring.
+            scored: list[tuple[int, str]] = []
+            for p in paths:
+                if p in already_included:
+                    continue
+                ext = os.path.splitext(p)[1].lower()
+                if ext not in ModelAgentExecutor._ARCH_TASKFILE_SOURCE_EXTS:
+                    continue
+                posix = p.replace("\\", "/")
+                basename = posix.rsplit("/", 1)[-1]            # e.g. models.py
+                stem = os.path.splitext(basename)[0]           # e.g. models
+                parent_qual = os.path.splitext(posix)[0]       # e.g. src/models
+                # Heuristic primary-symbol guess: snake/kebab -> PascalCase (low weight).
+                sym_parts = [w for w in re.split(r"[_\-]", stem) if w]
+                symbol_guess = "".join(w[:1].upper() + w[1:] for w in sym_parts)
+                score = 0
+                if basename.lower() in signal:
+                    score += 3                                  # full basename = strongest
+                if len(stem) >= 3 and stem.lower() in signal:
+                    score += 2                                  # stem (skip 1-2 char noise)
+                if parent_qual.lower() != stem.lower() and parent_qual.lower() in signal:
+                    score += 2                                  # parent-qualified stem
+                if len(symbol_guess) >= 3 and symbol_guess.lower() in signal:
+                    score += 1                                  # symbol-guess HINT, low weight
+                if score > 0:
+                    scored.append((score, p))
+
+            if not scored:
+                return None  # selected-empty is normal; 甲 + 乙-3a cover the Architect
+
+            # Rank: score DESC, then shorter path, then alphabetical (deterministic).
+            scored.sort(key=lambda sp: (-sp[0], len(sp[1]), sp[1]))
+            selected = [p for _, p in scored[: ModelAgentExecutor._ARCH_TASKFILE_MAX_FILES]]
+
+            # Read within the SHARED remaining budget left by 乙-3a.
+            remaining_total = ModelAgentExecutor._ARCH_FACADE_TOTAL_CAP - used_chars
+            if remaining_total <= 0:
+                return None  # 乙-3a already used the whole shared budget
+
+            sections: list[str] = []
+            used_in_block = 0
+            included = 0
+            budget_hit = False
+            for path in selected:
+                ok, content = read_scoped_file(
+                    path, workspace_root,
+                    max_bytes=ModelAgentExecutor._ARCH_TASKFILE_READ_CEILING,
+                )
+                if not ok:
+                    continue  # sensitive/oversized/symlink/missing → skip (sandbox protection)
+                truncated_file = False
+                if len(content) > ModelAgentExecutor._ARCH_TASKFILE_PER_FILE_CAP:
+                    content = content[: ModelAgentExecutor._ARCH_TASKFILE_PER_FILE_CAP]
+                    truncated_file = True
+                rem = remaining_total - used_in_block
+                if rem <= 0:
+                    budget_hit = True
+                    break
+                if len(content) > rem:
+                    content = content[:rem]
+                    truncated_file = True
+                    budget_hit = True
+                header = f"\n--- {path}" + (" (truncated)" if truncated_file else "") + " ---\n"
+                sections.append(header + content)
+                used_in_block += len(content)
+                included += 1
+                if budget_hit:
+                    break
+
+            if not sections:
+                return None
+            block = "\nTask-relevant project files (content):" + "".join(sections)
+            if budget_hit:
+                block += "\n[...additional task-relevant file content truncated to respect the context budget...]"
+            return block
+        except Exception:
+            return None  # defensive: never raise (matches 甲 / 乙-3a posture)
 
     # ── Documentation execution (a "second Builder": proposes doc files) ──
 
