@@ -34,8 +34,11 @@ read_file — pre-fetch augmented not replaced, veto-safe preserved on exhaustio
 end-of-loop observability SUMMARY LogEvent),
 tool_loop_summary_persist (B3 step 3.5: tool-loop SUMMARY persisted to the queryable log_events
 table — executor returns structured tool_loop_stats, architect attaches them, orchestrator writes
-a greppable "tool-loop SUMMARY" row; single-shot roles emit none).
-Total: 23 suites.
+a greppable "tool-loop SUMMARY" row; single-shot roles emit none),
+builder_tools (B3 step 4: builder wired to the tool loop via the extracted _parse_retry_core —
+advertises read_file only, write_file/shell blocked, blocking semantics preserved, stats on
+success AND failure, inner(tool)/outer(parse-retry) composition).
+Total: 24 suites.
 
 Usage:
     python scripts/run-unit-regression.py
@@ -72,6 +75,7 @@ TEST_SUITES = [
     "tests/tool_loop_test.py",
     "tests/architect_tools_test.py",
     "tests/tool_loop_summary_persist_test.py",
+    "tests/builder_tools_test.py",
 ]
 
 
@@ -123,7 +127,7 @@ def main():
         sys.exit(1)
     else:
         print()
-        print("  Unit baseline: ALL PASS (23 suites)")
+        print("  Unit baseline: ALL PASS (24 suites)")
         sys.exit(0)
 
 
