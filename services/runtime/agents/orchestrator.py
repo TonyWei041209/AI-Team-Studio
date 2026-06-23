@@ -344,6 +344,15 @@ class Orchestrator:
         # 7. Record token usage (Phase 12-1)
         self._record_token_usage(task_id, run_id, defn.role.value, result)
 
+        # 8. Tool-loop SUMMARY → log_events (B3 step 3.5): persist the tool-use audit trail
+        #    (rounds / tool_calls / requested tools+paths / ended) so tool-use is QUERYABLE after
+        #    a run — closing the step-3 gap where the SUMMARY was Python-logging-only and lost.
+        #    ONLY tool-enabled roles carry tool_loop_stats (currently architect) → the 6 single-
+        #    shot roles produce NO such row.
+        stats = getattr(result, "tool_loop_stats", None)
+        if isinstance(stats, dict):
+            self._log_tool_loop_summary(task_id, run_id, defn.role.value, stats)
+
         return {
             "run_id": run_id,
             "role": defn.role.value,
@@ -685,6 +694,27 @@ class Orchestrator:
             pass  # Never fail orchestration due to usage logging
         finally:
             conn.close()
+
+    def _log_tool_loop_summary(
+        self, task_id: str, run_id: str, role: str, stats: dict,
+    ) -> None:
+        """Persist the tool-loop SUMMARY to log_events (B3 step 3.5) — queryable audit trail.
+
+        Written ONLY for tool-enabled roles (whose ExecutionResult carries tool_loop_stats);
+        single-shot roles produce no such row. The message mirrors the executor's Python-logging
+        SUMMARY so a validator can ``grep`` log_events for "tool-loop SUMMARY"; the full structured
+        record also goes in the payload. Metadata ONLY — tool names + PATHS, never file contents.
+        """
+        reqs = stats.get("requests") or []
+        req_str = "[" + ",".join(
+            (r.get("tool", "?") + (":" + r["path"] if r.get("path") else ""))
+            for r in reqs if isinstance(r, dict)
+        ) + "]"
+        message = (
+            f"tool-loop SUMMARY role={role} rounds={stats.get('rounds')} "
+            f"tool_calls={stats.get('tool_calls')} requests={req_str} ended={stats.get('ended')}"
+        )
+        self._log(task_id, run_id, "info", role, message, payload={"tool_loop": stats})
 
     @staticmethod
     def _compress_rejection_history(history: list[dict]) -> None:

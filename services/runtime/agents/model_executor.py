@@ -1258,7 +1258,7 @@ class ModelAgentExecutor:
         task_context: dict,
         advertised_tools: tuple[str, ...] = _STEP1_TOOL_NAMES,
         max_rounds: int = _TOOL_LOOP_MAX_ROUNDS,
-    ) -> tuple[str, dict]:
+    ) -> tuple[str, dict, dict]:
         """A2 text-protocol read-only tool loop. SEPARATE sibling of _call_model.
 
         Builds a GROWING list[Message] and re-sends it via the SAME provider.complete each round
@@ -1270,10 +1270,14 @@ class ModelAgentExecutor:
           - "tool"      → enforces access (role allowed_tools via is_allowed + the step-1 read-only
                           allowlist), executes the sandboxed tool, appends the BOUNDED result text.
           - "malformed" → appends a protocol-error nudge and re-prompts (bounded by max_rounds).
-        Returns the IDENTICAL (content, usage_dict) tuple shape as _call_model. usage_dict SUMS
-        token usage across ALL rounds. NEVER raises: any unexpected error (incl. provider.complete
-        raising) returns the last content (or "") + accumulated usage, so the role's own veto-safe
-        / parse handling takes over.
+        Returns a (content, usage_dict, tool_loop_stats) tuple. content + usage_dict are IDENTICAL
+        to _call_model's (so the caller's _parse_and_validate sees the same content); usage_dict
+        SUMS token usage across ALL rounds. tool_loop_stats is the structured audit record
+        {rounds, tool_calls, requests:[{tool, path}], ended} (B3 step 3.5) — the caller attaches it
+        to its ExecutionResult so the orchestrator can persist it to log_events (queryable audit).
+        NEVER raises: any unexpected error (incl. provider.complete raising) returns the last
+        content (or "") + accumulated usage + stats(ended="error"), so the role's own veto-safe /
+        parse handling takes over.
 
         Called by _execute_architect (B3 step 2, advertising read_file only). The other 6
         roles still use the single-shot _call_model.
@@ -1317,13 +1321,28 @@ class ModelAgentExecutor:
         # ONLY: tool names + requested PATHS, NEVER file contents (mirrors the redactor discipline).
         rounds_taken = 0
         tool_call_count = 0
-        tool_requests: list[str] = []
+        tool_requests: list[dict] = []   # [{"tool": str, "path": str|None}, ...] — metadata only
 
-        def _emit_loop_summary(ended: str) -> None:
+        def _finish(ended: str, content: str) -> tuple[str, dict, dict]:
+            """Build the structured tool-loop stats, emit the Python-logging SUMMARY, and return
+            the (content, usage, stats) tuple. The caller attaches `stats` to its ExecutionResult
+            so the orchestrator persists it to the queryable log_events table (B3 step 3.5).
+            Metadata ONLY — tool names + PATHS, never file contents.
+            """
+            stats = {
+                "rounds": rounds_taken,
+                "tool_calls": tool_call_count,
+                "requests": list(tool_requests),
+                "ended": ended,
+            }
+            req_str = "[" + ",".join(
+                (r["tool"] + (":" + r["path"] if r.get("path") else "")) for r in tool_requests
+            ) + "]"
             logger.info(
                 "[tool-loop] SUMMARY role=%s rounds=%d tool_calls=%d requests=%s ended=%s",
-                role_label, rounds_taken, tool_call_count, tool_requests, ended,
+                role_label, rounds_taken, tool_call_count, req_str, ended,
             )
+            return content, accum_usage, stats
 
         try:
             registry = get_tool_registry()
@@ -1355,8 +1374,7 @@ class ModelAgentExecutor:
                 if kind == "final":
                     # Unwrap the envelope: hand the inner result to the caller AS IF it were the
                     # raw model output, so the existing _parse_and_validate works unchanged.
-                    _emit_loop_summary("final")
-                    return json.dumps(parsed["result"], ensure_ascii=False), accum_usage
+                    return _finish("final", json.dumps(parsed["result"], ensure_ascii=False))
 
                 if kind == "tool":
                     tool_name = parsed["tool"]
@@ -1397,7 +1415,7 @@ class ModelAgentExecutor:
                     # safe to log; file CONTENTS are never logged — mirrors the redactor discipline).
                     req_path = params.get("path")
                     tool_requests.append(
-                        f"{tool.name}:{req_path}" if isinstance(req_path, str) else tool.name)
+                        {"tool": tool.name, "path": req_path if isinstance(req_path, str) else None})
                     # Metadata-only log (param KEYS, not values/content — mirrors the redactor's
                     # discipline of never logging file contents).
                     logger.info("[tool-loop] round=%d role=%s tool=%s params_keys=%s -> success=%s",
@@ -1419,13 +1437,11 @@ class ModelAgentExecutor:
             # veto-safe role like architect degrades gracefully when it is not the schema object).
             logger.warning("[tool-loop] max_rounds=%d exhausted for role=%s; returning last content",
                            max_rounds, role_label)
-            _emit_loop_summary("max_rounds_exhausted")
-            return last_content, accum_usage
+            return _finish("max_rounds_exhausted", last_content)
         except Exception as exc:
             # NEVER raise: graceful degrade so the role's own handling takes over.
             logger.warning("[tool-loop] unexpected error for role=%s: %s", role_label, exc)
-            _emit_loop_summary("error")
-            return last_content, accum_usage
+            return _finish("error", last_content)
 
     # ── Planner execution ─────────────────────────────────────
 
@@ -1786,13 +1802,17 @@ class ModelAgentExecutor:
             # list_directory is not granted, so advertising it would only ever be blocked. Returns
             # the IDENTICAL (content, usage) tuple as _call_model (final envelope unwrapped), so the
             # _parse_and_validate + veto-safe fallback below are UNCHANGED.
-            raw_content, usage = await self._call_model_with_tools(
+            # B3 step 3.5: the tool loop also returns structured tool_loop_stats (rounds/
+            # tool_calls/requests/ended) — attached to the ExecutionResult below so the
+            # orchestrator can persist it to log_events (queryable audit trail).
+            raw_content, usage, tool_loop_stats = await self._call_model_with_tools(
                 defn, provider, model_name, user_msg,
                 role=AgentRole.ARCHITECT, task_context=task_context,
                 advertised_tools=["read_file"],
             )
         except Exception as exc:
             # Provider/config/runtime error — degrade to a minimal valid design, never veto.
+            # (The error is from resolve/build BEFORE the loop ran → no tool_loop_stats.)
             return ExecutionResult(
                 success=True,
                 output=self._arch_concerns_fallback(
@@ -1812,9 +1832,11 @@ class ModelAgentExecutor:
                     f"({result.error_message}); the Builder should proceed from the Planner's plan with caution."
                 ),
                 token_usage=usage,
+                tool_loop_stats=tool_loop_stats,
             )
 
-        return ExecutionResult(success=True, output=result, token_usage=usage)
+        return ExecutionResult(success=True, output=result, token_usage=usage,
+                               tool_loop_stats=tool_loop_stats)
 
     @staticmethod
     def _arch_concerns_fallback(note: str) -> dict:

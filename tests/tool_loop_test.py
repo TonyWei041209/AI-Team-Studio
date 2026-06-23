@@ -107,7 +107,8 @@ def run_loop(scripted, role=AgentRole.ARCHITECT, task_context=None, raise_on_cal
     ex = ModelAgentExecutor()
     defn = get_definition(role)
     ctx = task_context if task_context is not None else {"project_id": "p1"}
-    content, usage = asyncio.run(ex._call_model_with_tools(
+    # B3 step 3.5: _call_model_with_tools now returns (content, usage, tool_loop_stats).
+    content, usage, _stats = asyncio.run(ex._call_model_with_tools(
         defn, prov, "gemini-2.5-flash", "Do the task.",
         role=role, task_context=ctx,
     ))

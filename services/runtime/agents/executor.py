@@ -32,6 +32,11 @@ class ExecutionResult:
     failure_kind   On failure, what KIND: "json_parse" (json.loads failed — syntactic)
                    or "schema" (parsed but failed the output schema). Lets the builder's
                    inner retry target syntactic JSON failures only. None on success.
+    tool_loop_stats  Tool-enabled roles ONLY (currently architect via _call_model_with_tools):
+                   the structured tool-loop audit record {rounds, tool_calls, requests:
+                   [{tool, path}], ended}. The orchestrator persists it to log_events for an
+                   queryable audit trail (B3 step 3.5). None for single-shot roles. Metadata
+                   only — tool names + PATHS, never file contents.
     """
 
     def __init__(
@@ -43,6 +48,7 @@ class ExecutionResult:
         token_usage: dict | None = None,
         raw_output: str | None = None,
         failure_kind: str | None = None,
+        tool_loop_stats: dict | None = None,
     ):
         self.success = success
         self.output = output
@@ -50,6 +56,7 @@ class ExecutionResult:
         self.token_usage = token_usage
         self.raw_output = raw_output
         self.failure_kind = failure_kind
+        self.tool_loop_stats = tool_loop_stats
         # Normalise to ReviewDecision enum when provided
         if isinstance(decision, str):
             self.decision = ReviewDecision(decision).value
