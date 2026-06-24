@@ -302,6 +302,17 @@ class MockAgentExecutor:
         inject synthetic N). The real "Builder produces N" source is wired in step 2.
         """
         candidates = ctx.get("candidate_proposals")
+        if candidates is None:
+            # Live pipeline (step 1): no explicit candidate list is injected. Fall back to the
+            # Builder's output as the candidate set — a single Builder proposal becomes a
+            # 1-element list (no-op passthrough); step 2 feeds N explicitly via
+            # candidate_proposals. Tests that inject candidate_proposals are unaffected.
+            prev = ctx.get("previous_outputs")
+            builder_out = prev.get("builder") if isinstance(prev, dict) else None
+            if isinstance(builder_out, list):
+                candidates = builder_out
+            elif isinstance(builder_out, dict) and builder_out:
+                candidates = [builder_out]
         try:
             if not isinstance(candidates, list) or len(candidates) == 0:
                 raise ValueError("no candidate_proposals to select from")

@@ -482,14 +482,14 @@ def get_definition(role: AgentRole) -> AgentRoleDefinition:
     raise ValueError(f"No definition for role: {role}")
 
 
-# ── Comparator role (C2 step 1 — DEFINED BUT UNWIRED) ──────────
+# ── Comparator role (C2 step 1 — WIRED into the live pipeline) ──────────
 # A read-only selector that collapses N candidate Builder proposals down to ONE
-# (C2 direction = internal collapse N→1). It is intentionally NOT a member of
-# AGENT_PIPELINE: this step adds the role infrastructure + mock selection logic only;
-# inserting it into the live pipeline (and the collapse handoff / proposal-creation
-# transfer) is a separate, human-reviewed wiring step. No-op task status
-# (required==success==IN_PROGRESS, mirroring Architect/Security-Reviewer) so wiring it
-# later adds zero state-machine change. Read-only: allowed_tools=[].
+# (C2 direction = internal collapse N→1). No-op task status
+# (required==success==IN_PROGRESS, mirroring Architect/Security-Reviewer) so it adds zero
+# state-machine change. Read-only: allowed_tools=[]. It is inserted into AGENT_PIPELINE
+# between Builder and QA just below (the literal above is built before this constant exists),
+# and the orchestrator additionally EXEMPTS it from the participant filter so it is
+# always-on mandatory collapse infra — never a disableable participant.
 
 COMPARATOR_SYSTEM_PROMPT = """\
 You are the Comparator agent in an AI development workstation.
@@ -533,3 +533,11 @@ COMPARATOR_DEFINITION = AgentRoleDefinition(
     output_sections=["selected_index", "selection_basis", "rationale", "chosen"],
     system_prompt=COMPARATOR_SYSTEM_PROMPT,
 )
+
+
+# Insert the Comparator into the live pipeline between Builder and QA (C2 step 1 wiring).
+# Done post-definition because the AGENT_PIPELINE literal above is evaluated before this
+# constant exists. Idempotent guard tolerates a module reload.
+if AgentRole.COMPARATOR not in {d.role for d in AGENT_PIPELINE}:
+    _comparator_pos = next(i for i, d in enumerate(AGENT_PIPELINE) if d.role == AgentRole.BUILDER) + 1
+    AGENT_PIPELINE.insert(_comparator_pos, COMPARATOR_DEFINITION)

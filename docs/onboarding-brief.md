@@ -235,8 +235,13 @@ execution_proposal      Builder 输出，存 proposal_data + risk_level + requir
 - schema **V24**；核心执行管线完成到 **Phase 8B**（命令执行 + 回滚）。
 - **运行模式 = Daily Usage Mode**：不主动开发新功能，只在真实使用出现 blocker 时修。
 - 曾在真实项目 us-quant-research 端到端跑通（6 文件创建 + 3 命令 + 1 回滚，状态文档记录，本会话未重跑）。
-- **测试基线**：`python scripts/run-all-regression.py` = **56 套 / 56 通过**（本会话重跑确立）。
-- **C2 step 1（已完成，`comparator`，方向 LOCKED = 内部 collapse N→1）**：read-only mock Comparator 角色，在 N 个 builder-shaped 候选提案中选 1。**DEFINED BUT UNWIRED**——加了 `AgentRole.COMPARATOR` enum + 独立 `COMPARATOR_DEFINITION`（no-op status IN_PROGRESS、allowed_tools=[]）+ `MockAgentExecutor._comparator`（选择规则：优先 `requires_approval==false`，并列取首个；veto-safe 兜底：异常/畸形→最低 risk_level，缺失→critical 排末，全不可读→首个；**永远 success=True**）+ `tests/comparator_test.py`（28 检查 a–f）。**未接入 AGENT_PIPELINE / _get_enabled_roles / 编排器 handoff / schema / 安全机制——全未动**。接线（插入活管线 + collapse handoff + 提案创建转移）= 下一步**人工审查**步骤。回归 55→56 全绿。
+- **测试基线**：`python scripts/run-all-regression.py` = **57 套 / 57 通过**（本会话重跑确立）。
+- **C2 step 1（mock comparator 已构建 + 已接线，方向 LOCKED = 内部 collapse N→1）**：read-only mock Comparator 角色，在 N 个 builder-shaped 候选中选 1。
+  - **构建（`bdb6a92`）**：`AgentRole.COMPARATOR` + `COMPARATOR_DEFINITION`（no-op status IN_PROGRESS、allowed_tools=[]）+ `MockAgentExecutor._comparator`（规则：优先 `requires_approval==false`，并列取首个；veto-safe 兜底：异常/畸形/N=0→最低 risk_level，缺失→critical 排末，全不可读→首个；**永远 success=True**）+ `tests/comparator_test.py`。
+  - **接线（人工审查后，本次）**：① comparator 插入 AGENT_PIPELINE **builder 与 qa 之间**（post-definition `.insert()`，因 list literal 先于常量求值）；② **filter-exemption**——编排器 active_pipeline 过滤把 comparator **豁免**（始终在管线，是强制 collapse 基建，非可禁用 participant；故 `_get_enabled_roles` / participant 系统 / phase15_3 T6 **字节未动**）；③ **Option-A collapse handoff**——generic handoff 后加一个 role==COMPARATOR 的**附加、容错**特例：把 comparator 的 `chosen`（builder-shaped）写进 `previous_outputs["builder"]`，使 qa/sr/reviewer/documentation **字节未改**地读到选中提案；`chosen` 缺失/畸形→不覆写（保留 builder 原值）；comparator 自身完整输出留在 `previous_outputs["comparator"]` 作审计；④ mock 候选来源：优先 `ctx["candidate_proposals"]`，否则回退 `[previous_outputs["builder"]]`（step-1 builder 产 1 → N=1 → no-op passthrough）。
+  - **step 1 = no-op passthrough**：builder 仍产 1 → comparator 选中那 1 → 1:1 安全链不变（**提案创建未动**：仍在 builder step，gate 仍 `(BUILDER, DOCUMENTATION)`，comparator **不在 gate**，建 0 个提案）。**控制流（idx/rejection/MAX_REJECTIONS/审批门/blocking-veto）未动**。
+  - 测试：`tests/comparator_wiring_test.py`（17 检查 a–g：接线/collapse/审计槽/容错/下游不变/提案1:1/filter-exemption）。phase3 + phase6b_round2 的管线 shape 断言 7→8 更新（含 comparator，DOC-3 同款先例；phase3 的两处 positional steps[3]/steps[5] 改为按角色选取）。**4 个下游 reader 测试字节未改**。Unit 28→29，回归 56→57 全绿。
+  - **下一步 = step 2（待人工）**：让 builder 产 N + 把提案创建从 builder 转到 comparator（保 1:1）。
 - **C-series 预备工作（已完成，不触碰编排控制流）**：
   - (1) 删除死键 `rejection_feedback`（mock 的 `is_retry` 重新指向 live 的 `rejection_history`）——C1 会踩的潜在陷阱已清除。
   - (2) `agent_runs.attempt_number` 列（V24，V23 式纯增量/可空/幂等迁移；由编排器 `rejection_count` 写入：首轮=0，被退回重跑的 builder→qa→sr→reviewer 尾段=1/2）——C1/C3 现可直接区分重跑轮次，不再只靠 `created_at`。

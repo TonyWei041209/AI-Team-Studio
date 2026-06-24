@@ -70,13 +70,14 @@ code, orch = req("POST", f"/tasks/{TID1}/orchestrate", {
 test("Orchestrate returns 200", code == 200, f"code={code}")
 test("Final status is done", orch.get("final_status") == "done",
      f"got: {orch.get('final_status')}")
-test("7 steps executed", len(orch.get("steps", [])) == 7,
+test("8 steps executed", len(orch.get("steps", [])) == 8,
      f"got: {len(orch.get('steps', []))}")
 
-# Verify step roles in order (Documentation runs LAST, after the Reviewer)
+# Verify step roles in order. C2 step 1: the Comparator runs between Builder and QA
+# (no-op passthrough in step 1 — builder still produces 1). Documentation runs LAST.
 step_roles = [s["role"] for s in orch.get("steps", [])]
-test("Steps in order: planner,architect,builder,qa,security_reviewer,reviewer,documentation",
-     step_roles == ["planner", "architect", "builder", "qa", "security_reviewer", "reviewer", "documentation"],
+test("Steps in order: planner,architect,builder,comparator,qa,security_reviewer,reviewer,documentation",
+     step_roles == ["planner", "architect", "builder", "comparator", "qa", "security_reviewer", "reviewer", "documentation"],
      f"got: {step_roles}")
 
 # Verify all steps succeeded
@@ -101,7 +102,7 @@ test("Task status is done", task_after.get("status") == "done",
 
 # Verify AgentRun records
 code, runs = req("GET", f"/tasks/{TID1}/runs")
-test("7 AgentRun records created", len(runs) == 7, f"got: {len(runs)}")
+test("8 AgentRun records created", len(runs) == 8, f"got: {len(runs)}")
 
 run_statuses = [r["status"] for r in runs]
 test("All runs completed", all(s == "completed" for s in run_statuses),
@@ -109,7 +110,7 @@ test("All runs completed", all(s == "completed" for s in run_statuses),
 
 # /api/tasks/{id}/runs returns runs in chronological (created_at ASC) order
 run_roles = [r["role"] for r in runs]
-test("Run roles match pipeline", run_roles == ["planner", "architect", "builder", "qa", "security_reviewer", "reviewer", "documentation"],
+test("Run roles match pipeline", run_roles == ["planner", "architect", "builder", "comparator", "qa", "security_reviewer", "reviewer", "documentation"],
      f"got: {run_roles}")
 
 # Verify started_at and ended_at are set
@@ -145,7 +146,7 @@ test("Orchestration status returns 200", code == 200)
 test("Status shows done", status.get("task_status") == "done")
 test("Status is_complete true", status.get("is_complete") is True)
 test("Status current_role is null", status.get("current_role") is None)
-test("Status has runs", len(status.get("runs", [])) == 7)
+test("Status has runs", len(status.get("runs", [])) == 8)
 
 # ================================================================
 # TEST 2: Failure path — agent fails
@@ -293,12 +294,13 @@ builder_out = orch["steps"][2].get("output", {})
 test("Builder has proposed_files", "proposed_files" in builder_out)
 test("Builder has validation_plan", "validation_plan" in builder_out)
 
-qa_out = orch["steps"][3].get("output", {})
+# Select QA by role (the Comparator now occupies index 3, between builder and qa).
+qa_out = next((s.get("output", {}) for s in orch.get("steps", []) if s.get("role") == "qa"), {})
 test("QA has result field", "result" in qa_out)
 test("QA result is PASS", qa_out.get("result") == "PASS")
 
-# steps[4] is now Security Reviewer; Reviewer moved to steps[5]
-reviewer_out = orch["steps"][5].get("output", {})
+# Select Reviewer by role (robust to the Comparator insertion shifting positional indices).
+reviewer_out = next((s.get("output", {}) for s in orch.get("steps", []) if s.get("role") == "reviewer"), {})
 test("Reviewer has decision field", "decision" in reviewer_out)
 test("Reviewer decision is APPROVE", reviewer_out.get("decision") == "APPROVE")
 

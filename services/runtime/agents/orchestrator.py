@@ -132,10 +132,12 @@ class Orchestrator:
 
         # ── 2b. Load project participant config ────────────
         enabled_roles = self._get_enabled_roles(task_context["project_id"])
-        # Filter pipeline: keep only enabled roles
+        # Filter pipeline: keep only enabled roles. The Comparator (C2) is EXEMPT — it is
+        # mandatory collapse infra (selects 1 proposal among N), not a user-toggleable
+        # participant, so it is always present regardless of project participant config.
         active_pipeline = [
             defn for defn in AGENT_PIPELINE
-            if defn.role.value in enabled_roles
+            if defn.role.value in enabled_roles or defn.role == AgentRole.COMPARATOR
         ]
         if not active_pipeline:
             # Safety: if somehow all roles disabled, use full pipeline
@@ -236,6 +238,18 @@ class Orchestrator:
 
             # Store output for the next agent
             task_context["previous_outputs"][defn.role.value] = step.get("output", {})
+
+            # C2 step 1 — Option-A collapse: the Comparator selects ONE proposal among N; its
+            # chosen (Builder-shaped) dict must land in the single "builder" slot that
+            # qa/sr/reviewer/documentation read, so those readers stay byte-unchanged. Additive,
+            # role-gated, fault-tolerant — a missing/malformed `chosen` leaves the existing
+            # builder value intact (never breaks the handoff). NOT a control-flow branch; the
+            # generic write above keeps previous_outputs["comparator"] as the comparator's audit record.
+            if defn.role == AgentRole.COMPARATOR:
+                _out = step.get("output")
+                _chosen = _out.get("chosen") if isinstance(_out, dict) else None
+                if isinstance(_chosen, dict) and _chosen:
+                    task_context["previous_outputs"]["builder"] = _chosen
 
             idx += 1
 

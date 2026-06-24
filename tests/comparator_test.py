@@ -76,16 +76,22 @@ def _select(candidates):
 # ══════════════════════════════════════════════════════════════
 # Definition sanity (DEFINED BUT UNWIRED)
 # ══════════════════════════════════════════════════════════════
-print("\n[def] COMPARATOR_DEFINITION standalone + UNWIRED")
+print("\n[def] COMPARATOR_DEFINITION + WIRED into AGENT_PIPELINE")
 check("def: role is COMPARATOR", COMPARATOR_DEFINITION.role == AgentRole.COMPARATOR)
 check("def: no-op status (required==success==IN_PROGRESS)",
       COMPARATOR_DEFINITION.required_task_status == TaskStatus.IN_PROGRESS
       and COMPARATOR_DEFINITION.success_task_status == TaskStatus.IN_PROGRESS)
 check("def: read-only (allowed_tools == [])", COMPARATOR_DEFINITION.allowed_tools == [])
 check("def: has a system prompt", bool(COMPARATOR_DEFINITION.system_prompt.strip()))
-check("def: NOT inserted into AGENT_PIPELINE (unwired)",
-      all(d.role != AgentRole.COMPARATOR for d in AGENT_PIPELINE),
-      f"pipeline roles: {[d.role.value for d in AGENT_PIPELINE]}")
+# WIRED (C2 step 1 wiring): comparator is now a member of AGENT_PIPELINE, positioned
+# immediately between builder and qa.
+_pipe = [d.role.value for d in AGENT_PIPELINE]
+check("def: WIRED — comparator IS in AGENT_PIPELINE", "comparator" in _pipe, str(_pipe))
+check("def: comparator positioned immediately between builder and qa",
+      "comparator" in _pipe
+      and _pipe.index("comparator") == _pipe.index("builder") + 1
+      and _pipe.index("comparator") + 1 == _pipe.index("qa"),
+      str(_pipe))
 
 
 # ══════════════════════════════════════════════════════════════

@@ -46,9 +46,12 @@ removed; mock builder retry detection repointed to the live rejection_history ch
 v24_attempt_number (C-series pre-work ITEM 2: additive nullable attempt_number on agent_runs
 records the rejection round per run — first pass 0, re-run tail 1/2 — V23-style migration),
 comparator (C2 step 1: read-only mock Comparator role that collapses N candidate proposals
-to 1 — requires_approval-first selection rule + veto-safe lowest-risk fallback; DEFINED BUT
-UNWIRED, not in AGENT_PIPELINE).
-Total: 28 suites.
+to 1 — requires_approval-first selection rule + veto-safe lowest-risk fallback; now WIRED
+into AGENT_PIPELINE between builder and qa),
+comparator_wiring (C2 step 1 wiring: comparator inserted live + Option-A collapse writes the
+chosen proposal into previous_outputs["builder"]; filter-exemption always-on; downstream byte-
+unchanged; proposal 1:1 intact).
+Total: 29 suites.
 
 Usage:
     python scripts/run-unit-regression.py
@@ -90,6 +93,7 @@ TEST_SUITES = [
     "tests/rejection_feedback_removed_test.py",
     "tests/v24_attempt_number_test.py",
     "tests/comparator_test.py",
+    "tests/comparator_wiring_test.py",
 ]
 
 
@@ -141,7 +145,7 @@ def main():
         sys.exit(1)
     else:
         print()
-        print("  Unit baseline: ALL PASS (28 suites)")
+        print("  Unit baseline: ALL PASS (29 suites)")
         sys.exit(0)
 
 

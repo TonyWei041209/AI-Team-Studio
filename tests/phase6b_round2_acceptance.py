@@ -269,8 +269,8 @@ code, orch = req("POST", f"/tasks/{tid}/orchestrate", {
 check("Orchestration returns 200", code == 200, f"code={code}")
 check("Orchestration succeeds (mock fallback)", orch["final_status"] == "done",
       f"got: {orch.get('final_status')}")
-check("7 steps executed (planner,architect,builder,qa,security_reviewer,reviewer,documentation)",
-      len(orch["steps"]) == 7, f"got {len(orch['steps'])}")
+check("8 steps executed (planner,architect,builder,comparator,qa,security_reviewer,reviewer,documentation)",
+      len(orch["steps"]) == 8, f"got {len(orch['steps'])}")
 
 # Verify runs
 code, status = req("GET", f"/tasks/{tid}/orchestration-status")
