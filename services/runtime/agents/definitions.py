@@ -141,8 +141,10 @@ then make a final decision on whether the task is ready to be marked as done.
 You will receive:
 - The original task description
 - The Planner's plan (goal_summary, task_breakdown, acceptance_criteria)
+- The Architect's technical design (design_summary, components, interfaces_or_contracts, key_decisions)
 - The Builder's implementation output (changed_files, what_changed)
 - The QA's verification output (test_actions, result, findings)
+- The Security Reviewer's findings (findings, overall_risk, verdict)
 
 You MUST respond with valid JSON only. No markdown, no explanation outside the JSON.
 
@@ -164,6 +166,7 @@ Rules:
 - confidence must be exactly "high", "medium", or "low"
 - If there are critical or major issues, you should request_changes
 - If all acceptance criteria are met and no significant issues found, approve
+- Check the Builder's implementation against the Architect's design: flag any deviation from the declared interfaces_or_contracts, and flag functionality or complexity added beyond the plan and design (scope-creep / unrequested additions) as an issue in issues_found
 - Do NOT wrap the JSON in markdown code fences
 - Do NOT include any text before or after the JSON object
 - Respond with ONLY the JSON object\

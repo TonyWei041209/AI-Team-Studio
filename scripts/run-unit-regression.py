@@ -37,8 +37,11 @@ table — executor returns structured tool_loop_stats, architect attaches them, 
 a greppable "tool-loop SUMMARY" row; single-shot roles emit none),
 builder_tools (B3 step 4: builder wired to the tool loop via the extracted _parse_retry_core —
 advertises read_file only, write_file/shell blocked, blocking semantics preserved, stats on
-success AND failure, inner(tool)/outer(parse-retry) composition).
-Total: 24 suites.
+success AND failure, inner(tool)/outer(parse-retry) composition),
+reviewer_architect_context (B2 #1: reviewer now receives the Architect's design — optional
+"Architect design:" block in planner->architect->builder order — and REVIEWER_SYSTEM_PROMPT
+gained the architect+SR inputs and a build-vs-design consistency / scope-creep rule).
+Total: 25 suites.
 
 Usage:
     python scripts/run-unit-regression.py
@@ -76,6 +79,7 @@ TEST_SUITES = [
     "tests/architect_tools_test.py",
     "tests/tool_loop_summary_persist_test.py",
     "tests/builder_tools_test.py",
+    "tests/reviewer_architect_context_test.py",
 ]
 
 
@@ -127,7 +131,7 @@ def main():
         sys.exit(1)
     else:
         print()
-        print("  Unit baseline: ALL PASS (24 suites)")
+        print("  Unit baseline: ALL PASS (25 suites)")
         sys.exit(0)
 
 

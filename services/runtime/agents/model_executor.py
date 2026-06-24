@@ -1635,6 +1635,8 @@ class ModelAgentExecutor:
         prev = ctx.get("previous_outputs", {})
         if prev.get("planner"):
             parts.append(f"\nPlanner output:\n{json.dumps(prev['planner'], ensure_ascii=False, separators=(',',':'))}")
+        if prev.get("architect"):
+            parts.append(f"\nArchitect design:\n{json.dumps(prev['architect'], ensure_ascii=False, separators=(',',':'))}")
         if prev.get("builder"):
             parts.append(f"\nBuilder output:\n{json.dumps(prev['builder'], ensure_ascii=False, separators=(',',':'))}")
         if prev.get("qa"):
