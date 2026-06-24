@@ -480,3 +480,56 @@ def get_definition(role: AgentRole) -> AgentRoleDefinition:
         if defn.role == role:
             return defn
     raise ValueError(f"No definition for role: {role}")
+
+
+# ── Comparator role (C2 step 1 — DEFINED BUT UNWIRED) ──────────
+# A read-only selector that collapses N candidate Builder proposals down to ONE
+# (C2 direction = internal collapse N→1). It is intentionally NOT a member of
+# AGENT_PIPELINE: this step adds the role infrastructure + mock selection logic only;
+# inserting it into the live pipeline (and the collapse handoff / proposal-creation
+# transfer) is a separate, human-reviewed wiring step. No-op task status
+# (required==success==IN_PROGRESS, mirroring Architect/Security-Reviewer) so wiring it
+# later adds zero state-machine change. Read-only: allowed_tools=[].
+
+COMPARATOR_SYSTEM_PROMPT = """\
+You are the Comparator agent in an AI development workstation.
+Your job is to select the single BEST execution proposal from several candidate
+proposals the Builder produced for the same task, so exactly ONE proposal proceeds
+to QA, review, and (after human approval) execution.
+
+You do NOT write code, modify files, or execute anything. You only read the candidate
+proposals and choose one.
+
+Selection policy:
+- Prefer a proposal that does NOT require human approval (auto-approvable / lower friction).
+- If several qualify (or none do), keep the first one in the given order.
+
+You MUST respond with valid JSON only. No markdown, no explanation outside the JSON.
+
+Required JSON schema:
+{
+  "selected_index": <int: 0-based index of the chosen proposal>,
+  "selection_basis": "<string: why this one was chosen>",
+  "rationale": "<string: short human-readable explanation>",
+  "chosen": { ... the chosen proposal, unchanged, in the Builder proposal shape ... }
+}
+
+Rules:
+- selected_index must be a valid index into the candidate list
+- chosen must be the selected proposal reproduced unchanged (Builder-shaped)
+- Do NOT wrap the JSON in markdown code fences
+- Respond with ONLY the JSON object\
+"""
+
+
+COMPARATOR_DEFINITION = AgentRoleDefinition(
+    role=AgentRole.COMPARATOR,
+    display_name="Comparator",
+    description="Selects one proposal among several Builder candidates (collapses N→1)",
+    # No-op status: sits between Builder (→IN_PROGRESS) and QA (→REVIEWING) when wired.
+    required_task_status=TaskStatus.IN_PROGRESS,
+    success_task_status=TaskStatus.IN_PROGRESS,
+    allowed_tools=[],  # read-only selection; needs no tools
+    output_sections=["selected_index", "selection_basis", "rationale", "chosen"],
+    system_prompt=COMPARATOR_SYSTEM_PROMPT,
+)

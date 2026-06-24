@@ -235,7 +235,8 @@ execution_proposal      Builder 输出，存 proposal_data + risk_level + requir
 - schema **V24**；核心执行管线完成到 **Phase 8B**（命令执行 + 回滚）。
 - **运行模式 = Daily Usage Mode**：不主动开发新功能，只在真实使用出现 blocker 时修。
 - 曾在真实项目 us-quant-research 端到端跑通（6 文件创建 + 3 命令 + 1 回滚，状态文档记录，本会话未重跑）。
-- **测试基线**：`python scripts/run-all-regression.py` = **55 套 / 55 通过**（本会话重跑确立；含新增 2 套 C-series 预备测试）。
+- **测试基线**：`python scripts/run-all-regression.py` = **56 套 / 56 通过**（本会话重跑确立）。
+- **C2 step 1（已完成，`comparator`，方向 LOCKED = 内部 collapse N→1）**：read-only mock Comparator 角色，在 N 个 builder-shaped 候选提案中选 1。**DEFINED BUT UNWIRED**——加了 `AgentRole.COMPARATOR` enum + 独立 `COMPARATOR_DEFINITION`（no-op status IN_PROGRESS、allowed_tools=[]）+ `MockAgentExecutor._comparator`（选择规则：优先 `requires_approval==false`，并列取首个；veto-safe 兜底：异常/畸形→最低 risk_level，缺失→critical 排末，全不可读→首个；**永远 success=True**）+ `tests/comparator_test.py`（28 检查 a–f）。**未接入 AGENT_PIPELINE / _get_enabled_roles / 编排器 handoff / schema / 安全机制——全未动**。接线（插入活管线 + collapse handoff + 提案创建转移）= 下一步**人工审查**步骤。回归 55→56 全绿。
 - **C-series 预备工作（已完成，不触碰编排控制流）**：
   - (1) 删除死键 `rejection_feedback`（mock 的 `is_retry` 重新指向 live 的 `rejection_history`）——C1 会踩的潜在陷阱已清除。
   - (2) `agent_runs.attempt_number` 列（V24，V23 式纯增量/可空/幂等迁移；由编排器 `rejection_count` 写入：首轮=0，被退回重跑的 builder→qa→sr→reviewer 尾段=1/2）——C1/C3 现可直接区分重跑轮次，不再只靠 `created_at`。

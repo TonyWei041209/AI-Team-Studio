@@ -86,6 +86,9 @@ class AgentExecutor(Protocol):
 
 # ── Mock implementation ────────────────────────────────────────
 
+# Risk ordering for the Comparator's veto-safe fallback (C2 step 1). Lower = safer.
+_RISK_ORDER = {"low": 0, "medium": 1, "high": 2, "critical": 3}
+
 
 class MockAgentExecutor:
     """Simulates agent work with configurable delays, failures, and rejections.
@@ -134,6 +137,7 @@ class MockAgentExecutor:
             AgentRole.SECURITY_REVIEWER: self._security_reviewer,
             AgentRole.REVIEWER: self._reviewer,
             AgentRole.DOCUMENTATION: self._documentation,
+            AgentRole.COMPARATOR: self._comparator,
         }
         return generators[role](title, desc, task_context)
 
@@ -281,3 +285,94 @@ class MockAgentExecutor:
             "validation_plan": ["A human confirms the README section matches the implemented behavior"],
         }
         return ExecutionResult(success=True, output=output)
+
+    def _comparator(self, title: str, desc: str, ctx: dict) -> ExecutionResult:
+        """C2 step 1 (mock): collapse N candidate Builder proposals down to ONE.
+
+        Selection rule (LOCKED): prefer a candidate with ``requires_approval is False``
+        (auto-approvable); on a tie — multiple False, or none False (all True / field
+        absent, treated as True) — keep the FIRST in list order. requires_approval only.
+
+        Fallback (LOCKED): on ANY failure (no candidates, malformed entry, exception)
+        degrade to the lowest ``risk_level`` (low<medium<high<critical; missing/unreadable
+        → treated as critical so it sorts last); if ALL risk_levels are unreadable, keep the
+        FIRST candidate. ALWAYS returns success=True (veto-safe — never aborts the pipeline).
+
+        Step-1 source: the N candidates are read from ``ctx["candidate_proposals"]`` (tests
+        inject synthetic N). The real "Builder produces N" source is wired in step 2.
+        """
+        candidates = ctx.get("candidate_proposals")
+        try:
+            if not isinstance(candidates, list) or len(candidates) == 0:
+                raise ValueError("no candidate_proposals to select from")
+            # PRIMARY: first candidate with requires_approval is False; else the first overall.
+            chosen_index = next(
+                (i for i, c in enumerate(candidates)
+                 if isinstance(c, dict) and c.get("requires_approval") is False),
+                0,
+            )
+            chosen = candidates[chosen_index]
+            if not isinstance(chosen, dict):
+                raise ValueError(f"chosen candidate at index {chosen_index} is not an object")
+            auto_approvable = chosen.get("requires_approval") is False
+            basis = (
+                "requires_approval=false (auto-approvable)"
+                if auto_approvable
+                else "no auto-approvable candidate; first in order"
+            )
+            return ExecutionResult(success=True, output={
+                "selected_index": chosen_index,
+                "selection_basis": basis,
+                "rationale": (
+                    f"Selected proposal #{chosen_index} of {len(candidates)} ({basis})."
+                ),
+                "chosen": chosen,
+            })
+        except Exception as exc:
+            return self._comparator_fallback(candidates, exc)
+
+    @staticmethod
+    def _comparator_fallback(candidates, exc) -> ExecutionResult:
+        """Veto-safe degrade for the Comparator: lowest risk_level, fault-tolerant.
+
+        Never returns success=False (mirrors the QA/SR VETO INVARIANT). Missing/unreadable
+        risk_level sorts last (critical); strict ``<`` keeps the first among equal ranks, so
+        all-unreadable → the FIRST candidate.
+        """
+        try:
+            if not isinstance(candidates, list) or len(candidates) == 0:
+                return ExecutionResult(success=True, output={
+                    "selected_index": None,
+                    "selection_basis": "fallback_no_candidates",
+                    "rationale": f"Selection failed ({exc}); no candidates available.",
+                    "chosen": {},
+                })
+            best_index, best_rank = 0, None
+            for i, c in enumerate(candidates):
+                rank = 3  # missing / unreadable / non-dict → treat as critical (sorts last)
+                if isinstance(c, dict):
+                    rl = c.get("risk_level")
+                    if isinstance(rl, str) and rl.strip().lower() in _RISK_ORDER:
+                        rank = _RISK_ORDER[rl.strip().lower()]
+                if best_rank is None or rank < best_rank:
+                    best_rank, best_index = rank, i
+            chosen = candidates[best_index]
+            return ExecutionResult(success=True, output={
+                "selected_index": best_index,
+                "selection_basis": "fallback_lowest_risk",
+                "rationale": (
+                    f"Primary selection failed ({exc}); degraded to lowest risk_level "
+                    f"(rank={best_rank}; all-unreadable→first)."
+                ),
+                "chosen": chosen if isinstance(chosen, dict) else {},
+            })
+        except Exception as exc2:
+            # Absolute last resort — still veto-safe.
+            has_first = isinstance(candidates, list) and len(candidates) > 0
+            first = candidates[0] if has_first else {}
+            return ExecutionResult(success=True, output={
+                "selected_index": 0 if has_first else None,
+                "selection_basis": "fallback_first_safe",
+                "rationale": f"Fallback also failed ({exc2}); defaulted to first candidate.",
+                "chosen": first if isinstance(first, dict) else {},
+            })

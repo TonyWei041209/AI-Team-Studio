@@ -44,8 +44,11 @@ gained the architect+SR inputs and a build-vs-design consistency / scope-creep r
 rejection_feedback_removed (C-series pre-work ITEM 1: the dead rejection_feedback key is
 removed; mock builder retry detection repointed to the live rejection_history channel),
 v24_attempt_number (C-series pre-work ITEM 2: additive nullable attempt_number on agent_runs
-records the rejection round per run — first pass 0, re-run tail 1/2 — V23-style migration).
-Total: 27 suites.
+records the rejection round per run — first pass 0, re-run tail 1/2 — V23-style migration),
+comparator (C2 step 1: read-only mock Comparator role that collapses N candidate proposals
+to 1 — requires_approval-first selection rule + veto-safe lowest-risk fallback; DEFINED BUT
+UNWIRED, not in AGENT_PIPELINE).
+Total: 28 suites.
 
 Usage:
     python scripts/run-unit-regression.py
@@ -86,6 +89,7 @@ TEST_SUITES = [
     "tests/reviewer_architect_context_test.py",
     "tests/rejection_feedback_removed_test.py",
     "tests/v24_attempt_number_test.py",
+    "tests/comparator_test.py",
 ]
 
 
@@ -137,7 +141,7 @@ def main():
         sys.exit(1)
     else:
         print()
-        print("  Unit baseline: ALL PASS (27 suites)")
+        print("  Unit baseline: ALL PASS (28 suites)")
         sys.exit(0)
 
 

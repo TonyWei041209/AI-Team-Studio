@@ -32,6 +32,9 @@ class AgentRole(str, Enum):
     SECURITY_REVIEWER = "security_reviewer"
     REVIEWER = "reviewer"
     DOCUMENTATION = "documentation"
+    # C2 step 1: read-only mock selector that collapses N candidate proposals to 1.
+    # Defined but NOT yet inserted into AGENT_PIPELINE (wiring is a later, human-reviewed step).
+    COMPARATOR = "comparator"
 
 
 class RunStatus(str, Enum):
