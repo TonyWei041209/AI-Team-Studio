@@ -40,8 +40,12 @@ advertises read_file only, write_file/shell blocked, blocking semantics preserve
 success AND failure, inner(tool)/outer(parse-retry) composition),
 reviewer_architect_context (B2 #1: reviewer now receives the Architect's design — optional
 "Architect design:" block in planner->architect->builder order — and REVIEWER_SYSTEM_PROMPT
-gained the architect+SR inputs and a build-vs-design consistency / scope-creep rule).
-Total: 25 suites.
+gained the architect+SR inputs and a build-vs-design consistency / scope-creep rule),
+rejection_feedback_removed (C-series pre-work ITEM 1: the dead rejection_feedback key is
+removed; mock builder retry detection repointed to the live rejection_history channel),
+v24_attempt_number (C-series pre-work ITEM 2: additive nullable attempt_number on agent_runs
+records the rejection round per run — first pass 0, re-run tail 1/2 — V23-style migration).
+Total: 27 suites.
 
 Usage:
     python scripts/run-unit-regression.py
@@ -80,6 +84,8 @@ TEST_SUITES = [
     "tests/tool_loop_summary_persist_test.py",
     "tests/builder_tools_test.py",
     "tests/reviewer_architect_context_test.py",
+    "tests/rejection_feedback_removed_test.py",
+    "tests/v24_attempt_number_test.py",
 ]
 
 
@@ -131,7 +137,7 @@ def main():
         sys.exit(1)
     else:
         print()
-        print("  Unit baseline: ALL PASS (25 suites)")
+        print("  Unit baseline: ALL PASS (27 suites)")
         sys.exit(0)
 
 

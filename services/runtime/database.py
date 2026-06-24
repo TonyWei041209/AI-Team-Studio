@@ -989,6 +989,31 @@ def _apply_v23(conn: sqlite3.Connection) -> None:
     conn.execute("INSERT INTO schema_version (version) VALUES (23)")
 
 
+def _apply_v24(conn: sqlite3.Connection) -> None:
+    """V24: Record which re-run round produced each agent_runs row (C-series pre-work).
+
+    The orchestrator's rejection loop re-runs builder→qa→security_reviewer→reviewer on
+    each Reviewer request_changes; today those re-run rows are indistinguishable from the
+    first pass except by created_at ordering. attempt_number records the rejection round a
+    run belongs to (sourced from the orchestrator's rejection_count): first pass = 0, after
+    the 1st rejection = 1, after the 2nd = 2. Planner/Architect (never re-run) are always 0.
+    Lets C1/C3 distinguish builder attempt 1 vs 2 vs 3 directly rather than by timestamp.
+
+    Write-side only — NO control-flow change (the idx loop / rejection rewind / MAX_REJECTIONS
+    are untouched). Additive nullable column → existing rows are preserved untouched
+    (attempt_number NULL = pre-feature / unknown). Mirrors the V23 template: the _MIGRATIONS
+    version gate runs this once; the PRAGMA guard additionally makes a stray re-invocation of
+    the ADD COLUMN safe.
+
+    NOTE: C2's proposal grouping (a proposal_group_id on execution_proposals) is a DIFFERENT
+    table with an undecided shape and is intentionally NOT added here — deferred to C2.
+    """
+    existing = {row[1] for row in conn.execute("PRAGMA table_info(agent_runs)").fetchall()}
+    if "attempt_number" not in existing:
+        conn.execute("ALTER TABLE agent_runs ADD COLUMN attempt_number INTEGER")
+    conn.execute("INSERT INTO schema_version (version) VALUES (24)")
+
+
 # Ordered list of migrations
 _MIGRATIONS = [
     (1, _apply_v1),
@@ -1014,6 +1039,7 @@ _MIGRATIONS = [
     (21, _apply_v21),
     (22, _apply_v22),
     (23, _apply_v23),
+    (24, _apply_v24),
 ]
 
 

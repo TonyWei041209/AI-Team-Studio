@@ -151,7 +151,12 @@ class Orchestrator:
         while idx < len(active_pipeline):
             defn = active_pipeline[idx]
 
-            step = await self._execute_step(task_id, defn, task_context)
+            # attempt_number = rejection_count: which rejection round this run belongs to.
+            # First pass = 0; the builder→…→reviewer tail re-run after the Nth rejection = N.
+            # This does NOT alter control flow — rejection_count is the existing loop local.
+            step = await self._execute_step(
+                task_id, defn, task_context, attempt_number=rejection_count,
+            )
             steps.append(step)
 
             # Agent failed → task fails immediately
@@ -198,7 +203,10 @@ class Orchestrator:
                     task_context["rejection_history"].append(step.get("output", {}))
                     # Compress older rejections to save tokens (Phase 12-3)
                     self._compress_rejection_history(task_context["rejection_history"])
-                    task_context["rejection_feedback"] = step.get("output", {})
+                    # NOTE: rejection_history (above) is the SOLE feedback channel the
+                    # re-running roles read (model_executor builds "Previous rejection(s):"
+                    # from it). The former rejection_feedback key was write-only/dead and
+                    # is intentionally not set — its latest value equalled rejection_history[-1].
                     builder_idx = next(
                         (i for i, d in enumerate(active_pipeline) if d.role == AgentRole.BUILDER),
                         1,
@@ -249,8 +257,14 @@ class Orchestrator:
         task_id: str,
         defn: AgentRoleDefinition,
         task_context: dict,
+        attempt_number: int = 0,
     ) -> dict:
-        """Create an AgentRun, execute the agent, update the run."""
+        """Create an AgentRun, execute the agent, update the run.
+
+        *attempt_number* (V24) records which rejection round this run belongs to; it is
+        passed straight through to the agent_runs row. Defaults to 0 so existing direct
+        callers (unit tests) keep recording first-pass runs without change.
+        """
 
         # 1. Create AgentRun (pending)
         run_id = self._create_run(
@@ -263,6 +277,7 @@ class Orchestrator:
                 "role": defn.role.value,
                 "has_previous": list(task_context["previous_outputs"].keys()),
             }),
+            attempt_number=attempt_number,
         )
 
         self._log(task_id, run_id, "info", defn.role.value,
@@ -541,7 +556,10 @@ class Orchestrator:
         model_provider: str,
         model_name: str,
         input_summary: str,
+        attempt_number: int = 0,
     ) -> str:
+        # attempt_number (V24): which rejection round this run belongs to. Defaults to 0
+        # so any caller on the old signature (e.g. a direct unit-test call) stays correct.
         run_id = str(uuid.uuid4())
         now = datetime.now(timezone.utc).isoformat()
         conn = get_connection()
@@ -549,10 +567,10 @@ class Orchestrator:
             conn.execute(
                 """INSERT INTO agent_runs
                    (id, task_id, role, model_provider, model_name,
-                    status, input_summary, created_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                    status, input_summary, created_at, attempt_number)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (run_id, task_id, role.value, model_provider, model_name,
-                 RunStatus.PENDING.value, input_summary, now),
+                 RunStatus.PENDING.value, input_summary, now, attempt_number),
             )
             conn.commit()
             return run_id

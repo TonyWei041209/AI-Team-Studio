@@ -84,7 +84,10 @@ try:
     ver = conn.execute("SELECT MAX(version) FROM schema_version").fetchone()[0]
 finally:
     conn.close()
-check("A: schema_version reached 23", ver == 23, f"got {ver}")
+# >= 23 (not == 23): later additive migrations (e.g. V24 attempt_number) advance MAX(version);
+# the V23 contract is only that the schema has REACHED 23. The column checks below are the
+# substantive V23 assertions.
+check("A: schema_version reached >= 23", ver >= 23, f"got {ver}")
 cols = _cols("agent_runs")
 check("A: agent_runs has raw_output column", "raw_output" in cols, str(sorted(cols)))
 check("A: agent_runs has finish_reason column", "finish_reason" in cols, str(sorted(cols)))
@@ -98,7 +101,7 @@ finally:
     conn.close()
 check("A: new columns nullable (row inserts with them NULL)", row["raw_output"] is None and row["finish_reason"] is None)
 
-# re-run migrations → idempotent (safe twice); row preserved; version still 23
+# re-run migrations → idempotent (safe twice); row preserved; version unchanged
 database._ensure_schema()
 conn = get_connection()
 try:
@@ -106,7 +109,7 @@ try:
     still = conn.execute("SELECT COUNT(*) FROM agent_runs WHERE id=?", (rid,)).fetchone()[0]
 finally:
     conn.close()
-check("A: re-running migrations is idempotent (version still 23)", ver2 == 23, f"got {ver2}")
+check("A: re-running migrations is idempotent (version unchanged)", ver2 == ver, f"got {ver2}, expected {ver}")
 check("A: pre-existing row preserved across re-run", still == 1)
 
 

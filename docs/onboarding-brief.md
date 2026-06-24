@@ -232,10 +232,15 @@ execution_proposal      Builder 输出，存 proposal_data + risk_level + requir
 ## 13. 当前状态与运行模式
 
 - 分支 `phase-6e-b-approved-snapshot`，clean，已 push。
-- schema V16；核心执行管线完成到 **Phase 8B**（命令执行 + 回滚）。
+- schema **V24**；核心执行管线完成到 **Phase 8B**（命令执行 + 回滚）。
 - **运行模式 = Daily Usage Mode**：不主动开发新功能，只在真实使用出现 blocker 时修。
 - 曾在真实项目 us-quant-research 端到端跑通（6 文件创建 + 3 命令 + 1 回滚，状态文档记录，本会话未重跑）。
-- **测试基线**：状态文档记 20 套 / 20 通过。⚠️ **本次未重跑**，请勿当作当前事实引用；接手第一件事建议 `python scripts/run-all-regression.py` 重新确立真相。
+- **测试基线**：`python scripts/run-all-regression.py` = **55 套 / 55 通过**（本会话重跑确立；含新增 2 套 C-series 预备测试）。
+- **C-series 预备工作（已完成，不触碰编排控制流）**：
+  - (1) 删除死键 `rejection_feedback`（mock 的 `is_retry` 重新指向 live 的 `rejection_history`）——C1 会踩的潜在陷阱已清除。
+  - (2) `agent_runs.attempt_number` 列（V24，V23 式纯增量/可空/幂等迁移；由编排器 `rejection_count` 写入：首轮=0，被退回重跑的 builder→qa→sr→reviewer 尾段=1/2）——C1/C3 现可直接区分重跑轮次，不再只靠 `created_at`。
+  - `proposal_group_id`（C2 的提案分组）**推迟到 C2**（不同表、形态未定）。控制流（idx 循环 / 退回重写 / MAX_REJECTIONS / 审批门 / blocking-veto 语义）**完全未动**。
+  - 这只是预备工作；**C2/C1/C3 的控制流实现仍待定（建议先定 C2 方向）**。
 - ⚠️ git 历史被重写过，提交日期不可信，无法据 git 推断真实开发周期。
 
 ---

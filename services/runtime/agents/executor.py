@@ -163,7 +163,10 @@ class MockAgentExecutor:
         return ExecutionResult(success=True, output=output)
 
     def _builder(self, title: str, desc: str, ctx: dict) -> ExecutionResult:
-        is_retry = "rejection_feedback" in ctx
+        # Retry detection keys off rejection_history — the live channel the real
+        # builder reads (model_executor.py). The former rejection_feedback key was
+        # removed as dead (its value duplicated rejection_history[-1]).
+        is_retry = "rejection_history" in ctx
         output = {
             "change_summary": (
                 f"{'Revised' if is_retry else 'Implemented'} the core logic for: {title}"

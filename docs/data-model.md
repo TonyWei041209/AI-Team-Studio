@@ -46,6 +46,9 @@ A single execution of an agent role against a task.
 | started_at | datetime? | When execution began |
 | ended_at | datetime? | When execution finished |
 | created_at | datetime | Creation timestamp |
+| raw_output | string? | Audit-grade full provider output (V23; lists not collapsed) |
+| finish_reason | string? | Provider finish/stop reason (V23) |
+| attempt_number | int? | Rejection round that produced this run (V24): first pass = 0; the builder→qa→security_reviewer→reviewer tail re-run after the Nth Reviewer `request_changes` = N. Planner/Architect (never re-run) are always 0. Set from the orchestrator's `rejection_count`; NULL on pre-V24 rows. Additive/write-side only — does not affect control flow. |
 
 ### ApprovalRequest
 A pending approval for a high-risk action.
