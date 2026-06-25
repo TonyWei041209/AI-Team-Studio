@@ -11,8 +11,8 @@ Verifies the wiring (NOT the selection logic — that's comparator_test.py):
       previous_outputs["builder"] = the builder's original (downstream not broken); done.
   (e) DOWNSTREAM UNCHANGED: QA reads previous_outputs["builder"] (the slot the 4 real
       readers use; their isolated tests stay green — Option A).
-  (f) PROPOSAL 1:1: exactly one execution_proposal from the builder; ZERO from the
-      comparator (it is not in the proposal-creation gate). Safety-chain 1:1 intact.
+  (f) PROPOSAL 1:1 (C2 step 2): ZERO execution_proposals from the builder (wrapper fails
+      the gate); EXACTLY 1 from the comparator (the transfer). Safety-chain 1:1 intact.
   (g) FILTER-EXEMPTION: the comparator runs even for a project WITH participant config
       (it is always-on mandatory infra, not a disableable participant).
 
@@ -67,9 +67,13 @@ BUILDER_PROPOSAL = {
 
 
 class KnownBuilder:
-    """Builder that emits a fixed, known single proposal."""
+    """Builder that emits a fixed, known proposal wrapped as N=1 (C2 step 2 shape).
+
+    The wrapper {"proposals":[...]} has no top-level proposed_files → the builder creates
+    0 proposals; the comparator selects the single candidate and creates the 1 proposal.
+    """
     async def execute(self, role, task_context):
-        return ExecutionResult(success=True, output=dict(BUILDER_PROPOSAL))
+        return ExecutionResult(success=True, output={"proposals": [dict(BUILDER_PROPOSAL)]})
 
 
 class RecordingQA:
@@ -159,8 +163,9 @@ try:
     comp_props = conn.execute("SELECT COUNT(*) FROM execution_proposals WHERE task_id=? AND role='comparator'", (tid,)).fetchone()[0]
 finally:
     conn.close()
-check("f: exactly 1 execution_proposal from builder", builder_props == 1, f"got {builder_props}")
-check("f: ZERO execution_proposals from comparator (not in gate)", comp_props == 0, f"got {comp_props}")
+# C2 step 2: proposal creation transferred — builder (wrapper) creates 0, comparator creates 1.
+check("f: ZERO execution_proposals from builder (wrapper fails the gate)", builder_props == 0, f"got {builder_props}")
+check("f: EXACTLY 1 execution_proposal from comparator (the transfer)", comp_props == 1, f"got {comp_props}")
 
 
 # ══════════════════════════════════════════════════════════════
@@ -175,8 +180,8 @@ orch2 = Orchestrator(
 )
 result2 = asyncio.run(orch2.run(tid2))
 check("d: pipeline still completes (veto-safe)", result2.final_status == "done", result2.final_status)
-check("d: builder slot retains the builder's ORIGINAL proposal (no overwrite with garbage)",
-      qa2.seen_builder == BUILDER_PROPOSAL, str(qa2.seen_builder))
+check("d: builder slot retains the builder's ORIGINAL output (the wrapper, no overwrite with garbage)",
+      qa2.seen_builder == {"proposals": [BUILDER_PROPOSAL]}, str(qa2.seen_builder))
 
 
 # ══════════════════════════════════════════════════════════════

@@ -290,9 +290,15 @@ architect_out = orch["steps"][1].get("output", {})
 test("Architect has design_summary", "design_summary" in architect_out,
      f"keys: {list(architect_out.keys())}")
 
+# C2 step 2: the mock Builder emits a WRAPPER {"proposals":[...]} with NO top-level
+# proposed_files (so it doesn't trip the proposal gate; the Comparator creates the proposal).
 builder_out = orch["steps"][2].get("output", {})
-test("Builder has proposed_files", "proposed_files" in builder_out)
-test("Builder has validation_plan", "validation_plan" in builder_out)
+_bp0 = (builder_out.get("proposals") or [{}])[0]
+test("Builder emits a proposals wrapper (N candidates)",
+     isinstance(builder_out.get("proposals"), list) and len(builder_out["proposals"]) >= 1,
+     f"keys: {list(builder_out.keys())}")
+test("Builder proposal[0] has proposed_files", "proposed_files" in _bp0)
+test("Builder proposal[0] has validation_plan", "validation_plan" in _bp0)
 
 # Select QA by role (the Comparator now occupies index 3, between builder and qa).
 qa_out = next((s.get("output", {}) for s in orch.get("steps", []) if s.get("role") == "qa"), {})

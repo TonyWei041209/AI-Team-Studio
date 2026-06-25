@@ -48,9 +48,16 @@ def check(label, cond, detail=""):
 
 # ══════════════════════════════════════════════════════════════
 # (A) Mock builder retry detection now keys off rejection_history
+# (C2 step 2: the mock builder emits a WRAPPER {"proposals":[...]}; the is_retry wording
+#  now lives on each proposal, so read proposals[0].)
 # ══════════════════════════════════════════════════════════════
 print("\n[A] MockAgentExecutor builder keys is_retry off rejection_history")
 mock = MockAgentExecutor(delay_seconds=0)
+
+
+def _p0(res):
+    return res.output["proposals"][0]
+
 
 # rejection_history present → treated as a retry
 r_hist = asyncio.run(mock.execute(AgentRole.BUILDER, {
@@ -58,16 +65,16 @@ r_hist = asyncio.run(mock.execute(AgentRole.BUILDER, {
     "rejection_history": [{"decision": "request_changes", "reason": "x"}],
 }))
 check("A: rejection_history present -> 'Revised' wording",
-      r_hist.output["change_summary"].startswith("Revised"), r_hist.output["change_summary"])
+      _p0(r_hist)["change_summary"].startswith("Revised"), _p0(r_hist)["change_summary"])
 check("A: rejection_history present -> first file action 'modify'",
-      r_hist.output["proposed_files"][0]["action"] == "modify")
+      _p0(r_hist)["proposed_files"][0]["action"] == "modify")
 
 # fresh context → not a retry
 r_fresh = asyncio.run(mock.execute(AgentRole.BUILDER, {"title": "T", "description": "d"}))
 check("A: no rejection_history -> 'Implemented' wording",
-      r_fresh.output["change_summary"].startswith("Implemented"), r_fresh.output["change_summary"])
+      _p0(r_fresh)["change_summary"].startswith("Implemented"), _p0(r_fresh)["change_summary"])
 check("A: no rejection_history -> first file action 'create'",
-      r_fresh.output["proposed_files"][0]["action"] == "create")
+      _p0(r_fresh)["proposed_files"][0]["action"] == "create")
 
 # the removed key ALONE must NOT trigger a retry (proves the repoint away from rejection_feedback)
 r_legacy = asyncio.run(mock.execute(AgentRole.BUILDER, {
@@ -75,7 +82,7 @@ r_legacy = asyncio.run(mock.execute(AgentRole.BUILDER, {
     "rejection_feedback": {"decision": "request_changes"},
 }))
 check("A: legacy rejection_feedback alone does NOT trigger retry (key is dead)",
-      r_legacy.output["change_summary"].startswith("Implemented"), r_legacy.output["change_summary"])
+      _p0(r_legacy)["change_summary"].startswith("Implemented"), _p0(r_legacy)["change_summary"])
 
 
 # ══════════════════════════════════════════════════════════════

@@ -167,40 +167,48 @@ class MockAgentExecutor:
         return ExecutionResult(success=True, output=output)
 
     def _builder(self, title: str, desc: str, ctx: dict) -> ExecutionResult:
-        # Retry detection keys off rejection_history — the live channel the real
-        # builder reads (model_executor.py). The former rejection_feedback key was
-        # removed as dead (its value duplicated rejection_history[-1]).
+        # C2 step 2 (mock-first): the Builder produces N (=3) candidate proposals under a
+        # WRAPPER {"proposals": [...]} with NO top-level proposed_files. The wrapper therefore
+        # does NOT trip the proposal-creation gate (which requires top-level proposed_files) →
+        # the Builder creates 0 proposals. The Comparator selects ONE (prefer
+        # requires_approval==False, first-on-tie) and ITS chosen becomes the single
+        # execution_proposal. The N are varied so the pick is deterministic: option 2 (index 1)
+        # is the FIRST requires_approval==False → the chosen one.
+        # Retry detection keys off rejection_history — the live channel the real builder reads.
         is_retry = "rejection_history" in ctx
+        verb = "Revised" if is_retry else "Implemented"
+        act = "modify" if is_retry else "create"
+
+        def _proposal(idx, risk_level, requires_approval, approach):
+            return {
+                "change_summary": f"{verb} option {idx} ({approach}) for: {title}",
+                "proposed_files": [
+                    {"path": "src/feature.py", "action": act,
+                     "reason": f"Core feature implementation (option {idx}: {approach})",
+                     "content": f"# option {idx}: {approach}\n"},
+                    {"path": "src/utils.py", "action": "modify",
+                     "reason": "Utility updates for feature support",
+                     "content": "# utils\n"},
+                ],
+                "change_steps": [
+                    {"step": 1, "description": f"{'Revise' if is_retry else 'Create'} feature module (option {idx})"},
+                    {"step": 2, "description": "Update utility functions"},
+                ],
+                "reasoning_summary": (
+                    "Addressed reviewer feedback" if is_retry else f"Option {idx}: {approach}"
+                ),
+                "validation_plan": ["Run unit tests", "Check type annotations", "Verify acceptance criteria"],
+                "risk_notes": [],
+                "risk_level": risk_level,
+                "requires_approval": requires_approval,
+            }
+
         output = {
-            "change_summary": (
-                f"{'Revised' if is_retry else 'Implemented'} the core logic for: {title}"
-            ),
-            "proposed_files": [
-                {
-                    "path": "src/feature.py",
-                    "action": "create" if not is_retry else "modify",
-                    "reason": "Core feature implementation",
-                },
-                {
-                    "path": "src/utils.py",
-                    "action": "modify",
-                    "reason": "Utility updates for feature support",
-                },
+            "proposals": [
+                _proposal(1, "high", True, "thorough-but-needs-approval"),
+                _proposal(2, "low", False, "lean-auto-approvable"),
+                _proposal(3, "medium", False, "middle-auto-approvable"),
             ],
-            "change_steps": [
-                {"step": 1, "description": f"{'Revise' if is_retry else 'Create'} feature module"},
-                {"step": 2, "description": "Update utility functions"},
-            ],
-            "reasoning_summary": (
-                "Addressed reviewer feedback" if is_retry
-                else "Followed the plan from the Planner step"
-            ),
-            "validation_plan": [
-                "Run unit tests",
-                "Check type annotations",
-                "Verify acceptance criteria",
-            ],
-            "risk_notes": [],
         }
         return ExecutionResult(success=True, output=output)
 
@@ -303,15 +311,17 @@ class MockAgentExecutor:
         """
         candidates = ctx.get("candidate_proposals")
         if candidates is None:
-            # Live pipeline (step 1): no explicit candidate list is injected. Fall back to the
-            # Builder's output as the candidate set — a single Builder proposal becomes a
-            # 1-element list (no-op passthrough); step 2 feeds N explicitly via
-            # candidate_proposals. Tests that inject candidate_proposals are unaffected.
+            # No explicit candidate list injected → derive from the Builder's output.
             prev = ctx.get("previous_outputs")
             builder_out = prev.get("builder") if isinstance(prev, dict) else None
             if isinstance(builder_out, list):
-                candidates = builder_out
+                candidates = builder_out                       # already a list of N
+            elif isinstance(builder_out, dict) and isinstance(builder_out.get("proposals"), list):
+                # C2 step 2: Builder packages N as a WRAPPER {"proposals":[...]} (no top-level
+                # proposed_files → it does not trip the proposal gate). Read the N from here.
+                candidates = builder_out["proposals"]
             elif isinstance(builder_out, dict) and builder_out:
+                # Step-1 back-compat: a single Builder-shaped proposal → a 1-element list.
                 candidates = [builder_out]
         try:
             if not isinstance(candidates, list) or len(candidates) == 0:

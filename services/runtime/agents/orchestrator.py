@@ -339,15 +339,27 @@ class Orchestrator:
                       f"{defn.display_name} completed successfully")
 
             # 5. Create execution proposal after a proposal-producing role succeeds.
-            #    Builder (Phase 6E-A) and Documentation (DOC-3) both emit proposed_files
-            #    that flow the execution chain. Gate on a non-empty proposed_files list so
-            #    a Documentation HYBRID skip-fallback (no proposed_files) creates NO proposal.
-            #    The Builder schema always requires proposed_files >= 1, so its behavior is
-            #    unchanged (it always had proposed_files → always created a proposal).
+            #    The gate trips ONLY on a non-empty TOP-LEVEL proposed_files list. This is the
+            #    SOLE proposal-creation site (1:1 is enforced here, not by the DB).
+            #    - Documentation (DOC-3): emits top-level proposed_files → creates 1 (HYBRID
+            #      skip-fallback has none → creates 0).
+            #    - Builder (C2 step 2): now emits a WRAPPER {"proposals":[...]} with NO
+            #      top-level proposed_files → it creates 0. Proposal creation TRANSFERS to the
+            #      Comparator below, which selects ONE and surfaces its `chosen` (a Builder-
+            #      shaped dict WITH top-level proposed_files) → exactly 1 proposal.
             if defn.role in (AgentRole.BUILDER, AgentRole.DOCUMENTATION):
                 output = result.output
                 if isinstance(output, dict) and output.get("proposed_files"):
                     self._create_execution_proposal(task_id, run_id, output, role=defn.role)
+            elif defn.role == AgentRole.COMPARATOR:
+                # Pass the chosen proposal (NOT the {selected_index,...,chosen} audit dict):
+                # proposal_data must be the actual proposal, and the gate must trip on
+                # chosen.proposed_files. A missing/malformed chosen creates NO proposal
+                # (veto-safe — the Comparator never fabricates one).
+                output = result.output
+                chosen = output.get("chosen") if isinstance(output, dict) else None
+                if isinstance(chosen, dict) and chosen.get("proposed_files"):
+                    self._create_execution_proposal(task_id, run_id, chosen, role=AgentRole.COMPARATOR)
         else:
             # FAILED-path audit (closes the V23 FAILED-path gap): persist the FULL raw
             # provider text (the unparsed string that failed json.loads, when available;

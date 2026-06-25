@@ -50,8 +50,11 @@ to 1 — requires_approval-first selection rule + veto-safe lowest-risk fallback
 into AGENT_PIPELINE between builder and qa),
 comparator_wiring (C2 step 1 wiring: comparator inserted live + Option-A collapse writes the
 chosen proposal into previous_outputs["builder"]; filter-exemption always-on; downstream byte-
-unchanged; proposal 1:1 intact).
-Total: 29 suites.
+unchanged; proposal 1:1 intact),
+c2_step2_gate_transfer (C2 step 2 mock-first: mock builder emits N-wrapper {proposals:[...]} →
+creates 0; proposal creation transfers to the comparator which creates exactly 1 (chosen) →
+1:1 safety chain preserved at the single gate site; N-1 audited via raw_output).
+Total: 30 suites.
 
 Usage:
     python scripts/run-unit-regression.py
@@ -94,6 +97,7 @@ TEST_SUITES = [
     "tests/v24_attempt_number_test.py",
     "tests/comparator_test.py",
     "tests/comparator_wiring_test.py",
+    "tests/c2_step2_gate_transfer_test.py",
 ]
 
 
@@ -145,7 +149,7 @@ def main():
         sys.exit(1)
     else:
         print()
-        print("  Unit baseline: ALL PASS (29 suites)")
+        print("  Unit baseline: ALL PASS (30 suites)")
         sys.exit(0)
 
 

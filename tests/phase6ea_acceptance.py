@@ -266,20 +266,25 @@ if code in (200, 201):
               len(proposals_list) >= 1, f"found {len(proposals_list)} proposals")
 
         if proposals_list:
-            # Role-based selection (robust to multiple proposals). As of DOC-3 the
-            # Documentation role adds a SECOND proposal (created after the Builder, so it
-            # sorts first by created_at DESC) — select the Builder proposal by role rather
-            # than positionally, and positively assert the documentation proposal too.
-            builder_proposal = next((p for p in proposals_list if p.get("role") == "builder"), None)
+            # Role-based selection (robust to multiple proposals).
+            # C2 step 2: proposal creation TRANSFERRED from Builder to the Comparator — the
+            # Builder now emits a wrapper {proposals:[...]} (creates 0); the Comparator selects
+            # ONE and creates the single proposal (role='comparator'). Documentation adds its
+            # own SECOND proposal (created after, sorts first by created_at DESC). Select the
+            # Comparator proposal by role, and positively assert the documentation proposal too.
+            comparator_proposal = next((p for p in proposals_list if p.get("role") == "comparator"), None)
             doc_proposal = next((p for p in proposals_list if p.get("role") == "documentation"), None)
-            check("Builder proposal exists (role-based)", builder_proposal is not None,
+            check("Comparator proposal exists (role-based, C2 step 2 transfer)", comparator_proposal is not None,
+                  f"roles={[p.get('role') for p in proposals_list]}")
+            check("No Builder proposal exists (Builder wrapper creates 0)",
+                  not any(p.get("role") == "builder" for p in proposals_list),
                   f"roles={[p.get('role') for p in proposals_list]}")
             check("Documentation proposal also exists (DOC-3 second proposal)", doc_proposal is not None,
                   f"roles={[p.get('role') for p in proposals_list]}")
-            proposal = builder_proposal or proposals_list[0]
+            proposal = comparator_proposal or proposals_list[0]
             _proposal_id = proposal.get("id", "")
             check("Proposal has task_id matching the task", proposal.get("task_id") == _task_id)
-            check("Proposal role is 'builder'", proposal.get("role") == "builder")
+            check("Proposal role is 'comparator'", proposal.get("role") == "comparator")
             # Phase 11-5: Low-risk proposals (requires_approval=False) are auto-approved
             expected_status = "pending" if proposal.get("requires_approval") else "approved"
             check(f"Proposal status is '{expected_status}'",
@@ -307,15 +312,15 @@ if _task_id:
     check("GET /tasks/{task_id}/approvals -> 200", code == 200, f"code={code}")
 
     approvals = approvals_data if isinstance(approvals_data, list) else []
-    # Find any approval with action_type == "proposal:builder"
-    proposal_approvals = [a for a in approvals if a.get("action_type") == "proposal:builder"]
+    # C2 step 2: the chosen proposal is created by the Comparator → action_type "proposal:comparator".
+    proposal_approvals = [a for a in approvals if a.get("action_type") == "proposal:comparator"]
 
     # There may or may not be a linked approval depending on risk level from mock output
     # The mock builder may or may not set requires_approval=True.
     # We verify: IF one exists, it has the proper structure.
     if proposal_approvals:
         pa = proposal_approvals[0]
-        check("proposal:builder approval has proposal_id set",
+        check("proposal:comparator approval has proposal_id set",
               bool(pa.get("proposal_id")), f"proposal_id={pa.get('proposal_id')}")
         # Verify the proposal_id refers to an actual proposal
         if _proposal_id:
@@ -331,7 +336,7 @@ if _task_id:
         print("  [INFO] Linked approval found (builder output had high/critical risk)")
     else:
         # No approval needed is also valid (mock builder risk may be low/medium)
-        print("  [INFO] No proposal:builder approval created (risk level did not require it — expected for mock)")
+        print("  [INFO] No proposal:comparator approval created (chosen is auto-approvable — expected for mock)")
         check("No unexpected non-proposal approvals exist",
               all(a.get("action_type", "").startswith("proposal:") or
                   a.get("action_type", "").startswith("manual:") or
