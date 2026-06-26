@@ -53,7 +53,7 @@ def check(label, cond, detail=""):
         print(f"  [FAIL] {label}" + (f"  -- {detail}" if detail else ""))
 
 
-VALID_DICT = {
+_SINGLE_PROPOSAL = {
     "change_summary": "x",
     "proposed_files": [{"path": "a.py", "action": "create", "reason": "r", "content": "c"}],
     "change_steps": [{"step": 1, "description": "d"}],
@@ -61,7 +61,9 @@ VALID_DICT = {
     "validation_plan": ["run tests"],
     "risk_notes": [],
 }
-SCHEMA_FAIL_DICT = {"change_summary": "x"}                  # valid JSON, missing required fields
+# C2 real-model N: a valid Builder output is now a WRAPPER of 2-3 proposals.
+VALID_DICT = {"proposals": [dict(_SINGLE_PROPOSAL), dict(_SINGLE_PROPOSAL)]}
+SCHEMA_FAIL_DICT = {"change_summary": "x"}                  # not a wrapper (no 'proposals') → schema fail
 RAW_MALFORMED = '{\n  "change_summary": "x" "oops"\n}'      # bad JSON + no "action" → tool-loop malformed
 
 FEEDBACK_MARK = "IMPORTANT — your previous response was NOT valid JSON"
@@ -109,7 +111,10 @@ res, prov = run_builder([final_env(VALID_DICT)])
 check("a: success=True", res.success, getattr(res, "error_message", ""))
 check("a: exactly 1 provider call (final on round 1, no retry)", len(prov.calls) == 1, str(len(prov.calls)))
 check("a: no parse-retry feedback in the (only) call", FEEDBACK_MARK not in prov.calls[0][0][1])
-check("a: proposed_files preserved + normalized", len(res.output.get("proposed_files", [])) == 1)
+check("a: wrapper has 2 proposals, each preserved + normalized (risk_level set per proposal)",
+      len(res.output.get("proposals", [])) == 2
+      and len(res.output["proposals"][0].get("proposed_files", [])) == 1
+      and "risk_level" in res.output["proposals"][0] and "risk_level" in res.output["proposals"][1])
 
 
 # (b) NO-RETRY-ON-SCHEMA: valid JSON, wrong shape → schema failure → NO retry, 1 call

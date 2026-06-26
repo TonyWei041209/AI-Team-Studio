@@ -102,83 +102,83 @@ VALID_BUILDER = {
     "risk_notes": ["Breaking change if session format changes"],
 }
 
-ok, err = BuilderOutputSchema.validate(VALID_BUILDER)
+ok, err = BuilderOutputSchema._validate_single_proposal(VALID_BUILDER)
 check("Valid complete output passes", ok, err)
 
 # Missing change_summary
 bad = {**VALID_BUILDER, "change_summary": ""}
-ok, err = BuilderOutputSchema.validate(bad)
+ok, err = BuilderOutputSchema._validate_single_proposal(bad)
 check("Empty change_summary fails", not ok)
 check("Error mentions change_summary", "change_summary" in err)
 
 # Missing proposed_files
 bad = {k: v for k, v in VALID_BUILDER.items() if k != "proposed_files"}
-ok, err = BuilderOutputSchema.validate(bad)
+ok, err = BuilderOutputSchema._validate_single_proposal(bad)
 check("Missing proposed_files fails", not ok)
 
 # Empty proposed_files
 bad = {**VALID_BUILDER, "proposed_files": []}
-ok, err = BuilderOutputSchema.validate(bad)
+ok, err = BuilderOutputSchema._validate_single_proposal(bad)
 check("Empty proposed_files fails", not ok)
 
 # proposed_files item missing path
 bad = {**VALID_BUILDER, "proposed_files": [{"action": "create", "reason": "x"}]}
-ok, err = BuilderOutputSchema.validate(bad)
+ok, err = BuilderOutputSchema._validate_single_proposal(bad)
 check("proposed_files missing path fails", not ok)
 check("Error mentions path", "path" in err)
 
 # Invalid action
 bad = {**VALID_BUILDER, "proposed_files": [{"path": "a.py", "action": "rename", "reason": "x"}]}
-ok, err = BuilderOutputSchema.validate(bad)
+ok, err = BuilderOutputSchema._validate_single_proposal(bad)
 check("Invalid action fails", not ok)
 check("Error mentions action", "action" in err)
 
 # Valid actions: create, modify, delete
 for action in ("create", "modify", "delete"):
     test_data = {**VALID_BUILDER, "proposed_files": [{"path": "a.py", "action": action, "reason": "test"}]}
-    ok, _ = BuilderOutputSchema.validate(test_data)
+    ok, _ = BuilderOutputSchema._validate_single_proposal(test_data)
     check(f"Action '{action}' accepted", ok)
 
 # Missing change_steps
 bad = {k: v for k, v in VALID_BUILDER.items() if k != "change_steps"}
-ok, err = BuilderOutputSchema.validate(bad)
+ok, err = BuilderOutputSchema._validate_single_proposal(bad)
 check("Missing change_steps fails", not ok)
 
 # change_steps item missing step
 bad = {**VALID_BUILDER, "change_steps": [{"description": "do something"}]}
-ok, err = BuilderOutputSchema.validate(bad)
+ok, err = BuilderOutputSchema._validate_single_proposal(bad)
 check("change_steps missing step fails", not ok)
 
 # Missing reasoning_summary
 bad = {**VALID_BUILDER, "reasoning_summary": ""}
-ok, err = BuilderOutputSchema.validate(bad)
+ok, err = BuilderOutputSchema._validate_single_proposal(bad)
 check("Empty reasoning_summary fails", not ok)
 
 # Missing validation_plan
 bad = {**VALID_BUILDER, "validation_plan": []}
-ok, err = BuilderOutputSchema.validate(bad)
+ok, err = BuilderOutputSchema._validate_single_proposal(bad)
 check("Empty validation_plan fails", not ok)
 
 # risk_notes optional (missing tolerated)
 good = {k: v for k, v in VALID_BUILDER.items() if k != "risk_notes"}
-ok, err = BuilderOutputSchema.validate(good)
+ok, err = BuilderOutputSchema._validate_single_proposal(good)
 check("Missing risk_notes tolerated", ok)
 
 # risk_notes can be empty
 good = {**VALID_BUILDER, "risk_notes": []}
-ok, err = BuilderOutputSchema.validate(good)
+ok, err = BuilderOutputSchema._validate_single_proposal(good)
 check("Empty risk_notes allowed", ok)
 
 # Extra fields tolerated
 good = {**VALID_BUILDER, "extra_field": "extra"}
-ok, err = BuilderOutputSchema.validate(good)
+ok, err = BuilderOutputSchema._validate_single_proposal(good)
 check("Extra fields tolerated", ok)
 
 # Non-dict input
-ok, err = BuilderOutputSchema.validate("string")
+ok, err = BuilderOutputSchema._validate_single_proposal("string")
 check("String input fails", not ok)
 
-ok, err = BuilderOutputSchema.validate([1, 2])
+ok, err = BuilderOutputSchema._validate_single_proposal([1, 2])
 check("List input fails", not ok)
 
 

@@ -76,34 +76,47 @@ Rules:
 
 BUILDER_SYSTEM_PROMPT = """\
 You are the Builder agent in an AI development workstation.
-Your job is to analyze the Planner's plan and produce a structured execution proposal.
+Your job is to analyze the Planner's plan and produce 2-3 ALTERNATIVE execution proposals
+that solve the task in genuinely different ways, so a downstream Comparator can select the
+best one for review and (after approval) execution.
 
 CRITICAL CONSTRAINTS (supervised preparation mode):
 - You MUST NOT execute any file modifications, shell commands, or git operations.
 - You MUST NOT claim that you have already made changes or run commands.
 - You MUST NOT fabricate command output or file contents.
-- You are ONLY producing a structured proposal of what SHOULD be done.
+- You are ONLY producing structured proposals of what SHOULD be done.
 - All proposed changes are suggestions that will be reviewed and approved before execution.
 - File deletions are high-risk and must be noted in risk_notes.
 - You may be given the current content of existing files this change is likely to modify (selected by relevance); use it to ground modifications in the real current code, and treat any file not shown as something to reason about from the design. Secret values in that content may appear as [REDACTED-SECRET]; treat them as the configured secret and do not reproduce or invent secret values.
 
 You MUST respond with valid JSON only. No markdown, no explanation outside the JSON.
 
-Required JSON schema:
+You MUST return a WRAPPER object whose only top-level key is "proposals" — a list of 2 or 3
+proposals. Do NOT put proposed_files (or any proposal field) at the top level.
+
+Wrapper schema:
 {
-  "change_summary": "<string: one-line summary of the proposed changes>",
+  "proposals": [
+    { <proposal> },
+    { <proposal> }
+  ]
+}
+
+Each <proposal> has this schema:
+{
+  "change_summary": "<string: one-line summary of THIS proposal's changes>",
   "proposed_files": [
     {"path": "<string: file path>", "action": "<string: create|modify|delete>", "reason": "<string: why this file needs this change>", "content": "<string: full file content to write — required for create/modify>"}
   ],
   "change_steps": [
     {"step": <int>, "description": "<string: specific action to take>", "target_file": "<string: optional file path>"}
   ],
-  "reasoning_summary": "<string: why this approach was chosen over alternatives>",
+  "reasoning_summary": "<string: THIS proposal's specific approach and why it was taken>",
   "validation_plan": ["<string: how to verify each change works>", ...],
   "risk_notes": ["<string: potential risk or concern>", ...]
 }
 
-Extended fields (optional but recommended for execution planning):
+Each <proposal> may ALSO include these extended fields (optional, per proposal):
 {
   "proposed_commands": [
     {"command": "<string: shell command>", "working_dir": "<string: optional>", "risk_level": "<string: low|medium|high|critical>", "reason": "<string: why this command is needed>"}
@@ -117,17 +130,27 @@ Extended fields (optional but recommended for execution planning):
   "estimated_impact": {"files_affected": <int>, "commands_count": <int>, "risk_summary": "<string>"}
 }
 
+ALTERNATIVES — the 2-3 proposals MUST differ by IMPLEMENTATION STRATEGY, not trivially:
+- e.g. a conservative minimal-change approach vs a more thorough refactor;
+- different structural, dependency, or data-model strategies that genuinely trade off
+  simplicity / risk / scope.
+Make each proposal a real, distinct option a reviewer could choose between.
+
 Rules:
-- change_summary must be a non-empty string
-- proposed_files must have at least 1 item; each needs path (str), action (create|modify|delete), reason (str), content (str — the full file content to write for create/modify actions)
-- change_steps must have at least 1 item; each needs step (int), description (str); target_file is optional
-- reasoning_summary must be a non-empty string
-- validation_plan must have at least 1 item (string)
-- risk_notes can be an empty list []
-- Extended fields are optional; if omitted, they will be auto-computed
+- The top-level object MUST be {"proposals": [...]} with 2 or 3 proposals. Do NOT emit a single
+  top-level proposal and do NOT put proposed_files at the top level.
+- Each proposal must INDEPENDENTLY and FULLY satisfy the proposal schema:
+  - change_summary must be a non-empty string
+  - proposed_files must have at least 1 item; each needs path (str), action (create|modify|delete), reason (str), content (str — the full file content to write for create/modify actions)
+  - change_steps must have at least 1 item; each needs step (int), description (str); target_file is optional
+  - reasoning_summary must be a non-empty string
+  - validation_plan must have at least 1 item (string)
+  - risk_notes can be an empty list []
+  - extended fields are optional; if omitted, they will be auto-computed
+- The proposals must be genuinely different implementation strategies, not minor variations.
 - Do NOT wrap the JSON in markdown code fences
 - Do NOT include any text before or after the JSON object
-- Respond with ONLY the JSON object\
+- Respond with ONLY the JSON wrapper object\
 """
 
 

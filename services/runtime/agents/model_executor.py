@@ -286,22 +286,34 @@ _VALID_RISK_LEVELS = {"low", "medium", "high", "critical"}
 _VALID_DOC_ACTIONS = {"create", "modify"}  # documentation never deletes files
 _VALID_ACTION_TYPES = {"file", "shell", "git"}
 
+# C2 real-model N: the Builder emits a WRAPPER {"proposals":[...]} with N candidates.
+# N is bounded [MIN, MAX] — at least 2 so the Comparator has a meaningful choice; at most 3
+# to cap tokens/cost.
+_BUILDER_MIN_PROPOSALS = 2
+_BUILDER_MAX_PROPOSALS = 3
+
 
 class BuilderOutputSchema:
-    """Validates Builder JSON output against the execution proposal schema.
+    """Validates Builder JSON output.
 
-    Phase 6D core fields are required.  Phase 6E-A execution proposal fields
-    are optional (validated only when present) for backward compatibility.
+    C2 real-model N: the Builder output is a WRAPPER {"proposals":[p1..pN]}, N in
+    [_BUILDER_MIN_PROPOSALS, _BUILDER_MAX_PROPOSALS]; each proposal is validated by
+    ``_validate_single_proposal`` (the pre-C2 single-proposal schema — Phase 6D required
+    fields + optional Phase 6E-A fields). A single-proposal / top-level-proposed_files
+    output (no "proposals" key) is REJECTED — the airtight enforcement that keeps the
+    real-builder path 1:1 (the proposal-creation gate / transfer code is unchanged).
     """
 
     @staticmethod
-    def validate(data: Any) -> tuple[bool, str]:
-        """Check *data* conforms to the Builder plan-only output schema.
+    def _validate_single_proposal(data: Any) -> tuple[bool, str]:
+        """Validate ONE Builder-shaped proposal (the pre-C2 single-proposal schema).
 
+        Phase 6D fields are required; Phase 6E-A fields are optional (validated only when
+        present). Used per-element by ``validate()`` over the wrapper's ``proposals`` list.
         Returns ``(True, "")`` on success or ``(False, "<reason>")`` on failure.
         """
         if not isinstance(data, dict):
-            return False, "Output must be a JSON object"
+            return False, "proposal must be a JSON object"
 
         # change_summary: required, non-empty string
         cs = data.get("change_summary")
@@ -455,6 +467,36 @@ class BuilderOutputSchema:
             if rs_val is not None and not isinstance(rs_val, str):
                 return False, "estimated_impact.risk_summary must be a string"
 
+        return True, ""
+
+    @staticmethod
+    def validate(data: Any) -> tuple[bool, str]:
+        """Enforce the C2 wrapper {"proposals":[...]} (N in [MIN, MAX]); validate each proposal.
+
+        SAFETY: a single-proposal / top-level-proposed_files output (no "proposals" key) is
+        REJECTED here → the Builder (blocking) aborts the pipeline rather than emitting a
+        gate-tripping single proposal that would double-create alongside the Comparator. The
+        gate/transfer code is unchanged; this validation is what keeps the real path 1:1.
+        Returns ``(True, "")`` on success or ``(False, "<reason>")`` on failure.
+        """
+        if not isinstance(data, dict):
+            return False, "Output must be a JSON object"
+        proposals = data.get("proposals")
+        if not isinstance(proposals, list):
+            return False, (
+                "Output must be a wrapper object with a 'proposals' list "
+                "(a single-proposal / top-level proposed_files output is rejected)"
+            )
+        n = len(proposals)
+        if n < _BUILDER_MIN_PROPOSALS or n > _BUILDER_MAX_PROPOSALS:
+            return False, (
+                f"proposals must contain between {_BUILDER_MIN_PROPOSALS} and "
+                f"{_BUILDER_MAX_PROPOSALS} items, got {n}"
+            )
+        for i, p in enumerate(proposals):
+            ok, err = BuilderOutputSchema._validate_single_proposal(p)
+            if not ok:
+                return False, f"proposals[{i}]: {err}"
         return True, ""
 
 
@@ -1548,9 +1590,15 @@ class ModelAgentExecutor:
             failure.tool_loop_stats = stats
             return failure  # parse/schema/length/exhausted — success=False → pipeline ABORTS
 
-        # Normalize optional fields (Phase 6D core) + execution proposal (Phase 6E-A)
-        parsed.setdefault("risk_notes", [])
-        _normalize_builder_proposal(parsed)
+        # C2 real-model N: normalize EACH of the N proposals (Phase 6D core + Phase 6E-A).
+        # CRITICAL: this runs here, BEFORE the (downstream) Comparator selects — normalization
+        # sets risk_level + requires_approval, the fields the Comparator selects on, so every
+        # proposal must be normalized first. `parsed` passed BuilderOutputSchema.validate, so
+        # parsed["proposals"] is a list of 2-3. The wrapper lands in previous_outputs["builder"]
+        # via the generic handoff (identical to the mock path); the Comparator reads ["proposals"].
+        for _p in parsed["proposals"]:
+            _p.setdefault("risk_notes", [])
+            _normalize_builder_proposal(_p)
 
         return ExecutionResult(success=True, output=parsed, token_usage=usage, tool_loop_stats=stats)
 

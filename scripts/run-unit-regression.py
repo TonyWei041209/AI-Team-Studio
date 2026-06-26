@@ -53,8 +53,11 @@ chosen proposal into previous_outputs["builder"]; filter-exemption always-on; do
 unchanged; proposal 1:1 intact),
 c2_step2_gate_transfer (C2 step 2 mock-first: mock builder emits N-wrapper {proposals:[...]} →
 creates 0; proposal creation transfers to the comparator which creates exactly 1 (chosen) →
-1:1 safety chain preserved at the single gate site; N-1 audited via raw_output).
-Total: 30 suites.
+1:1 safety chain preserved at the single gate site; N-1 audited via raw_output),
+builder_wrapper_schema (C2 real-model N: BuilderOutputSchema enforces the wrapper {proposals:
+[2-3]}, extracted _validate_single_proposal per element, REJECTS single-proposal/old-shape →
+builder blocking abort = fail-safe enforcement; normalize-over-N sets risk_level+requires_approval).
+Total: 31 suites.
 
 Usage:
     python scripts/run-unit-regression.py
@@ -98,6 +101,7 @@ TEST_SUITES = [
     "tests/comparator_test.py",
     "tests/comparator_wiring_test.py",
     "tests/c2_step2_gate_transfer_test.py",
+    "tests/builder_wrapper_schema_test.py",
 ]
 
 
@@ -149,7 +153,7 @@ def main():
         sys.exit(1)
     else:
         print()
-        print("  Unit baseline: ALL PASS (30 suites)")
+        print("  Unit baseline: ALL PASS (31 suites)")
         sys.exit(0)
 
 

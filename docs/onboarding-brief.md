@@ -235,7 +235,14 @@ execution_proposal      Builder 输出，存 proposal_data + risk_level + requir
 - schema **V24**；核心执行管线完成到 **Phase 8B**（命令执行 + 回滚）。
 - **运行模式 = Daily Usage Mode**：不主动开发新功能，只在真实使用出现 blocker 时修。
 - 曾在真实项目 us-quant-research 端到端跑通（6 文件创建 + 3 命令 + 1 回滚，状态文档记录，本会话未重跑）。
-- **测试基线**：`python scripts/run-all-regression.py` = **58 套 / 58 通过**（本会话重跑确立）。
+- **测试基线**：`python scripts/run-all-regression.py` = **59 套 / 59 通过**（本会话重跑确立）。
+- **C2 real-model N（schema+prompt+normalize，已完成）— 让真实模型 builder 也产 N（wrapper），走已验证的 transfer**：
+  - **安全维度（唯一）= REJECT 强制**：`BuilderOutputSchema.validate` 现强制 wrapper `{proposals:[2-3]}`；抽出 `_validate_single_proposal`（旧单提案逻辑逐字）逐元素校验；**单提案/旧 shape（顶层 proposed_files、无 "proposals" 键）→ 校验 FAIL → builder（阻塞）中止管线**，绝不放出会触发 gate 的单提案（否则真实路径 builder 1 + comparator 1 = 2，1:1 BREAK）。**gate/transfer 代码本身完全未改**——schema 强制就是真实路径的 1:1 保险（fail-safe）。常量 `_BUILDER_MIN/MAX_PROPOSALS=2/3`。
+  - **prompt**（`BUILDER_SYSTEM_PROMPT`）：要求 wrapper of 2-3 按**实现策略**差异的提案（保守最小改 vs 彻底重构等），每个独立满足提案 schema。CRITICAL CONSTRAINTS 块逐字保留。
+  - **normalize-over-N**（`_execute_builder` :1553）：对 `parsed["proposals"]` 每个映射 `_normalize_builder_proposal`——**在 comparator（下游）选择前**设好每个提案的 `risk_level`+`requires_approval`（comparator 选择依据的字段）。wrapper 经 generic handoff 落到 `previous_outputs["builder"]`（与 mock 路径一致）→ comparator 读 `["proposals"]`。
+  - **未动**：gate/transfer（orchestrator.py:347-362）、`_create_execution_proposal` 体、UNIQUE 链、comparator 选择逻辑（executor.py `_comparator` 已读 ["proposals"]）、mock builder（已产 wrapper）、4 下游 reader、控制流。
+  - 测试：`tests/builder_wrapper_schema_test.py`（cases 1-6，含 **(2) 单提案被 REJECT** 安全断言 + (3) bounds + (5) normalize-over-N）。合法 shape/redirect 更新：builder_json_retry/builder_tools（VALID_DICT→wrapper）、phase6d/phase6ea 的 Section-1 直接 schema 单测改调 `_validate_single_proposal`（单提案逻辑搬进 helper，断言+错误消息逐字保留）。Unit 30→31，回归 58→59 全绿。
+  - **下一步 = real-Gemini 验证（live，人工跑）**：配 role_model_settings.builder=gemini，跑真实 orchestrate，确认模型真的产 N 个**有意义差异**的提案 + transfer 在真实路径成立（builder 0 / comparator 选 1）。
 - **C2 step 2（mock-first，已完成，提案创建从 builder 转到 comparator，保 1:1）**：
   - **mock builder 现产 N**（executor.py `_builder`）：WRAPPER `{proposals:[3 个 builder-shaped 提案]}`，**无顶层 proposed_files** → 不触发提案 gate → **builder 建 0 个提案**。3 个提案有差异，使选择规则确定地挑中 option 2（index 1，第一个 `requires_approval==false`）。
   - **comparator 候选来源**（executor.py `_comparator`）：优先 `candidate_proposals`；否则 builder_out 是 list→直接用、是 `{proposals:[...]}` wrapper→读 `["proposals"]`、是单 dict→`[单]`（step-1 兼容）。

@@ -56,7 +56,7 @@ def check(label, cond, detail=""):
         print(f"  [FAIL] {label}" + (f"  -- {detail}" if detail else ""))
 
 
-VALID_DICT = {
+_SINGLE = {
     "change_summary": "Add a CANCELLED status and cancel method",
     "proposed_files": [{"path": "src/models.py", "action": "modify", "reason": "add CANCELLED", "content": "..."}],
     "change_steps": [{"step": 1, "description": "add enum value"}],
@@ -64,6 +64,8 @@ VALID_DICT = {
     "validation_plan": ["run tests"],
     "risk_notes": [],
 }
+# C2 real-model N: a valid Builder output is now a WRAPPER of 2-3 proposals.
+VALID_DICT = {"proposals": [dict(_SINGLE), dict(_SINGLE, change_summary="Add a CANCELLED (refactor variant)")]}
 RAW_MALFORMED = '{\n  "change_summary": "x" "oops"\n}'      # bad JSON + no "action"
 
 
@@ -108,10 +110,12 @@ def run_builder(scripted):
 print("\n[a] final-envelope")
 res, prov = run_builder([final_env(VALID_DICT)])
 check("a: success=True", res.success, getattr(res, "error_message", ""))
-check("a: design unwrapped + parsed (change_summary preserved)",
-      res.output.get("change_summary", "").startswith("Add a CANCELLED"))
-check("a: proposal normalized (risk_level computed by _normalize_builder_proposal)",
-      "risk_level" in res.output, str(res.output.keys()))
+check("a: wrapper unwrapped + parsed (2 proposals; first change_summary preserved)",
+      len(res.output.get("proposals", [])) == 2
+      and res.output["proposals"][0].get("change_summary", "").startswith("Add a CANCELLED"))
+check("a: EACH proposal normalized (risk_level computed by _normalize_builder_proposal)",
+      bool(res.output.get("proposals")) and all("risk_level" in p for p in res.output["proposals"]),
+      str(res.output.keys()))
 check("a: exactly 1 provider call", len(prov.calls) == 1, str(len(prov.calls)))
 check("a: tool_loop_stats attached (ended=final)",
       isinstance(res.tool_loop_stats, dict) and res.tool_loop_stats.get("ended") == "final", str(res.tool_loop_stats))
@@ -176,7 +180,8 @@ res, prov = run_builder([(RAW_MALFORMED, "stop")] * MAXR + [final_env(VALID_DICT
 check("f: success=True (recovered by the parse-retry running a FRESH tool loop)", res.success, getattr(res, "error_message", ""))
 check(f"f: {MAXR}+1 calls (attempt-1 exhausts {MAXR} rounds, attempt-2 finals on round 1)",
       len(prov.calls) == MAXR + 1, str(len(prov.calls)))
-check("f: final design parsed", res.output.get("change_summary", "").startswith("Add a CANCELLED"))
+check("f: final wrapper parsed (first proposal change_summary)",
+      res.output.get("proposals", [{}])[0].get("change_summary", "").startswith("Add a CANCELLED"))
 
 
 # ══════════════════════════════════════════════════════════════

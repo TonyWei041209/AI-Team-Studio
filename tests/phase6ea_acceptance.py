@@ -112,7 +112,7 @@ VALID_BUILDER_BASE = {
 }
 
 # Test valid output with all Phase 6D required fields passes
-ok, err = BuilderOutputSchema.validate(VALID_BUILDER_BASE)
+ok, err = BuilderOutputSchema._validate_single_proposal(VALID_BUILDER_BASE)
 check("Valid Phase 6D complete output passes", ok, err)
 
 # Test valid output WITH all Phase 6E-A optional fields passes
@@ -139,11 +139,11 @@ with_6ea = {
         "risk_summary": "Low risk changes",
     },
 }
-ok, err = BuilderOutputSchema.validate(with_6ea)
+ok, err = BuilderOutputSchema._validate_single_proposal(with_6ea)
 check("Valid output WITH Phase 6E-A optional fields passes", ok, err)
 
 # Test valid output WITHOUT Phase 6E-A fields passes (backward compat)
-ok, err = BuilderOutputSchema.validate(VALID_BUILDER_BASE)
+ok, err = BuilderOutputSchema._validate_single_proposal(VALID_BUILDER_BASE)
 check("Valid output WITHOUT Phase 6E-A fields passes (backward compat)", ok, err)
 
 # Test invalid proposed_commands (missing command field)
@@ -151,7 +151,7 @@ bad_cmds = {
     **VALID_BUILDER_BASE,
     "proposed_commands": [{"reason": "no command here"}],
 }
-ok, err = BuilderOutputSchema.validate(bad_cmds)
+ok, err = BuilderOutputSchema._validate_single_proposal(bad_cmds)
 check("Invalid proposed_commands (missing command field) fails", not ok)
 check("Error mentions 'command' for missing command", not ok and "command" in err)
 
@@ -167,26 +167,26 @@ bad_steps = {
         }
     ],
 }
-ok, err = BuilderOutputSchema.validate(bad_steps)
+ok, err = BuilderOutputSchema._validate_single_proposal(bad_steps)
 check("Invalid execution_steps (bad action_type 'unknown') fails", not ok)
 check("Error mentions 'action_type' for bad action", not ok and "action_type" in err)
 
 # Test invalid risk_level value
 bad_risk = {**VALID_BUILDER_BASE, "risk_level": "extreme"}
-ok, err = BuilderOutputSchema.validate(bad_risk)
+ok, err = BuilderOutputSchema._validate_single_proposal(bad_risk)
 check("Invalid risk_level 'extreme' fails", not ok)
 check("Error mentions 'risk_level'", not ok and "risk_level" in err)
 
 # Test invalid requires_approval (string instead of bool)
 bad_ra = {**VALID_BUILDER_BASE, "requires_approval": "yes"}
-ok, err = BuilderOutputSchema.validate(bad_ra)
+ok, err = BuilderOutputSchema._validate_single_proposal(bad_ra)
 check("Invalid requires_approval (string) fails", not ok)
 check("Error mentions 'requires_approval'", not ok and "requires_approval" in err)
 
 # Test all valid risk levels accepted
 for level in ("low", "medium", "high", "critical"):
     test_data = {**VALID_BUILDER_BASE, "risk_level": level}
-    ok, err = BuilderOutputSchema.validate(test_data)
+    ok, err = BuilderOutputSchema._validate_single_proposal(test_data)
     check(f"Risk level '{level}' accepted", ok, err)
 
 # Test all valid action_types accepted
@@ -202,7 +202,7 @@ for at in ("file", "shell", "git"):
             }
         ],
     }
-    ok, err = BuilderOutputSchema.validate(test_data)
+    ok, err = BuilderOutputSchema._validate_single_proposal(test_data)
     check(f"Execution step action_type '{at}' accepted", ok, err)
 
 
